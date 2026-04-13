@@ -155,7 +155,7 @@ export default function App() {
   const router = useRouter()
   useEffect(() => { if (status === "unauthenticated") router.replace("/") }, [status, router])
   const [view, setView] = useState("general");
-  const [emails, setEmails] = useState(INIT_EMAILS);
+  const [emails, setEmails] = useState([]);
   const [resas, setResas] = useState(INIT_RESAS);
   const [sel, setSel] = useState(null);
   const [reply, setReply] = useState("");
@@ -264,14 +264,17 @@ export default function App() {
         }
       }catch(_){}
     })();
-    window._setEmails = e => { const w=e.map(m=>({...m,flags:m.flags||[],aTraiter:m.aTraiter||false})); setEmails(w); setLoadingMail(false); toast(e.length+" emails chargés"); };
+    // Charger les vrais emails Gmail depuis Supabase (isolés par user_id)
+    setLoadingMail(true);
     fetch("/api/emails").then(r=>r.json()).then(data=>{
       if(Array.isArray(data)&&data.length>0){
-        const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:m.flags||[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));
-        setEmails(prev=>{const ids=new Set(INIT_EMAILS.map(e=>e.id));const extra=prev.filter(e=>!ids.has(e.id)&&!real.find(r=>r.id===e.id));return[...real,...extra];});
+        const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:Array.isArray(m.flags)?m.flags:[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));
+        setEmails(real); // Remplace complètement — pas de mélange avec INIT_EMAILS
+      } else {
+        setEmails([]); // Aucun email pour ce compte
       }
-    }).catch(()=>{});
-    return ()=>{ delete window._setEmails; };
+      setLoadingMail(false);
+    }).catch(()=>{ setLoadingMail(false); });
   },[]);
 
   const toggleFlag = (id, flag) => {
@@ -929,7 +932,7 @@ export default function App() {
             {/* Sidebar catégories mails — collapsible */}
             <div style={{width:subCollapsed?44:160,background:"#221E19",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid rgba(209,196,178,0.06)",transition:"width .2s ease",overflow:"hidden"}}>
               <div style={{padding:subCollapsed?"10px 6px":"14px 10px 10px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0}}>
-                {!subCollapsed&&<button onClick={()=>{setLoadingMail(true);fetch("/api/emails").then(r=>r.json()).then(data=>{if(Array.isArray(data)&&data.length>0){const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:m.flags||[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));setEmails(prev=>{const ids=new Set(INIT_EMAILS.map(e=>e.id));const extra=prev.filter(e=>!ids.has(e.id)&&!real.find(r=>r.id===e.id));return[...real,...extra];});toast(data.length+" emails chargés");}setLoadingMail(false);}).catch(()=>{toast("Erreur chargement","err");setLoadingMail(false);});}} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
+                {!subCollapsed&&<button onClick={()=>{setLoadingMail(true);fetch("/api/emails").then(r=>r.json()).then(data=>{if(Array.isArray(data)&&data.length>0){const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:Array.isArray(m.flags)?m.flags:[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));setEmails(real);toast(real.length+" emails chargés");}else{setEmails([]);toast("Aucun email");}setLoadingMail(false);}).catch(()=>{toast("Erreur chargement","err");setLoadingMail(false);});}} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
                   {loadingMail?<Spin s={11}/>:"↺"} Actualiser
                 </button>}
                 <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"rgba(209,196,178,0.07)",color:"rgba(209,196,178,0.35)",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:subCollapsed?0:6}}>
@@ -938,7 +941,7 @@ export default function App() {
               </div>
               {subCollapsed?(
                 <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center"}}>
-                  <button onClick={()=>{setLoadingMail(true);fetch("/api/emails").then(r=>r.json()).then(data=>{if(Array.isArray(data)&&data.length>0){const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:m.flags||[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));setEmails(prev=>{const ids=new Set(INIT_EMAILS.map(e=>e.id));const extra=prev.filter(e=>!ids.has(e.id)&&!real.find(r=>r.id===e.id));return[...real,...extra];});toast(data.length+" emails chargés");}setLoadingMail(false);}).catch(()=>{setLoadingMail(false);});}} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13}}>↺</button>
+                  <button onClick={()=>{setLoadingMail(true);fetch("/api/emails").then(r=>r.json()).then(data=>{if(Array.isArray(data)&&data.length>0){const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:Array.isArray(m.flags)?m.flags:[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));setEmails(real);toast(real.length+" emails chargés");}else{setEmails([]);toast("Aucun email");}setLoadingMail(false);}).catch(()=>{setLoadingMail(false);});}} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13}}>↺</button>
                   <button onClick={()=>setMailFilter("all")} title="Tous les mails" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>📬</button>
                   {MAIL_CATS.map(c=>(
                     <button key={c.id} onClick={()=>setMailFilter(c.id)} title={c.label} style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>
