@@ -16,13 +16,16 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'ARCHANGE · RÊVA',
-  description: 'Agent IA événementiel — Brasserie RÊVA Paris 13e',
+  title: 'ARCHANGE - REVA',
+  description: 'Agent IA evenementiel - Brasserie REVA Paris 13e',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" className={`${cormorant.variable} ${dmSans.variable}`}>
+      <head>
+        <meta charSet="utf-8" />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>
