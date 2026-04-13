@@ -1,0 +1,13 @@
+:root {
+  --bg: #F5F3EF; --dark: #1C1814; --gold: #C9A96E;
+  --border: #EAE6E1; --muted: #8A8178; --white: #FFFFFF; --sidebar: #1C1814;
+  --font-serif: 'Cormorant Garamond', serif; --font-sans: 'DM Sans', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: var(--font-sans); background: var(--bg); color: var(--dark); -webkit-font-smoothing: antialiased; }
+#__next, main { height: 100%; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #DDD8D0; border-radius: 2px; }
+input, textarea, select { font-family: var(--font-sans); outline: none; }
+button { font-family: var(--font-sans); cursor: pointer; }
