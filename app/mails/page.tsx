@@ -258,7 +258,7 @@ export default function App() {
           if(d.links) try{ setLinks(JSON.parse(d.links)); }catch(_){}
           if(d.links_fetched) try{ setLinksFetched(JSON.parse(d.links_fetched)); }catch(_){}
           if(d.context) setCustomCtx(d.context);
-          if(d.statuts) try{ setStatuts(JSON.parse(d.statuts)); }catch(_){}
+          if(d.statuts) try{ const s=JSON.parse(d.statuts); if(Array.isArray(s)&&s.length>0) setStatuts(s); }catch(_){}
           if(d.relances) try{ setRelances(JSON.parse(d.relances)); }catch(_){}
           if(d.note_ia) try{ setNoteIA(JSON.parse(d.note_ia)); }catch(_){}
         }
@@ -535,7 +535,10 @@ export default function App() {
                             <div style={{width:8,height:8,borderRadius:"50%",background:s.color,flexShrink:0}}/>
                             <span>{s.label}</span>
                           </button>
-                          {count>0&&<span style={{fontSize:10,opacity:.6,color:generalFilter===s.id?"#E8B86D":"rgba(209,196,178,0.4)"}}>{count}</span>}
+                          <div style={{display:"flex",alignItems:"center",gap:4}}>
+                            {count>0&&<span style={{fontSize:10,opacity:.6,color:generalFilter===s.id?"#E8B86D":"rgba(209,196,178,0.4)"}}>{count}</span>}
+                            <button onClick={e=>{e.stopPropagation();if(!window.confirm('Supprimer le statut "'+s.label+'" ?')) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);if(generalFilter===s.id)setGeneralFilter("all");toast("Statut supprimé");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(209,196,178,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(239,68,68,0.7)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(209,196,178,0.2)")}>✕</button>
+                          </div>
                         </div>
                       );
                     })}
