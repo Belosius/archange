@@ -7,44 +7,66 @@ export default function LoginPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
 
+  // Rediriger si déjà connecté
   useEffect(() => {
-    if (status === 'authenticated') router.replace('/mails')
-  }, [status, router])
+    if (session) router.replace('/mails')
+  }, [session, router])
 
   if (status === 'loading') return (
-    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#F5F3EF' }}>
-      <div style={{ width:28, height:28, border:'2px solid #EAE6E1', borderTopColor:'#C9A96E', borderRadius:'50%', animation:'spin .7s linear infinite' }}/>
-      <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
+    <div style={styles.loader}>
+      <div style={styles.spinner}/>
     </div>
   )
 
   return (
-    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#F5F3EF', fontFamily:"'DM Sans', sans-serif" }}>
-      <div style={{ textAlign:'center', maxWidth:340, padding:'0 24px' }}>
-        <div style={{ fontFamily:"'Cormorant Garamond', serif", fontSize:32, fontWeight:300, color:'#1C1814', letterSpacing:'.08em', marginBottom:8 }}>
-          ARCHANGE
+    <div style={styles.page}>
+      <div style={styles.bg1}/><div style={styles.bg2}/>
+      <div style={styles.card}>
+        <div style={styles.logo}>
+          <div style={styles.logoName}>ARCHANGE</div>
+          <div style={styles.logoSub}>RÊVA · Agent IA</div>
+          <div style={styles.logoLine}/>
         </div>
-        <div style={{ fontSize:11, color:'#8A8178', letterSpacing:'.2em', textTransform:'uppercase', marginBottom:48 }}>
-          RÊVA · Agent IA événementiel
-        </div>
-        <button
-          onClick={() => signIn('google', { callbackUrl: '/mails' })}
-          style={{ display:'flex', alignItems:'center', gap:12, width:'100%', padding:'14px 24px', background:'#1C1814', color:'#D1C4B2', border:'none', borderRadius:10, fontSize:13, fontWeight:500, cursor:'pointer', justifyContent:'center', letterSpacing:'.03em', transition:'opacity .15s' }}
-          onMouseOver={e => (e.currentTarget.style.opacity='.85')}
-          onMouseOut={e => (e.currentTarget.style.opacity='1')}
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
-            <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
-            <path d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
-            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
-          </svg>
-          Se connecter avec Google
+        <h1 style={styles.title}>Bienvenue</h1>
+        <p style={styles.subtitle}>
+          Connectez votre boîte Gmail pour synchroniser automatiquement vos demandes événementielles Zenchef en temps réel.
+        </p>
+        <button style={styles.btnGoogle} onClick={() => signIn('google', { callbackUrl: '/mails' })}>
+          <GoogleIcon />
+          Continuer avec Google
         </button>
-        <div style={{ marginTop:24, fontSize:11, color:'#C4BDB5', lineHeight:1.6 }}>
-          Connexion sécurisée · Accès Gmail requis
-        </div>
+        <div style={styles.hint}>reva13france@gmail.com</div>
+        <div style={styles.security}>🔒 Connexion sécurisée · données chiffrées</div>
       </div>
     </div>
   )
+}
+
+function GoogleIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+  )
+}
+
+const styles: Record<string, React.CSSProperties> = {
+  page: { minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:24, background:'#F5F3EF', position:'relative', overflow:'hidden' },
+  bg1:  { position:'absolute', top:-80, right:-80, width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle, rgba(201,169,110,.08) 0%, transparent 70%)', pointerEvents:'none' },
+  bg2:  { position:'absolute', bottom:-60, left:-60, width:240, height:240, borderRadius:'50%', background:'radial-gradient(circle, rgba(201,169,110,.06) 0%, transparent 70%)', pointerEvents:'none' },
+  card: { background:'#FFFFFF', borderRadius:16, border:'1px solid #EAE6E1', padding:'40px 44px', width:'100%', maxWidth:420, textAlign:'center', boxShadow:'0 4px 24px rgba(28,24,20,.06)', position:'relative', zIndex:1 },
+  logo: { marginBottom:32 },
+  logoName: { fontFamily:"'Cormorant Garamond', serif", fontSize:28, fontWeight:300, color:'#1C1814', letterSpacing:'.12em' },
+  logoSub:  { fontSize:10, color:'#8A8178', letterSpacing:'.22em', textTransform:'uppercase', marginTop:4 },
+  logoLine: { width:40, height:1, background:'#C9A96E', margin:'10px auto 0' },
+  title:    { fontFamily:"'Cormorant Garamond', serif", fontSize:22, fontWeight:400, color:'#1C1814', marginBottom:10 },
+  subtitle: { fontSize:13, color:'#8A8178', lineHeight:1.65, marginBottom:28 },
+  btnGoogle:{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, width:'100%', padding:'13px 20px', borderRadius:10, border:'1px solid #EAE6E1', background:'#FFFFFF', cursor:'pointer', fontSize:14, fontWeight:500, color:'#1C1814', fontFamily:"'DM Sans', sans-serif", transition:'all .2s' },
+  hint:     { fontSize:11, color:'#B0A898', marginTop:14 },
+  security: { display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:24, paddingTop:20, borderTop:'1px solid #EAE6E1', fontSize:11, color:'#B0A898' },
+  loader:   { height:'100vh', display:'flex', alignItems:'center', justifyContent:'center' },
+  spinner:  { width:28, height:28, border:'2px solid #EAE6E1', borderTopColor:'#C9A96E', borderRadius:'50%', animation:'spin 0.7s linear infinite' },
 }

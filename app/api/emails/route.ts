@@ -1,32 +1,52 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 import { supabaseAdmin } from '@/lib/supabase'
 import { syncRecentEmails } from '@/lib/gmail'
 
-export async function GET(request: Request) {
+// GET /api/emails — récupérer les emails de l'utilisateur
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  const { searchParams } = new URL(request.url)
+  if (!session?.user?.id) return NextResponse.json({ error: 'Non connecté' }, { status: 401 })
+
+  const { searchParams } = req.nextUrl
   const filter = searchParams.get('filter') || 'all'
-  const q = searchParams.get('q') || ''
-  let query = supabaseAdmin.from('emails').select('*').eq('user_id', session.user.id).order('date_iso', { ascending: false }).limit(100)
-  if (filter === 'unread') query = query.eq('is_unread', true)
-  if (filter === 'starred') query = query.eq('is_starred', true)
-  if (filter === 'atraiter') query = query.contains('flags', ['atraiter'])
-  if (q) query = query.or(`subject.ilike.%${q}%,from_name.ilike.%${q}%,snippet.ilike.%${q}%`)
+  const search = searchParams.get('q') || ''
+  const limit = parseInt(searchParams.get('limit') || '100')
+
+  let query = supabaseAdmin
+    .from('emails')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .order('date_iso', { ascending: false })
+    .limit(limit)
+
+  // Filtres
+  if (filter === 'nonlus') query = query.eq('is_unread', true)
+  if (filter === 'star')   query = query.contains('flags', ['star'])
+  if (filter === 'flag')   query = query.contains('flags', ['flag'])
+  if (filter === 'atraiter') query = query.eq('a_traiter', true)
+
+  // Recherche
+  if (search) {
+    query = query.or(`from_name.ilike.%${search}%,from_email.ilike.%${search}%,subject.ilike.%${search}%`)
+  }
+
   const { data, error } = await query
-  if (error) return NextResponse.json([], { status: 200 })
-  return NextResponse.json(data || [])
+  if (error) return NextResponse.json({ error }, { status: 500 })
+
+  return NextResponse.json(data)
 }
 
-export async function POST(request: Request) {
+// POST /api/emails/sync — forcer une synchronisation Gmail
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  if (!session?.user?.id) return NextResponse.json({ error: 'Non connecté' }, { status: 401 })
+
   try {
     const count = await syncRecentEmails(session.user.id, 50)
     return NextResponse.json({ synced: count })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+  } catch (error) {
+    return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }
