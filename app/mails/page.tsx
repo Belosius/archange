@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 const localStorageSet = async (key: string, value: string) => { try { localStorage.setItem(key, value); } catch(_){} return {key, value};};
 const localStorageGet = async (key: string) => { try { const v = localStorage.getItem(key); return v ? {key, value: v} : null; } catch(_){ return null; }};
@@ -229,35 +229,40 @@ export default function App() {
   const firstDay = d => { const f = new Date(d.getFullYear(),d.getMonth(),1).getDay(); return f===0?6:f-1; };
   const resasDay = day => { const ds=calDate.getFullYear()+"-"+String(calDate.getMonth()+1).padStart(2,"0")+"-"+String(day).padStart(2,"0"); return resas.filter(r=>r.dateDebut===ds); };
 
-  const saveNoteIA = async (n: Record<string,{text:string,date:string}>) => { setNoteIA(n); try{ await localStorageSet("arc_note_ia",JSON.stringify(n)); }catch(_){} };
-  const saveStatuts = async (s: StatutDef[]) => { setStatuts(s); try{ await localStorageSet("arc_statuts",JSON.stringify(s)); }catch(_){} };
-  const saveResas = async r => { setResas(r); try{ await localStorageSet("arc_resas",JSON.stringify(r)); }catch(_){} };
-  const saveRelances = async (r: any[]) => { setRelances(r); try{ await localStorageSet("arc_relances",JSON.stringify(r)); }catch(_){} };
-  const saveDocs  = async d => { setDocs(d);  try{ await localStorageSet("arc_docs", JSON.stringify(d.filter(x=>!x.isPdf))); }catch(_){} };
-  const saveLinks = async l => { setLinks(l); try{ await localStorageSet("arc_links",JSON.stringify(l)); }catch(_){} };
-  const saveEmails= e => { setEmails(e); try{ localStorageSet("arc_emails",JSON.stringify(e)); }catch(_){} };
+  // Sauvegarde Supabase (avec debounce pour éviter trop d'appels)
+  const _saveTimeout = React.useRef<any>(null);
+  const saveToSupabase = (data: any) => {
+    if(_saveTimeout.current) clearTimeout(_saveTimeout.current);
+    _saveTimeout.current = setTimeout(async () => {
+      try { await fetch("/api/user-data", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data) }); } catch(_){}
+    }, 1000);
+  };
+
+  const saveNoteIA = async (n: Record<string,{text:string,date:string}>) => { setNoteIA(n); saveToSupabase({note_ia:JSON.stringify(n)}); };
+  const saveStatuts = async (s: StatutDef[]) => { setStatuts(s); saveToSupabase({statuts:JSON.stringify(s)}); };
+  const saveResas = async r => { setResas(r); saveToSupabase({resas:JSON.stringify(r)}); };
+  const saveRelances = async (r: any[]) => { setRelances(r); saveToSupabase({relances:JSON.stringify(r)}); };
+  const saveDocs  = async d => { setDocs(d); saveToSupabase({docs:JSON.stringify(d.filter(x=>!x.isPdf))}); };
+  const saveLinks = async l => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
+  const saveEmails= e => { setEmails(e); };
 
   useEffect(()=>{
     (async()=>{
-      try{ const r=await localStorageGet("arc_docs");   if(r) setDocs(JSON.parse(r.value)); }catch(_){}
-      try{ const r=await localStorageGet("arc_resas");  if(r) setResas(JSON.parse(r.value)); }catch(_){}
-      try{ const r=await localStorageGet("arc_links");  if(r) setLinks(JSON.parse(r.value)); }catch(_){}
-      try{ const r=await localStorageGet("arc_links_fetched"); if(r) setLinksFetched(JSON.parse(r.value)); }catch(_){}
-      try{ const r=await localStorageGet("arc_context");if(r) setCustomCtx(r.value); }catch(_){}
-      try{
-        const r=await localStorageGet("arc_emails");
-        if(r){
-          const stored=JSON.parse(r.value);
-          // Fusionner : les INIT_EMAILS (nouveaux Gmail) priment sur le storage
-          // On garde les emails du storage non présents dans INIT_EMAILS
-          const initIds=new Set(INIT_EMAILS.map(m=>m.id));
-          const extra=stored.filter(m=>!initIds.has(m.id));
-          setEmails([...INIT_EMAILS,...extra]);
+      // Charger depuis Supabase en priorité
+      try {
+        const r = await fetch("/api/user-data");
+        if(r.ok) {
+          const d = await r.json();
+          if(d.resas) try{ setResas(JSON.parse(d.resas)); }catch(_){}
+          if(d.docs) try{ setDocs(JSON.parse(d.docs)); }catch(_){}
+          if(d.links) try{ setLinks(JSON.parse(d.links)); }catch(_){}
+          if(d.links_fetched) try{ setLinksFetched(JSON.parse(d.links_fetched)); }catch(_){}
+          if(d.context) setCustomCtx(d.context);
+          if(d.statuts) try{ setStatuts(JSON.parse(d.statuts)); }catch(_){}
+          if(d.relances) try{ setRelances(JSON.parse(d.relances)); }catch(_){}
+          if(d.note_ia) try{ setNoteIA(JSON.parse(d.note_ia)); }catch(_){}
         }
       }catch(_){}
-      try{ const r=await localStorageGet("arc_statuts");if(r) setStatuts(JSON.parse(r.value)); }catch(_){}
-      try{ const r=await localStorageGet("arc_relances");if(r) setRelances(JSON.parse(r.value)); }catch(_){}
-      try{ const r=await localStorageGet("arc_note_ia"); if(r) setNoteIA(JSON.parse(r.value)); }catch(_){}
     })();
     window._setEmails = e => { const w=e.map(m=>({...m,flags:m.flags||[],aTraiter:m.aTraiter||false})); setEmails(w); setLoadingMail(false); toast(e.length+" emails chargés"); };
     fetch("/api/emails").then(r=>r.json()).then(data=>{
@@ -291,15 +296,18 @@ export default function App() {
 
   const handleSel = async (emailArg) => {
     let email = emailArg;
-    // Mark as read when opened
     if(email.unread) {
       const upd = emails.map(m=>m.id===email.id?{...m,unread:false}:m);
       saveEmails(upd); email={...email,unread:false};
     }
     setSel(email); setReply(""); setEditing(false); setExtracted(null); setShowPlanForm(false);
+  };
+
+  const genererReponse = async () => {
+    if(!sel) return;
     setGenReply(true);
     try {
-      const prompt = "Email:\nDe: "+email.from+" <"+email.fromEmail+">\nObjet: "+email.subject+"\n\n"+(email.body||email.snippet);
+      const prompt = "Email:\nDe: "+sel.from+" <"+sel.fromEmail+">\nObjet: "+sel.subject+"\n\n"+(sel.body||sel.snippet);
       const linkCtx = Object.values(linksFetched).filter(Boolean).map(l=>l.summary).join("\n\n");
       const sys = SYSTEM_PROMPT+(customCtx?"\n\nContexte:\n"+customCtx:"")+(linkCtx?"\n\nInfos web:\n"+linkCtx:"");
       const [r,info] = await Promise.all([
@@ -466,6 +474,7 @@ export default function App() {
         </div>
         {!navCollapsed&&<div style={{padding:"16px 20px",borderTop:"1px solid rgba(209,196,178,0.06)",flexShrink:0}}>
           <div style={{fontSize:9,color:"rgba(209,196,178,0.22)",lineHeight:1.9,letterSpacing:"0.08em"}}>133 Av. de France<br/>75013 Paris</div>
+          <button onClick={()=>signOut({callbackUrl:"/"})} style={{marginTop:8,width:"100%",padding:"6px 0",borderRadius:6,border:"1px solid rgba(209,196,178,0.12)",background:"transparent",color:"rgba(209,196,178,0.35)",fontSize:9,letterSpacing:"0.08em",cursor:"pointer",textTransform:"uppercase"}}>⎋ Déconnexion</button>
         </div>}
       </aside>
 
@@ -696,7 +705,7 @@ export default function App() {
 
             {/* Panel détail réservation (général) — XL */}
             {selResaGeneral&&!editResaPanel&&(
-              <div style={{flex:1,minWidth:380,borderLeft:"1px solid #EAE6E1",background:"#FDFCFA",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              <div style={{flex:1,minWidth:380,borderLeft:"1px solid #EAE6E1",background:"#FDFCFA",display:"flex",flexDirection:"column",overflowY:"auto"}}>
 
                 {/* Header avec avatar */}
                 <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
@@ -920,7 +929,7 @@ export default function App() {
             {/* Sidebar catégories mails — collapsible */}
             <div style={{width:subCollapsed?44:160,background:"#221E19",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid rgba(209,196,178,0.06)",transition:"width .2s ease",overflow:"hidden"}}>
               <div style={{padding:subCollapsed?"10px 6px":"14px 10px 10px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0}}>
-                {!subCollapsed&&<button onClick={()=>{setLoadingMail(true);window.sendPrompt("RELOAD_EMAILS");}} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
+                {!subCollapsed&&<button onClick={()=>{setLoadingMail(true);fetch("/api/emails").then(r=>r.json()).then(data=>{if(Array.isArray(data)&&data.length>0){const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:m.flags||[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));setEmails(prev=>{const ids=new Set(INIT_EMAILS.map(e=>e.id));const extra=prev.filter(e=>!ids.has(e.id)&&!real.find(r=>r.id===e.id));return[...real,...extra];});toast(data.length+" emails chargés");}setLoadingMail(false);}).catch(()=>{toast("Erreur chargement","err");setLoadingMail(false);});}} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
                   {loadingMail?<Spin s={11}/>:"↺"} Actualiser
                 </button>}
                 <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"rgba(209,196,178,0.07)",color:"rgba(209,196,178,0.35)",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:subCollapsed?0:6}}>
@@ -929,7 +938,7 @@ export default function App() {
               </div>
               {subCollapsed?(
                 <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center"}}>
-                  <button onClick={()=>{setLoadingMail(true);window.sendPrompt("RELOAD_EMAILS");}} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13}}>↺</button>
+                  <button onClick={()=>{setLoadingMail(true);fetch("/api/emails").then(r=>r.json()).then(data=>{if(Array.isArray(data)&&data.length>0){const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:m.flags||[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));setEmails(prev=>{const ids=new Set(INIT_EMAILS.map(e=>e.id));const extra=prev.filter(e=>!ids.has(e.id)&&!real.find(r=>r.id===e.id));return[...real,...extra];});toast(data.length+" emails chargés");}setLoadingMail(false);}).catch(()=>{setLoadingMail(false);});}} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13}}>↺</button>
                   <button onClick={()=>setMailFilter("all")} title="Tous les mails" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>📬</button>
                   {MAIL_CATS.map(c=>(
                     <button key={c.id} onClick={()=>setMailFilter(c.id)} title={c.label} style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>
@@ -1122,14 +1131,20 @@ export default function App() {
                     </div>
                     {genReply
                       ? <div style={{padding:"20px",fontSize:13,color:"#8A8178",display:"flex",alignItems:"center",gap:10}}><Spin/> Rédaction en cours…</div>
-                      : editing
-                        ? <textarea value={editReply} onChange={e=>setEditReply(e.target.value)} style={{width:"100%",padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,border:"none",outline:"none",resize:"vertical",background:"transparent",minHeight:200}}/>
-                        : <div style={{padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{reply}</div>
+                      : !reply
+                        ? <div style={{padding:"20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+                            <div style={{fontSize:12,color:"#8A8178",textAlign:"center"}}>Cliquez pour demander à ARCHANGE de rédiger une réponse.</div>
+                            <button onClick={genererReponse} style={{...gold,padding:"10px 20px",fontSize:12,display:"flex",alignItems:"center",gap:8}}>✨ Générer une réponse</button>
+                          </div>
+                        : editing
+                          ? <textarea value={editReply} onChange={e=>setEditReply(e.target.value)} style={{width:"100%",padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,border:"none",outline:"none",resize:"vertical",background:"transparent",minHeight:200}}/>
+                          : <div style={{padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{reply}</div>
                     }
                     <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #EAE6E1",background:"#F5F3EF"}}>
-                      <button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+(editing?editReply:reply)); setDrafted(p=>new Set([...p,sel.id])); toast("Brouillon créé !"); }} disabled={!reply||genReply} style={{...gold}}>Créer le brouillon</button>
-                      <button onClick={()=>{ if(editing){setReply(editReply);setEditing(false);}else{setEditing(true);setEditReply(reply);} }} disabled={!reply||genReply} style={{...out}}>{editing?"Valider":"Modifier"}</button>
-                      <button onClick={()=>handleSel(sel)} disabled={genReply} style={{...out,color:"#8A8178"}}>↻ Regénérer</button>
+                      {reply && <><button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+(editing?editReply:reply)); setDrafted(p=>new Set([...p,sel.id])); toast("Brouillon créé !"); }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
+                      <button onClick={()=>{ if(editing){setReply(editReply);setEditing(false);}else{setEditing(true);setEditReply(reply);} }} disabled={genReply} style={{...out}}>{editing?"Valider":"Modifier"}</button>
+                      <button onClick={genererReponse} disabled={genReply} style={{...out,color:"#8A8178"}}>↻ Regénérer</button></>}
+                      {!reply && !genReply && <button onClick={genererReponse} style={{...gold,fontSize:11}}>✨ Générer une réponse</button>}
                     </div>
                   </div>
                 </div>
