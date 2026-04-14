@@ -64,7 +64,35 @@ async function callClaude(msg: string, system: string, docs: any[] | null): Prom
   }
 }
 
-const Spin = ({s=14}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{animation:"sp .7s linear infinite"}}><circle cx="12" cy="12" r="9" strokeOpacity=".15"/><path d="M12 3a9 9 0 0 1 9 9" strokeLinecap="round"/><style>{"@keyframes sp{to{transform:rotate(360deg)}}"}</style></svg>;
+// ─── Nettoyage HTML des corps d'emails ───────────────────────────────────────
+function cleanEmailBody(raw: string): string {
+  if (!raw) return "";
+  // Décoder les entités HTML courantes
+  const entities: Record<string,string> = {
+    "&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&#39;":"'",
+    "&nbsp;":" ","&apos;":"'","&hellip;":"…","&mdash;":"—","&ndash;":"–",
+    "&laquo;":"«","&raquo;":"»","&eacute;":"é","&egrave;":"è","&ecirc;":"ê",
+    "&agrave;":"à","&acirc;":"â","&ocirc;":"ô","&ugrave;":"ù","&ucirc;":"û",
+    "&iuml;":"ï","&ccedil;":"ç","&oslash;":"ø","&copy;":"©","&reg;":"®",
+  };
+  let text = raw;
+  // Remplacer les entités nommées
+  Object.entries(entities).forEach(([entity, char]) => {
+    text = text.replace(new RegExp(entity, "gi"), char);
+  });
+  // Remplacer les entités numériques (&#123; ou &#x7B;)
+  text = text.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
+  text = text.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  // Remplacer les <br> et <p> par des sauts de ligne avant de striper
+  text = text.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<\/div>/gi, "\n");
+  // Supprimer toutes les balises HTML restantes
+  text = text.replace(/<[^>]+>/g, "");
+  // Nettoyer les espaces et lignes vides excessives
+  text = text.replace(/[ \t]+/g, " ");
+  text = text.replace(/\n{3,}/g, "\n\n");
+  text = text.trim();
+  return text;
+}
 
 const Avatar = ({name, size=34}) => {
   const i = name.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
@@ -192,7 +220,7 @@ export default function App() {
   useEffect(() => () => { if (notifTimer.current) clearTimeout(notifTimer.current); }, []);
   const [docs, setDocs] = useState([]);
   const [loadingMail, setLoadingMail] = useState(false);
-  const [calDate, setCalDate] = useState(new Date(2026,5,1));
+  const [calDate, setCalDate] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [selResa, setSelResa] = useState(null);
   const [editResa, setEditResa] = useState(null);
   const [links, setLinks] = useState({website:"",instagram:"",facebook:"",other:""});
@@ -302,8 +330,8 @@ export default function App() {
     fromEmail: m.from_email || "",
     subject:   m.subject    || "(sans objet)",
     date:      m.date       || "",
-    snippet:   m.snippet    || "",
-    body:      m.body       || m.snippet || "",
+    snippet:   cleanEmailBody(m.snippet || ""),
+    body:      cleanEmailBody(m.body || m.snippet || ""),
     flags:     Array.isArray(m.flags) ? m.flags : [],
     aTraiter:  m.a_traiter  || false,
     unread:    m.is_unread  || false,
@@ -472,6 +500,24 @@ export default function App() {
           ...prev,
           [sel.id]: { reply: newReply, editReply: newReply, extracted: newExtracted }
         }));
+      }
+      // Point 4 — Association automatique email ↔ événement
+      // Si l'IA détecte que c'est une réservation et qu'un événement correspond, on lie l'email
+      if (newExtracted?.isReservation || newExtracted?.nom || newExtracted?.email) {
+        const emailCandidat = newExtracted?.email || sel.fromEmail;
+        const nomCandidat = (newExtracted?.nom || sel.from || "").toLowerCase();
+        const resaMatch = resas.find(r =>
+          (r.email && r.email.toLowerCase() === emailCandidat?.toLowerCase()) ||
+          (r.nom && nomCandidat && r.nom.toLowerCase().includes(nomCandidat.split(" ")[0]))
+        );
+        if (resaMatch) {
+          // Lier l'email à la réservation en stockant l'association dans noteIA
+          const linkKey = `__email_link_${sel.id}`;
+          if (!noteIA[linkKey]) {
+            const upd = { ...noteIA, [linkKey]: { text: resaMatch.id, date: new Date().toLocaleDateString("fr-FR") } };
+            saveNoteIA(upd);
+          }
+        }
       }
     } catch (e: any) {
       toast("Erreur : " + (e.message || "connexion impossible"), "err");
@@ -661,7 +707,7 @@ export default function App() {
         </div>
         <div style={{flex:1,padding:navCollapsed?"8px 6px":"12px 10px",display:"flex",flexDirection:"column",gap:1,overflowY:"auto"}}>
           {NAV.map(n=>(
-            <button key={n.id} onClick={()=>{setView(n.id);setSubCollapsed(false);}} title={navCollapsed?n.label:undefined} style={{display:"flex",alignItems:"center",gap:navCollapsed?0:10,width:"100%",padding:navCollapsed?"11px 0":"10px 12px",borderRadius:8,border:"none",background:view===n.id?"rgba(209,196,178,0.1)":"transparent",color:view===n.id?"#D1C4B2":"rgba(209,196,178,0.38)",fontSize:11,textAlign:"left",cursor:"pointer",justifyContent:navCollapsed?"center":"flex-start",position:"relative",transition:"all .15s",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:view===n.id?600:400}}>
+            <button key={n.id} onClick={()=>{setView(n.id);setSubCollapsed(false);}} title={navCollapsed?n.label:undefined} style={{display:"flex",alignItems:"center",gap:navCollapsed?0:10,width:"100%",padding:navCollapsed?"11px 0":"10px 12px",borderRadius:8,border:"none",background:view===n.id?"rgba(209,196,178,0.1)":"transparent",color:view===n.id?"#D1C4B2":"rgba(209,196,178,0.65)",fontSize:11,textAlign:"left",cursor:"pointer",justifyContent:navCollapsed?"center":"flex-start",position:"relative",transition:"all .15s",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:view===n.id?600:400}}>
               <span style={{fontSize:15,opacity:.8,fontFamily:"serif"}}>{n.icon}</span>
               {!navCollapsed&&<><span style={{flex:1}}>{n.label}</span>{n.badge>0&&<span style={{fontSize:9,background:view===n.id?"rgba(209,196,178,0.15)":"rgba(209,196,178,0.06)",color:view===n.id?"#D1C4B2":"rgba(209,196,178,0.3)",padding:"2px 7px",borderRadius:100,fontWeight:700,letterSpacing:"0.04em"}}>{n.badge}</span>}</>}              {navCollapsed&&n.badge>0&&<span style={{position:"absolute",top:6,right:6,width:6,height:6,borderRadius:"50%",background:"#C9A96E"}}/>}
             </button>
@@ -1146,16 +1192,16 @@ export default function App() {
                 </div>
               ):(
                 <div style={{padding:"4px 6px",flex:1}}>
-                  <button onClick={()=>setMailFilter("all")} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="all"?"#D1C4B2":"rgba(209,196,178,0.4)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                  <button onClick={()=>setMailFilter("all")} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="all"?"#D1C4B2":"rgba(209,196,178,0.75)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                       <span style={{fontSize:12}}>📬</span>
                       <span style={{flex:1}}>Tous les mails</span>
-                      <span style={{fontSize:10,color:mailFilter==="all"?"#C9A96E":"rgba(209,196,178,0.25)"}}>{emails.length}</span>
+                      <span style={{fontSize:10,color:mailFilter==="all"?"#C9A96E":"rgba(209,196,178,0.45)"}}>{emails.length}</span>
                   </button>
                   {MAIL_CATS.map(c=>(
-                    <button key={c.id} onClick={()=>setMailFilter(c.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(209,196,178,0.1)":"transparent",color:mailFilter===c.id?"#D1C4B2":"rgba(209,196,178,0.4)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                    <button key={c.id} onClick={()=>setMailFilter(c.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(209,196,178,0.1)":"transparent",color:mailFilter===c.id?"#D1C4B2":"rgba(209,196,178,0.75)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                       <span style={{fontSize:12}}>{c.icon}</span>
                       <span style={{flex:1}}>{c.label}</span>
-                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.25)"}}>{emails.filter(m=>c.id==="all"?true:c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id)).length}</span>
+                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.45)"}}>{emails.filter(m=>c.id==="all"?true:c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id)).length}</span>
                     </button>
                   ))}
                 </div>
@@ -1232,6 +1278,7 @@ export default function App() {
                         <button onClick={()=>toggleFlag(sel.id,"flag")} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,opacity:(sel.flags||[]).includes("flag")?1:0.25}}>🚩</button>
                         <button onClick={()=>toggleUnread(sel.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.unread?"#EFF6FF":"#F5F3EF",color:sel.unread?"#1D4ED8":"#8A8178",cursor:"pointer",fontWeight:sel.unread?600:400}}>● {sel.unread?"Non lu":"Marquer non lu"}</button>
                         <button onClick={()=>toggleATraiter(sel.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.aTraiter?"#EFF6FF":"#F5F3EF",color:sel.aTraiter?"#2563EB":"#8A8178",cursor:"pointer",fontWeight:sel.aTraiter?600:400}}>📋 {sel.aTraiter?"À traiter":"Marquer à traiter"}</button>
+                        <button onClick={()=>{ if(!window.confirm("Supprimer cet email de l'app ? (Pas supprimé de Gmail)")) return; const upd=emails.filter(m=>m.id!==sel.id); saveEmails(upd); setSel(null); toast("Email supprimé de l'app"); }} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer",marginLeft:"auto"}}>🗑 Supprimer</button>
                       </div>
                     </div>
                     <div style={{padding:"16px 20px"}}>
@@ -1282,7 +1329,6 @@ export default function App() {
                         {/* Champs obligatoires */}
                         {[
                           ["dateDebut","📅 Date de l'événement *","date",true],
-                          ["nombrePersonnes","👥 Nombre de personnes *","number",true],
                           ["heureDebut","🕐 Heure de début *","time",true],
                           ["heureFin","🕕 Heure de fin *","time",true],
                         ].map(([k,l,type,required])=>(
@@ -1292,6 +1338,12 @@ export default function App() {
                             {planErrors[k]&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {planErrors[k]}</div>}
                           </div>
                         ))}
+                        {/* Nombre de personnes — champ numérique libre */}
+                        <div>
+                          <label style={{fontSize:11,color:planErrors["nombrePersonnes"]?"#DC2626":"#8A8178",display:"block",marginBottom:4,fontWeight:planErrors["nombrePersonnes"]?600:400}}>👥 Nombre de personnes *</label>
+                          <input type="number" min="1" value={planForm.nombrePersonnes||""} onChange={e=>setPlanForm({...planForm,nombrePersonnes:e.target.value})} placeholder="Ex: 50" style={{...inp}}/>
+                          {planErrors["nombrePersonnes"]&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {planErrors["nombrePersonnes"]}</div>}
+                        </div>
                         {/* Champs optionnels */}
                         <div>
                           <label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🎉 Type d'événement</label>
@@ -1342,7 +1394,6 @@ export default function App() {
                       {reply && <><button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+(editing?editReply:reply)); setDrafted(p=>new Set([...p,sel.id])); toast("Brouillon créé !"); }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
                       <button onClick={()=>{ if(editing){setReply(editReply);setEditing(false);if(sel)setRepliesCache(prev=>({...prev,[sel.id]:{...prev[sel.id],reply:editReply,editReply}}));}else{setEditing(true);setEditReply(reply);} }} disabled={genReply} style={{...out}}>{editing?"Valider":"Modifier"}</button>
                       <button onClick={genererReponse} disabled={genReply} style={{...out,color:"#8A8178"}}>↻ Regénérer</button></>}
-                      {!reply && !genReply && <button onClick={genererReponse} style={{...gold,fontSize:11}}>✨ Générer une réponse</button>}
                     </div>
                   </div>
                 </div>
@@ -1642,7 +1693,7 @@ export default function App() {
               </button>
               {srcSections.liens&&(
                 <div style={{padding:20,display:"flex",flexDirection:"column",gap:16}}>
-                  {[["website","🌐","Site internet","https://www.reva-brasserie.com"],["instagram","📸","Instagram","https://instagram.com/..."],["facebook","👍","Facebook","https://facebook.com/..."],["other","🔗","Autre lien","https://..."]].map(([key,icon,label,ph])=>(
+                  {[["website","🌐","Site internet","Entrez le lien de votre site internet..."],["instagram","📸","Instagram","https://instagram.com/..."],["facebook","👍","Facebook","https://facebook.com/..."],["other","🔗","Autre lien","https://..."]].map(([key,icon,label,ph])=>(
                     <div key={key}>
                       <label style={{fontSize:11,color:"#7A736A",display:"block",marginBottom:6,fontWeight:600,letterSpacing:"0.04em",textTransform:"uppercase"}}>{icon} {label}</label>
                       <div style={{display:"flex",gap:8}}>
