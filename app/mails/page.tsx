@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-const localStorageSet = async (key: string, value: string) => { try { localStorage.setItem(key, value); } catch(_){} return {key, value};};
-const localStorageGet = async (key: string) => { try { const v = localStorage.getItem(key); return v ? {key, value: v} : null; } catch(_){ return null; }};
+
+
 
 const ESPACES = [
   { id: "rdc", nom: "Rez-de-chaussée", color: "#E8B86D" },
@@ -42,10 +42,26 @@ const INIT_RESAS = [
 ];
 const EMPTY_RESA = { id:null, nom:"", email:"", telephone:"", entreprise:"", typeEvenement:"", nombrePersonnes:"", espaceId:"rdc", dateDebut:"", heureDebut:"", heureFin:"", statut:"nouveau", notes:"", budget:"", noteDirecteur:"" };
 
-async function callClaude(msg, system, docs) {
-  const res = await fetch("/api/claude", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ action:"raw", msg, system, docs }) });
-  const data = await res.json();
-  return data.response || "";
+async function callClaude(msg: string, system: string, docs: any[] | null): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 55000);
+  try {
+    const res = await fetch("/api/claude", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "raw", msg, system, docs }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`Erreur API (${res.status})`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data.response || "";
+  } catch (e: any) {
+    if (e.name === "AbortError") throw new Error("Délai dépassé — réessayez");
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 const Spin = ({s=14}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{animation:"sp .7s linear infinite"}}><circle cx="12" cy="12" r="9" strokeOpacity=".15"/><path d="M12 3a9 9 0 0 1 9 9" strokeLinecap="round"/><style>{"@keyframes sp{to{transform:rotate(360deg)}}"}</style></svg>;
@@ -156,7 +172,7 @@ export default function App() {
   useEffect(() => { if (status === "unauthenticated") router.replace("/") }, [status, router])
   const [view, setView] = useState("general");
   const [emails, setEmails] = useState([]);
-  const [resas, setResas] = useState(INIT_RESAS);
+  const [resas, setResas] = useState<any[]>([]);
   const [sel, setSel] = useState(null);
   const [reply, setReply] = useState("");
   const [genReply, setGenReply] = useState(false);
@@ -164,7 +180,14 @@ export default function App() {
   const [drafted, setDrafted] = useState(new Set());
   const [editing, setEditing] = useState(false);
   const [editReply, setEditReply] = useState("");
-  const [notif, setNotif] = useState(null);
+  const [notif, setNotif] = useState<{msg:string,type:string}|null>(null);
+  const notifTimer = useRef<any>(null);
+  const toast = (msg: string, type = "ok") => {
+    if (notifTimer.current) clearTimeout(notifTimer.current);
+    setNotif({ msg, type });
+    notifTimer.current = setTimeout(() => setNotif(null), 3000);
+  };
+  useEffect(() => () => { if (notifTimer.current) clearTimeout(notifTimer.current); }, []);
   const [docs, setDocs] = useState([]);
   const [loadingMail, setLoadingMail] = useState(false);
   const [calDate, setCalDate] = useState(new Date(2026,5,1));
@@ -221,21 +244,31 @@ export default function App() {
   const [srcSections, setSrcSections] = useState({liens:true, contexte:true, docs:true});  const [showNewEvent, setShowNewEvent] = useState(false);
   const [newEvent, setNewEvent] = useState<any>({...EMPTY_RESA});
   const [newEventErrors, setNewEventErrors] = useState<any>({});
-  const fileRef = useRef(null);
+  const [initializing, setInitializing] = useState(true);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const toast = (msg, type="ok") => { setNotif({msg,type}); setTimeout(()=>setNotif(null),3000); };
+  const daysInMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+  const firstDay = (d: Date) => { const f = new Date(d.getFullYear(),d.getMonth(),1).getDay(); return f===0?6:f-1; };
+  const resasDay = (day: number) => { const ds=calDate.getFullYear()+"-"+String(calDate.getMonth()+1).padStart(2,"0")+"-"+String(day).padStart(2,"0"); return resas.filter(r=>r.dateDebut===ds); };
 
-  const daysInMonth = d => new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
-  const firstDay = d => { const f = new Date(d.getFullYear(),d.getMonth(),1).getDay(); return f===0?6:f-1; };
-  const resasDay = day => { const ds=calDate.getFullYear()+"-"+String(calDate.getMonth()+1).padStart(2,"0")+"-"+String(day).padStart(2,"0"); return resas.filter(r=>r.dateDebut===ds); };
-
-  // Sauvegarde Supabase (avec debounce pour éviter trop d'appels)
-  const _saveTimeout = React.useRef<any>(null);
-  const saveToSupabase = (data: any) => {
-    if(_saveTimeout.current) clearTimeout(_saveTimeout.current);
-    _saveTimeout.current = setTimeout(async () => {
-      try { await fetch("/api/user-data", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data) }); } catch(_){}
-    }, 1000);
+  // Sauvegarde Supabase — debounce par clé pour éviter les écrasements
+  const _saveTimers = React.useRef<Record<string,any>>({});
+  const saveToSupabase = (data: Record<string, string>) => {
+    Object.entries(data).forEach(([key, value]) => {
+      if (_saveTimers.current[key]) clearTimeout(_saveTimers.current[key]);
+      _saveTimers.current[key] = setTimeout(async () => {
+        try {
+          const res = await fetch("/api/user-data", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ [key]: value }),
+          });
+          if (!res.ok) console.error("Supabase save error:", key, res.status);
+        } catch (e) {
+          console.error("Supabase save failed:", key, e);
+        }
+      }, 1000);
+    });
   };
 
   const saveNoteIA = async (n: Record<string,{text:string,date:string}>) => { setNoteIA(n); saveToSupabase({note_ia:JSON.stringify(n)}); };
@@ -246,56 +279,88 @@ export default function App() {
   const saveLinks = async l => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
   const saveEmails= e => { setEmails(e); };
 
-  useEffect(()=>{
-    (async()=>{
-      // Charger depuis Supabase en priorité
-      try {
-        const r = await fetch("/api/user-data");
-        if(r.ok) {
-          const d = await r.json();
-          if(d.resas) try{ setResas(JSON.parse(d.resas)); }catch(_){}
-          if(d.docs) try{ setDocs(JSON.parse(d.docs)); }catch(_){}
-          if(d.links) try{ setLinks(JSON.parse(d.links)); }catch(_){}
-          if(d.links_fetched) try{ setLinksFetched(JSON.parse(d.links_fetched)); }catch(_){}
-          if(d.context) setCustomCtx(d.context);
-          if(d.statuts) try{ const s=JSON.parse(d.statuts); if(Array.isArray(s)&&s.length>0) setStatuts(s); }catch(_){}
-          if(d.relances) try{ setRelances(JSON.parse(d.relances)); }catch(_){}
-          if(d.note_ia) try{ setNoteIA(JSON.parse(d.note_ia)); }catch(_){}
-        }
-      }catch(_){}
-    })();
-    // Charger les vrais emails Gmail depuis Supabase (isolés par user_id)
-    setLoadingMail(true);
-    fetch("/api/emails").then(r=>r.json()).then(data=>{
-      if(Array.isArray(data)&&data.length>0){
-        const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:Array.isArray(m.flags)?m.flags:[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));
-        setEmails(real); // Remplace complètement — pas de mélange avec INIT_EMAILS
+  useEffect(() => {
+    let cancelled = false;
+    const mapEmail = (m: any) => ({
+      id:        m.id,
+      from:      m.from_name  || "",
+      fromEmail: m.from_email || "",
+      subject:   m.subject    || "(sans objet)",
+      date:      m.date       || "",
+      snippet:   m.snippet    || "",
+      body:      m.body       || m.snippet || "",
+      flags:     Array.isArray(m.flags) ? m.flags : [],
+      aTraiter:  m.a_traiter  || false,
+      unread:    m.is_unread  || false,
+    });
+
+    const init = async () => {
+      // Chargement parallèle — user-data + emails simultanément
+      const [userData, emailsData] = await Promise.allSettled([
+        fetch("/api/user-data").then(r => r.ok ? r.json() : Promise.reject("user-data:" + r.status)),
+        fetch("/api/emails").then(r => r.ok ? r.json() : Promise.reject("emails:" + r.status)),
+      ]);
+
+      if (cancelled) return;
+
+      if (userData.status === "fulfilled") {
+        const d = userData.value;
+        try { if (d.resas)         setResas(JSON.parse(d.resas)); }         catch { /* garde l'état initial */ }
+        try { if (d.docs)          setDocs(JSON.parse(d.docs)); }           catch {}
+        try { if (d.links)         setLinks(JSON.parse(d.links)); }         catch {}
+        try { if (d.links_fetched) setLinksFetched(JSON.parse(d.links_fetched)); } catch {}
+        if (d.context) setCustomCtx(d.context);
+        try { if (d.statuts)  { const s = JSON.parse(d.statuts); if (Array.isArray(s) && s.length > 0) setStatuts(s); } } catch {}
+        try { if (d.relances)  setRelances(JSON.parse(d.relances)); }  catch {}
+        try { if (d.note_ia)   setNoteIA(JSON.parse(d.note_ia)); }     catch {}
       } else {
-        setEmails([]); // Aucun email pour ce compte
+        console.error("Chargement données utilisateur échoué :", userData.reason);
       }
-      setLoadingMail(false);
-    }).catch(()=>{ setLoadingMail(false); });
-  },[]);
 
-  const toggleFlag = (id, flag) => {
-    const upd = emails.map(m=>{ if(m.id!==id) return m; const f=m.flags||[]; return {...m,flags:f.includes(flag)?f.filter(x=>x!==flag):[...f,flag]}; });
-    saveEmails(upd); if(sel?.id===id) setSel(upd.find(m=>m.id===id));
+      if (emailsData.status === "fulfilled") {
+        const data = emailsData.value;
+        setEmails(Array.isArray(data) && data.length > 0 ? data.map(mapEmail) : []);
+      } else {
+        console.error("Chargement emails échoué :", emailsData.reason);
+        setEmails([]);
+      }
+
+      if (!cancelled) { setInitializing(false); setLoadingMail(false); }
+    };
+
+    setLoadingMail(true);
+    init();
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggleFlag = (id: string, flag: string) => {
+    const upd = emails.map(m => {
+      if (m.id !== id) return m;
+      const f = m.flags || [];
+      return { ...m, flags: f.includes(flag) ? f.filter((x: string) => x !== flag) : [...f, flag] };
+    });
+    saveEmails(upd);
+    if (sel?.id === id) setSel(upd.find(m => m.id === id) || null);
   };
-  const toggleATraiter = id => {
-    const upd = emails.map(m=>m.id===id?{...m,aTraiter:!m.aTraiter}:m);
-    saveEmails(upd); if(sel?.id===id) setSel(upd.find(m=>m.id===id));
+  const toggleATraiter = (id: string) => {
+    const upd = emails.map(m => m.id === id ? { ...m, aTraiter: !m.aTraiter } : m);
+    saveEmails(upd);
+    if (sel?.id === id) setSel(upd.find(m => m.id === id) || null);
   };
 
-  const filtered = emails.filter(m=>{
-    const q=search.toLowerCase();
-    const ok=!q||m.from.toLowerCase().includes(q)||m.subject.toLowerCase().includes(q)||(m.body||"").toLowerCase().includes(q);
-    if(!ok) return false;
-    if(mailFilter==="nonlus") return !!m.unread;
-    if(mailFilter==="star") return (m.flags||[]).includes("star");
-    if(mailFilter==="flag") return (m.flags||[]).includes("flag");
-    if(mailFilter==="atraiter") return m.aTraiter;
+  const filtered = React.useMemo(() => emails.filter(m => {
+    const q = search.toLowerCase();
+    const matchesSearch = !q
+      || m.from?.toLowerCase().includes(q)
+      || m.subject?.toLowerCase().includes(q)
+      || (m.body || "").toLowerCase().includes(q);
+    if (!matchesSearch) return false;
+    if (mailFilter === "nonlus")   return !!m.unread;
+    if (mailFilter === "star")     return (m.flags || []).includes("star");
+    if (mailFilter === "flag")     return (m.flags || []).includes("flag");
+    if (mailFilter === "atraiter") return !!m.aTraiter;
     return true;
-  });
+  }), [emails, search, mailFilter]);
 
   const handleSel = async (emailArg) => {
     let email = emailArg;
@@ -307,114 +372,154 @@ export default function App() {
   };
 
   const genererReponse = async () => {
-    if(!sel) return;
+    if (!sel) return;
     setGenReply(true);
+    setReply(""); setEditReply(""); setExtracted(null);
     try {
-      const prompt = "Email:\nDe: "+sel.from+" <"+sel.fromEmail+">\nObjet: "+sel.subject+"\n\n"+(sel.body||sel.snippet);
-      const linkCtx = Object.values(linksFetched).filter(Boolean).map(l=>l.summary).join("\n\n");
-      const sys = SYSTEM_PROMPT+(customCtx?"\n\nContexte:\n"+customCtx:"")+(linkCtx?"\n\nInfos web:\n"+linkCtx:"");
-      const [r,info] = await Promise.all([
-        callClaude(prompt+"\n\nRédige une réponse.", sys, docs),
+      const prompt = `Email:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${sel.body || sel.snippet || ""}`;
+      const linkCtx = Object.values(linksFetched).filter(Boolean).map((l: any) => l.summary).join("\n\n");
+      const sys = SYSTEM_PROMPT + (customCtx ? "\n\nContexte:\n" + customCtx : "") + (linkCtx ? "\n\nInfos web:\n" + linkCtx : "");
+
+      // Réponse et extraction en parallèle — on gère les échecs indépendamment
+      const [reponse, infoRaw] = await Promise.allSettled([
+        callClaude(prompt + "\n\nRédige une réponse.", sys, docs),
         callClaude(prompt, EXTRACT_PROMPT, null),
       ]);
-      setReply(r); setEditReply(r);
-      try { const ex=JSON.parse(info.replace(/```json|```/g,"").trim()); setExtracted(ex); } catch(_){}
-    } catch { toast("Erreur","err"); }
+
+      if (reponse.status === "fulfilled" && reponse.value) {
+        setReply(reponse.value); setEditReply(reponse.value);
+      } else {
+        const msg = reponse.status === "rejected" ? (reponse.reason?.message || "Erreur IA") : "Réponse vide";
+        toast("Impossible de générer la réponse : " + msg, "err");
+      }
+
+      if (infoRaw.status === "fulfilled") {
+        try {
+          const ex = JSON.parse(infoRaw.value.replace(/```json|```/g, "").trim());
+          setExtracted(ex);
+        } catch { /* extraction silencieuse */ }
+      }
+    } catch (e: any) {
+      toast("Erreur : " + (e.message || "connexion impossible"), "err");
+    }
     setGenReply(false);
   };
 
   const openPlanForm = () => {
     const f = {
-      nom: extracted?.nom || sel?.from || "",
-      email: extracted?.email || sel?.fromEmail || "",
-      telephone: extracted?.telephone || "",
-      entreprise: extracted?.entreprise || "",
-      typeEvenement: extracted?.typeEvenement || "Dîner",
-      nombrePersonnes: extracted?.nombrePersonnes || "",
-      espaceId: extracted?.espaceDetecte || "rdc",
-      dateDebut: extracted?.dateDebut || "",
-      heureDebut: extracted?.heureDebut || "",
-      heureFin: extracted?.heureFin || "",
-      notes: extracted?.notes || "",
-      statut: "nouveau",
+      nom:            extracted?.nom          || sel?.from         || "",
+      email:          extracted?.email        || sel?.fromEmail    || "",
+      telephone:      extracted?.telephone    || "",
+      entreprise:     extracted?.entreprise   || "",
+      typeEvenement:  extracted?.typeEvenement|| "Dîner",
+      nombrePersonnes:extracted?.nombrePersonnes != null ? String(extracted.nombrePersonnes) : "",
+      espaceId:       extracted?.espaceDetecte|| "rdc",
+      dateDebut:      extracted?.dateDebut    || "",
+      heureDebut:     extracted?.heureDebut   || "",
+      heureFin:       extracted?.heureFin     || "",
+      notes:          extracted?.notes        || "",
+      statut:         "nouveau",
+      budget:         "",
+      noteDirecteur:  "",
     };
     setPlanForm(f); setPlanErrors({}); setShowPlanForm(true);
   };
 
   const submitPlanForm = () => {
-    const errs = {};
-    if (!planForm.dateDebut) errs.dateDebut = "Date obligatoire";
-    if (!planForm.nombrePersonnes) errs.nombrePersonnes = "Nombre de personnes obligatoire";
-    if (!planForm.heureDebut) errs.heureDebut = "Heure de début obligatoire";
-    if (!planForm.heureFin) errs.heureFin = "Heure de fin obligatoire";
-    if (Object.keys(errs).length > 0) { setPlanErrors(errs); return; }
-    const r = { ...planForm, id:"r"+Date.now(), nombrePersonnes: parseInt(planForm.nombrePersonnes)||planForm.nombrePersonnes };
-    saveResas([...resas,r]); toast("Ajouté au planning !"); setShowPlanForm(false); setExtracted(null);
+    const errs: Record<string, string> = {};
+    if (!planForm.nom?.trim())            errs.nom            = "Nom obligatoire";
+    if (!planForm.dateDebut)              errs.dateDebut      = "Date obligatoire";
+    if (!planForm.nombrePersonnes)        errs.nombrePersonnes= "Nombre de personnes obligatoire";
+    if (!planForm.heureDebut)             errs.heureDebut     = "Heure de début obligatoire";
+    if (!planForm.heureFin)               errs.heureFin       = "Heure de fin obligatoire";
+    if (Object.keys(errs).length > 0)    { setPlanErrors(errs); return; }
+    const pers = parseInt(String(planForm.nombrePersonnes), 10);
+    const r = { ...planForm, id: "r" + Date.now(), nombrePersonnes: isNaN(pers) ? planForm.nombrePersonnes : pers };
+    saveResas([...resas, r]);
+    toast("Réservation ajoutée au planning !");
+    setShowPlanForm(false); setExtracted(null);
   };
 
-  const fetchLink = async (url, key) => {
-    if(!url) return; setFetchingLink(key);
+  const fetchLink = async (url: string, key: string) => {
+    if (!url?.trim()) return;
+    setFetchingLink(key);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:1000,
-          tools:[{"type":"web_search_20250305","name":"web_search"}],
-          system:"Tu es un assistant qui analyse des sites web pour une brasserie parisienne. Recherche des informations sur l'URL donnée et résume en 200 mots max ce que fait ce site, ses services, son ambiance, pour aider à répondre à des emails professionnels. Réponds en français.",
-          messages:[{role:"user",content:"Recherche et résume ce site pour moi : "+url}]
-        })
-      });
-      const data = await res.json();
-      const txt = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("") || "Analyse effectuée.";
-      const upd = {...linksFetched,[key]:{url,summary:txt,fetchedAt:new Date().toLocaleDateString("fr-FR")}};
-      setLinksFetched(upd); try{ await localStorageSet("arc_links_fetched",JSON.stringify(upd)); }catch(_){}
+      const prompt = `Recherche et analyse ce site web pour la brasserie RÊVA : ${url}\nRésume en 200 mots max : ce que fait ce site, ses services, son ambiance, pour aider à répondre à des emails professionnels.`;
+      const sys = "Tu es un assistant qui analyse des sites web pour une brasserie parisienne. Réponds en français, de façon concise et utile.";
+      const txt = await callClaude(prompt, sys, null);
+      const upd = { ...linksFetched, [key]: { url, summary: txt || "Analyse effectuée.", fetchedAt: new Date().toLocaleDateString("fr-FR") } };
+      setLinksFetched(upd);
+      saveToSupabase({ links_fetched: JSON.stringify(upd) });
       toast("Analysé !");
-    } catch { toast("Erreur réseau","err"); }
+    } catch (e: any) {
+      toast("Erreur analyse : " + (e.message || "réseau"), "err");
+    }
     setFetchingLink(null);
   };
 
-  const handleDoc = async e => {
-    const file=e.target.files?.[0]; if(!file) return;
+  const handleDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast("Fichier trop volumineux (max 10 Mo)", "err"); return; }
     try {
-      const isPdf=file.type==="application/pdf"||file.name.endsWith(".pdf");
-      let doc;
-      if(isPdf){ const b64=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(file); }); doc={id:Date.now(),name:file.name,base64:b64,isPdf:true,size:file.size}; }
-      else { doc={id:Date.now(),name:file.name,content:await file.text(),isPdf:false,size:file.size}; }
-      saveDocs([...docs,doc]); toast('"'+file.name+'" ajouté');
-    } catch(err){ toast("Erreur: "+err.message,"err"); }
-    e.target.value="";
+      const isPdf = file.type === "application/pdf" || file.name.endsWith(".pdf");
+      let doc: any;
+      if (isPdf) {
+        const b64 = await new Promise<string>((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => res((r.result as string).split(",")[1]);
+          r.onerror = () => rej(new Error("Lecture du fichier échouée"));
+          r.readAsDataURL(file);
+        });
+        doc = { id: Date.now(), name: file.name, base64: b64, isPdf: true, size: file.size };
+      } else {
+        const content = await file.text();
+        doc = { id: Date.now(), name: file.name, content, isPdf: false, size: file.size };
+      }
+      saveDocs([...docs, doc]);
+      toast(`"${file.name}" ajouté aux sources IA`);
+    } catch (err: any) {
+      toast("Erreur : " + (err.message || "impossible de lire le fichier"), "err");
+    }
+    e.target.value = "";
   };
 
-  const genRelanceIAFn = async (resa) => {
+  const genRelanceIAFn = async (resa: any) => {
     setShowRelanceIA(resa); setRelanceIAText(""); setGenRelanceIA(true);
     try {
-      const linkedMails = emails.filter(m=>m.fromEmail===resa.email);
-      const hist = linkedMails.map(m=>`---\nDe: ${m.from}\nObjet: ${m.subject}\n${m.body||m.snippet}`).join("\n\n");
-      const prompt = `Client: ${resa.nom}${resa.entreprise?" ("+resa.entreprise+")":""}\nType: ${resa.typeEvenement||"—"}\nDate: ${resa.dateDebut||"—"}\nPersonnes: ${resa.nombrePersonnes||"—"}\nNotes: ${resa.notes||"—"}\n\nHistorique emails:\n${hist||"Aucun échange précédent"}\n\nRédige un email de relance chaleureux et professionnel pour ce client, en tenant compte des échanges précédents. Email complet avec objet inclus en première ligne (format "Objet: ..."), puis le corps du mail.`;
+      const linkedMails = emails.filter(m => m.fromEmail === resa.email);
+      const hist = linkedMails.length > 0
+        ? linkedMails.map(m => `---\nDe: ${m.from}\nObjet: ${m.subject}\n${m.body || m.snippet || ""}`).join("\n\n")
+        : "Aucun échange précédent.";
+      const prompt = `Client: ${resa.nom || "—"}${resa.entreprise ? " (" + resa.entreprise + ")" : ""}\nType: ${resa.typeEvenement || "—"}\nDate: ${resa.dateDebut || "—"}\nPersonnes: ${resa.nombrePersonnes || "—"}\nNotes: ${resa.notes || "—"}\n\nHistorique emails:\n${hist}\n\nRédige un email de relance chaleureux et professionnel. Email complet avec objet en première ligne (format "Objet: ..."), puis le corps.`;
       const txt = await callClaude(prompt, SYSTEM_PROMPT, docs);
       setRelanceIAText(txt);
-    } catch { toast("Erreur IA","err"); setShowRelanceIA(null); }
+    } catch (e: any) {
+      toast("Erreur génération : " + (e.message || "IA indisponible"), "err");
+      setShowRelanceIA(null);
+    }
     setGenRelanceIA(false);
   };
 
-  const generateNoteIA = async (resa) => {
+  const generateNoteIA = async (resa: any) => {
     setGenNoteIA(resa.id);
     try {
-      const linkedMails = emails.filter(m=>
-        (resa.email && m.fromEmail===resa.email) ||
-        (resa.nom && m.from.toLowerCase().includes(resa.nom.toLowerCase().split(" ")[0]))
+      const linkedMails = emails.filter(m =>
+        (resa.email && m.fromEmail === resa.email) ||
+        (resa.nom && m.from?.toLowerCase().includes(resa.nom.toLowerCase().split(" ")[0]))
       );
-      const hist = linkedMails.length>0
-        ? linkedMails.map(m=>`---\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n${m.body||m.snippet}`).join("\n\n")
+      const hist = linkedMails.length > 0
+        ? linkedMails.map(m => `---\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n${m.body || m.snippet || ""}`).join("\n\n")
         : "Aucun échange email trouvé pour cet événement.";
-      const prompt = `Événement: ${resa.nom}${resa.entreprise?" ("+resa.entreprise+")":""}\nType: ${resa.typeEvenement||"—"} | Date: ${resa.dateDebut||"—"} | Horaires: ${resa.heureDebut||"—"} → ${resa.heureFin||"—"} | Espace: ${ESPACES.find(e=>e.id===resa.espaceId)?.nom||"—"} | Personnes: ${resa.nombrePersonnes||"—"} | Budget: ${resa.budget||"—"}\nNotes internes: ${resa.notes||"—"}\n\nÉchanges emails:\n${hist}`;
-      const sys = `Tu es un coordinateur événementiel expérimenté. Analyse les échanges emails ci-dessous et rédige une note de briefing concise pour l'équipe RÊVA. Inclus uniquement ce qui est utile opérationnellement : date/heure confirmées, nombre de personnes, espace réservé, type d'événement, prestations demandées (menu, boissons, matériel technique, décoration), contraintes particulières, budget si mentionné, interlocuteur principal et ton général du client. Format : bullet points courts, pas de formules de politesse, juste les faits.`;
+      const espaceName = ESPACES.find(e => e.id === resa.espaceId)?.nom || "—";
+      const prompt = `Événement: ${resa.nom || "—"}${resa.entreprise ? " (" + resa.entreprise + ")" : ""}\nType: ${resa.typeEvenement || "—"} | Date: ${resa.dateDebut || "—"} | Horaires: ${resa.heureDebut || "—"} → ${resa.heureFin || "—"} | Espace: ${espaceName} | Personnes: ${resa.nombrePersonnes || "—"} | Budget: ${resa.budget || "—"}\nNotes internes: ${resa.notes || "—"}\n\nÉchanges emails:\n${hist}`;
+      const sys = `Tu es un coordinateur événementiel. Rédige une note de briefing concise pour l'équipe RÊVA en bullet points : date/heure, nombre de personnes, espace, type d'événement, prestations, contraintes, budget si mentionné, interlocuteur. Juste les faits, pas de formules de politesse.`;
       const txt = await callClaude(prompt, sys, docs);
-      const upd = {...noteIA, [resa.id]:{text:txt, date:new Date().toLocaleDateString("fr-FR")}};
+      const upd = { ...noteIA, [resa.id]: { text: txt, date: new Date().toLocaleDateString("fr-FR") } };
       saveNoteIA(upd);
-    } catch { toast("Erreur génération note","err"); }
+    } catch (e: any) {
+      toast("Erreur génération note : " + (e.message || "IA indisponible"), "err");
+    }
     setGenNoteIA(null);
   };
 
@@ -437,7 +542,10 @@ export default function App() {
   const parEspace=ESPACES.map(e=>({...e,n:resas.filter(r=>r.espaceId===e.id).length,c:resas.filter(r=>r.espaceId===e.id&&r.statut==="confirme").length}));
   const parType=TYPES_EVT.map(t=>({t,n:resas.filter(r=>r.typeEvenement===t).length})).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
   const maxN=Math.max(...parEspace.map(e=>e.n),1);
-  const srcActives=Object.values(linksFetched).filter(Boolean).length+docs.length+(customCtx?1:0);
+  const srcActives = React.useMemo(
+    () => Object.values(linksFetched).filter(Boolean).length + docs.length + (customCtx ? 1 : 0),
+    [linksFetched, docs, customCtx]
+  );
 
   const NAV=[
     {id:"general",  icon:"◈",  label:"Événements", badge:resas.filter(r=>r.statut==="nouveau"||!r.statut).length||null},
@@ -455,7 +563,17 @@ export default function App() {
 
   return (
     <div style={{display:"flex",height:"100vh",overflow:"hidden",fontFamily:"'DM Sans', 'Helvetica Neue', sans-serif",background:"#F5F3EF"}}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#C9C3B8;border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:#A89E8F;}.mail-row:hover .mail-actions{opacity:1!important}.nav-btn:hover{background:rgba(209,196,178,0.12)!important;}.fade-in{animation:fadeIn .25s ease}.@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}"}</style>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#C9C3B8;border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:#A89E8F;}.mail-row:hover .mail-actions{opacity:1!important}.nav-btn:hover{background:rgba(209,196,178,0.12)!important;}.fade-in{animation:fadeIn .25s ease}@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}"}</style>
+
+      {/* Écran de chargement initial */}
+      {initializing && (
+        <div style={{position:"fixed",inset:0,background:"#1C1814",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:9999}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#D1C4B2",letterSpacing:"0.28em",textTransform:"uppercase"}}>ARCHANGE</div>
+          <div style={{fontSize:8,color:"rgba(209,196,178,0.4)",letterSpacing:"0.18em",textTransform:"uppercase",marginTop:-8}}>RÊVA · AGENT IA</div>
+          <Spin s={18}/>
+          <div style={{fontSize:11,color:"rgba(209,196,178,0.35)",letterSpacing:"0.08em"}}>Chargement en cours…</div>
+        </div>
+      )}
 
       {notif && <div style={{position:"fixed",bottom:32,left:"50%",transform:"translateX(-50%)",zIndex:9999,padding:"12px 24px",borderRadius:12,background:notif.type==="err"?"#2D0A0A":"#0A1F0E",color:notif.type==="err"?"#FCA5A5":"#6EE7B7",fontSize:13,fontWeight:500,whiteSpace:"nowrap",boxShadow:"0 8px 32px rgba(0,0,0,.25)",letterSpacing:"0.01em",border:notif.type==="err"?"1px solid rgba(239,68,68,.2)":"1px solid rgba(52,211,153,.2)"}}>{notif.msg}</div>}
 
@@ -537,7 +655,7 @@ export default function App() {
                           </button>
                           <div style={{display:"flex",alignItems:"center",gap:4}}>
                             {count>0&&<span style={{fontSize:10,opacity:.6,color:generalFilter===s.id?"#E8B86D":"rgba(209,196,178,0.4)"}}>{count}</span>}
-                            <button onClick={e=>{e.stopPropagation();if(!window.confirm('Supprimer le statut "'+s.label+'" ?')) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);if(generalFilter===s.id)setGeneralFilter("all");toast("Statut supprimé");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(209,196,178,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(239,68,68,0.7)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(209,196,178,0.2)")}>✕</button>
+                            <button onClick={e=>{e.stopPropagation();const ok=window.confirm('Supprimer "'+s.label+'" ? Les événements avec ce statut passeront à "Nouveau".');if(!ok) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);if(generalFilter===s.id)setGeneralFilter("all");toast("Statut supprimé");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(209,196,178,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(239,68,68,0.7)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(209,196,178,0.2)")}>✕</button>
                           </div>
                         </div>
                       );
@@ -1463,7 +1581,7 @@ export default function App() {
                         <div style={{marginTop:8,padding:"12px 14px",background:"#EDF5F0",border:"1px solid #C3DDD0",borderRadius:8}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                             <div style={{fontSize:10,color:"#2D6A4F",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase"}}>Résumé · {linksFetched[key].fetchedAt}</div>
-                            <button onClick={()=>{ const u={...linksFetched}; delete u[key]; setLinksFetched(u); try{localStorageSet("arc_links_fetched",JSON.stringify(u));}catch(_){} }} style={{background:"none",border:"none",color:"#A0522D",fontSize:11,cursor:"pointer",padding:0}}>Supprimer ×</button>
+                            <button onClick={()=>{ const u={...linksFetched}; delete u[key]; setLinksFetched(u); saveToSupabase({links_fetched:JSON.stringify(u)}); }} style={{background:"none",border:"none",color:"#A0522D",fontSize:11,cursor:"pointer",padding:0}}>Supprimer ×</button>
                           </div>
                           <div style={{fontSize:12,color:"#2D4A3A",lineHeight:1.7}}>{linksFetched[key].summary||""}</div>
                         </div>
@@ -1481,7 +1599,7 @@ export default function App() {
                   <div style={{fontSize:11,color:"#8A8178",marginTop:2}}>Instructions spéciales, ton, infos clés pour ARCHANGE.</div>
                 </button>
                 <div style={{display:"flex",gap:8,flexShrink:0,marginLeft:12}}>
-                  <button onClick={()=>{ if(editingCtx){try{localStorageSet("arc_context",customCtx);}catch(_){}} setEditingCtx(v=>!v); }} style={{...out,fontSize:11,padding:"6px 12px"}}>{editingCtx?"✓ Sauvegarder":"Modifier"}</button>
+                  <button onClick={()=>{ if(editingCtx){ saveToSupabase({context:customCtx}); } setEditingCtx(v=>!v); }} style={{...out,fontSize:11,padding:"6px 12px"}}>{editingCtx?"✓ Sauvegarder":"Modifier"}</button>
                   <button onClick={()=>setSrcSections(s=>({...s,contexte:!s.contexte}))} style={{background:"none",border:"none",cursor:"pointer",color:"#8A8178",fontSize:12}}>{srcSections.contexte?"▲":"▼"}</button>
                 </div>
               </div>
