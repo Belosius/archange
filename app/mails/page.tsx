@@ -176,7 +176,9 @@ export default function App() {
   const [sel, setSel] = useState(null);
   const [reply, setReply] = useState("");
   const [genReply, setGenReply] = useState(false);
-  const [extracted, setExtracted] = useState(null);
+  const [extracted, setExtracted] = useState<any>(null);
+  // Cache des réponses par email ID — évite les regénérations inutiles
+  const [repliesCache, setRepliesCache] = useState<Record<string,{reply:string,editReply:string,extracted:any|null}>>({});
   const [drafted, setDrafted] = useState(new Set());
   const [editing, setEditing] = useState(false);
   const [editReply, setEditReply] = useState("");
@@ -275,24 +277,68 @@ export default function App() {
   const saveStatuts = async (s: StatutDef[]) => { setStatuts(s); saveToSupabase({statuts:JSON.stringify(s)}); };
   const saveResas = async r => { setResas(r); saveToSupabase({resas:JSON.stringify(r)}); };
   const saveRelances = async (r: any[]) => { setRelances(r); saveToSupabase({relances:JSON.stringify(r)}); };
-  const saveDocs  = async d => { setDocs(d); saveToSupabase({docs:JSON.stringify(d.filter(x=>!x.isPdf))}); };
-  const saveLinks = async l => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
-  const saveEmails= e => { setEmails(e); };
+  const saveDocs = async (d: any[]) => {
+    setDocs(d);
+    // PDFs : stocker le base64 en sessionStorage (survit au refresh, pas au fermé/ouvert)
+    // Docs texte : stocker en Supabase
+    const textDocs = d.filter(x => !x.isPdf);
+    const pdfMeta  = d.filter(x =>  x.isPdf).map(x => ({ id: x.id, name: x.name, size: x.size, isPdf: true }));
+    // Sauvegarder base64 des PDFs en sessionStorage
+    try {
+      const pdfData: Record<string,string> = {};
+      d.filter(x => x.isPdf && x.base64).forEach(x => { pdfData[x.id] = x.base64; });
+      sessionStorage.setItem("arc_pdf_data", JSON.stringify(pdfData));
+    } catch {}
+    // Sauvegarder meta + texte en Supabase
+    saveToSupabase({ docs: JSON.stringify([...textDocs, ...pdfMeta]) });
+  };
+  const saveLinks = async (l: any) => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
+  const saveEmails = (e: any[]) => { setEmails(e); };
+
+  // Fonction partagée de mapping email API → état React
+  const mapEmail = (m: any) => ({
+    id:        m.id,
+    from:      m.from_name  || "",
+    fromEmail: m.from_email || "",
+    subject:   m.subject    || "(sans objet)",
+    date:      m.date       || "",
+    snippet:   m.snippet    || "",
+    body:      m.body       || m.snippet || "",
+    flags:     Array.isArray(m.flags) ? m.flags : [],
+    aTraiter:  m.a_traiter  || false,
+    unread:    m.is_unread  || false,
+  });
+
+  // Chargement/synchronisation des emails — déclenche d'abord une sync Gmail, puis relit Supabase
+  const loadEmailsFromApi = async (withSync = false) => {
+    setLoadingMail(true);
+    try {
+      // Si demandé, déclencher une synchronisation Gmail avant de lire
+      if (withSync) {
+        try {
+          await fetch("/api/emails/sync", { method: "POST" });
+        } catch {
+          // sync non critique — on continue même si ça échoue
+        }
+      }
+      const r = await fetch("/api/emails");
+      if (!r.ok) throw new Error("Erreur " + r.status);
+      const data = await r.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setEmails(data.map(mapEmail));
+        toast(data.length + " emails chargés");
+      } else {
+        setEmails([]);
+        toast("Aucun email — vérifiez la connexion Gmail", "err");
+      }
+    } catch (e: any) {
+      toast("Erreur chargement emails : " + (e.message || "réseau"), "err");
+    }
+    setLoadingMail(false);
+  };
 
   useEffect(() => {
     let cancelled = false;
-    const mapEmail = (m: any) => ({
-      id:        m.id,
-      from:      m.from_name  || "",
-      fromEmail: m.from_email || "",
-      subject:   m.subject    || "(sans objet)",
-      date:      m.date       || "",
-      snippet:   m.snippet    || "",
-      body:      m.body       || m.snippet || "",
-      flags:     Array.isArray(m.flags) ? m.flags : [],
-      aTraiter:  m.a_traiter  || false,
-      unread:    m.is_unread  || false,
-    });
 
     const init = async () => {
       // Chargement parallèle — user-data + emails simultanément
@@ -306,7 +352,18 @@ export default function App() {
       if (userData.status === "fulfilled") {
         const d = userData.value;
         try { if (d.resas)         setResas(JSON.parse(d.resas)); }         catch { /* garde l'état initial */ }
-        try { if (d.docs)          setDocs(JSON.parse(d.docs)); }           catch {}
+        try {
+          if (d.docs) {
+            const parsed = JSON.parse(d.docs);
+            // Réhydrater les PDFs avec leur base64 depuis sessionStorage
+            let pdfData: Record<string,string> = {};
+            try { pdfData = JSON.parse(sessionStorage.getItem("arc_pdf_data") || "{}"); } catch {}
+            const rehydrated = parsed.map((doc: any) =>
+              doc.isPdf && pdfData[doc.id] ? { ...doc, base64: pdfData[doc.id] } : doc
+            );
+            setDocs(rehydrated);
+          }
+        } catch {}
         try { if (d.links)         setLinks(JSON.parse(d.links)); }         catch {}
         try { if (d.links_fetched) setLinksFetched(JSON.parse(d.links_fetched)); } catch {}
         if (d.context) setCustomCtx(d.context);
@@ -362,13 +419,19 @@ export default function App() {
     return true;
   }), [emails, search, mailFilter]);
 
-  const handleSel = async (emailArg) => {
+  const handleSel = async (emailArg: any) => {
     let email = emailArg;
     if(email.unread) {
       const upd = emails.map(m=>m.id===email.id?{...m,unread:false}:m);
       saveEmails(upd); email={...email,unread:false};
     }
-    setSel(email); setReply(""); setEditing(false); setExtracted(null); setShowPlanForm(false);
+    // Restaurer la réponse mise en cache pour cet email (ne pas effacer !)
+    const cached = repliesCache[email.id];
+    setReply(cached?.reply || "");
+    setEditReply(cached?.editReply || "");
+    setExtracted(cached?.extracted || null);
+    setEditing(false); setShowPlanForm(false);
+    setSel(email);
   };
 
   const genererReponse = async () => {
@@ -380,14 +443,17 @@ export default function App() {
       const linkCtx = Object.values(linksFetched).filter(Boolean).map((l: any) => l.summary).join("\n\n");
       const sys = SYSTEM_PROMPT + (customCtx ? "\n\nContexte:\n" + customCtx : "") + (linkCtx ? "\n\nInfos web:\n" + linkCtx : "");
 
-      // Réponse et extraction en parallèle — on gère les échecs indépendamment
       const [reponse, infoRaw] = await Promise.allSettled([
         callClaude(prompt + "\n\nRédige une réponse.", sys, docs),
         callClaude(prompt, EXTRACT_PROMPT, null),
       ]);
 
+      let newReply = "";
+      let newExtracted: any = null;
+
       if (reponse.status === "fulfilled" && reponse.value) {
-        setReply(reponse.value); setEditReply(reponse.value);
+        newReply = reponse.value;
+        setReply(newReply); setEditReply(newReply);
       } else {
         const msg = reponse.status === "rejected" ? (reponse.reason?.message || "Erreur IA") : "Réponse vide";
         toast("Impossible de générer la réponse : " + msg, "err");
@@ -395,9 +461,17 @@ export default function App() {
 
       if (infoRaw.status === "fulfilled") {
         try {
-          const ex = JSON.parse(infoRaw.value.replace(/```json|```/g, "").trim());
-          setExtracted(ex);
+          newExtracted = JSON.parse(infoRaw.value.replace(/```json|```/g, "").trim());
+          setExtracted(newExtracted);
         } catch { /* extraction silencieuse */ }
+      }
+
+      // Mettre en cache la réponse pour cet email
+      if (newReply) {
+        setRepliesCache(prev => ({
+          ...prev,
+          [sel.id]: { reply: newReply, editReply: newReply, extracted: newExtracted }
+        }));
       }
     } catch (e: any) {
       toast("Erreur : " + (e.message || "connexion impossible"), "err");
@@ -1053,7 +1127,7 @@ export default function App() {
             {/* Sidebar catégories mails — collapsible */}
             <div style={{width:subCollapsed?44:160,background:"#221E19",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid rgba(209,196,178,0.06)",transition:"width .2s ease",overflow:"hidden"}}>
               <div style={{padding:subCollapsed?"10px 6px":"14px 10px 10px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0}}>
-                {!subCollapsed&&<button onClick={()=>{setLoadingMail(true);fetch("/api/emails").then(r=>r.json()).then(data=>{if(Array.isArray(data)&&data.length>0){const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:Array.isArray(m.flags)?m.flags:[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));setEmails(real);toast(real.length+" emails chargés");}else{setEmails([]);toast("Aucun email");}setLoadingMail(false);}).catch(()=>{toast("Erreur chargement","err");setLoadingMail(false);});}} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
+                {!subCollapsed&&<button onClick={()=>loadEmailsFromApi(true)} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
                   {loadingMail?<Spin s={11}/>:"↺"} Actualiser
                 </button>}
                 <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"rgba(209,196,178,0.07)",color:"rgba(209,196,178,0.35)",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:subCollapsed?0:6}}>
@@ -1062,7 +1136,7 @@ export default function App() {
               </div>
               {subCollapsed?(
                 <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center"}}>
-                  <button onClick={()=>{setLoadingMail(true);fetch("/api/emails").then(r=>r.json()).then(data=>{if(Array.isArray(data)&&data.length>0){const real=data.map(m=>({id:m.id,from:m.from_name||"",fromEmail:m.from_email||"",subject:m.subject||"(sans objet)",date:m.date||"",snippet:m.snippet||"",body:m.body||m.snippet||"",flags:Array.isArray(m.flags)?m.flags:[],aTraiter:m.a_traiter||false,unread:m.is_unread||false}));setEmails(real);toast(real.length+" emails chargés");}else{setEmails([]);toast("Aucun email");}setLoadingMail(false);}).catch(()=>{setLoadingMail(false);});}} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13}}>↺</button>
+                  <button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13}}>↺</button>
                   <button onClick={()=>setMailFilter("all")} title="Tous les mails" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>📬</button>
                   {MAIL_CATS.map(c=>(
                     <button key={c.id} onClick={()=>setMailFilter(c.id)} title={c.label} style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>
@@ -1266,7 +1340,7 @@ export default function App() {
                     }
                     <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #EAE6E1",background:"#F5F3EF"}}>
                       {reply && <><button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+(editing?editReply:reply)); setDrafted(p=>new Set([...p,sel.id])); toast("Brouillon créé !"); }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
-                      <button onClick={()=>{ if(editing){setReply(editReply);setEditing(false);}else{setEditing(true);setEditReply(reply);} }} disabled={genReply} style={{...out}}>{editing?"Valider":"Modifier"}</button>
+                      <button onClick={()=>{ if(editing){setReply(editReply);setEditing(false);if(sel)setRepliesCache(prev=>({...prev,[sel.id]:{...prev[sel.id],reply:editReply,editReply}}));}else{setEditing(true);setEditReply(reply);} }} disabled={genReply} style={{...out}}>{editing?"Valider":"Modifier"}</button>
                       <button onClick={genererReponse} disabled={genReply} style={{...out,color:"#8A8178"}}>↻ Regénérer</button></>}
                       {!reply && !genReply && <button onClick={genererReponse} style={{...gold,fontSize:11}}>✨ Générer une réponse</button>}
                     </div>
