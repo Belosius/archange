@@ -22,11 +22,240 @@ const DEFAULT_STATUTS: StatutDef[] = [
   { id: "annule",    label: "Annulé",     bg: "#FEE2E2", color: "#991B1B" },
 ];
 
-const SYSTEM_PROMPT = `Tu es l'assistant IA de la brasserie RÊVA, 133 Avenue de France, 75013 Paris. Tu réponds aux emails de manière humaine, directe et chaleureuse, comme le gérant Olivier.
-ESPACES : Rez-de-chaussée (120m², 100 assis, 150 debout), Le Patio (70m², 75 assis, 100 debout, 65 conférence, min 30 pers), Le Belvédère (70m², 75 assis, 100 debout, 65 conférence, vue BNF, min 30 pers).
-Règles : phrases courtes, ton chaleureux, suggère l'espace adapté, 5-10 lignes max. Signature : "Olivier, Rêva"`;
-const EXTRACT_PROMPT = `Analyse cet email et retourne UNIQUEMENT un JSON valide :
-{"isReservation":false,"nom":null,"email":null,"telephone":null,"entreprise":null,"typeEvenement":null,"nombrePersonnes":null,"espaceDetecte":null,"dateDebut":null,"heureDebut":null,"heureFin":null,"notes":null}`;
+const SYSTEM_PROMPT = `Tu es ARCHANGE, l'assistant commercial de la brasserie RÊVA (133 avenue de France, 75013 Paris). Tu réponds aux emails reçus par l'établissement avec le niveau d'expertise d'un directeur commercial expérimenté dans la restauration événementielle haut de gamme.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏢 IDENTITÉ & ÉTABLISSEMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+La brasserie RÊVA est un établissement moderne et chaleureux situé dans le 13e arrondissement de Paris, face à la BNF. Elle dispose de trois espaces distincts :
+
+- RDC : espace principal (120m²), capacité 100 personnes assis, idéal pour réceptions et événements de grande envergure
+- Patio : espace extérieur couvert (70m²), capacité 75 personnes assis, ambiance intimiste et végétalisée
+- Belvédère : espace en hauteur (70m²), capacité 75 personnes assis, vue panoramique sur la BNF — espace premium
+
+RÊVA se positionne comme un lieu de référence pour :
+- Réservations de groupes et séminaires
+- Événements d'entreprise (afterworks, team buildings, lancements de produits)
+- Célébrations privées (anniversaires, mariages, fiançailles)
+- Repas de groupe (enterrements de vie de garçon/jeune fille, repas familiaux)
+- Partenariats et collaborations professionnelles
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 TON RÔLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Tu incarnes un commercial senior spécialisé dans la restauration événementielle. Tu as une double compétence :
+1. Relationnelle : tu crées immédiatement un lien chaleureux et professionnel
+2. Commerciale : tu valorises systématiquement l'offre de RÊVA et tu cherches à convertir chaque contact en réservation concrète
+
+Tu ne te contentes jamais de "répondre" — tu accompagnes, tu proposes, tu rassures, tu convaincs avec subtilité.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📚 SOURCES DE RÉFÉRENCE — PRIORITÉ ABSOLUE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Tu reçois dans ce message un ou plusieurs documents joints (PDFs, fichiers texte) ainsi qu'un contexte personnalisé. Ces éléments constituent la documentation officielle de RÊVA : menus, tarifs, capacités, conditions de réservation, politique d'annulation, horaires, offres spéciales, etc.
+
+Tu dois :
+- Lire intégralement chaque document avant de rédiger ta réponse
+- Extraire et utiliser les informations précises qu'ils contiennent (chiffres, conditions, noms, tarifs exacts)
+- Donner toujours priorité aux informations des documents sur tes connaissances générales
+- Si une information demandée par le client figure dans les documents, la restituer avec précision et sans la reformuler au point de la dénaturer
+- Si une information n'est pas dans les documents, ne jamais l'inventer — répondre avec élégance : "Notre équipe vous confirme ce point très prochainement"
+- En cas de contradiction entre deux documents, privilégier le plus récent ou le plus spécifique
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📅 PLANNING & DISPONIBILITÉS — TEMPS RÉEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Tu reçois dans chaque message la liste complète des réservations en cours sous la section === PLANNING EN COURS ===. Chaque ligne indique : l'espace, la date, les horaires, le nombre de personnes et le statut.
+
+RÈGLE DE DISPONIBILITÉ :
+Un espace est considéré INDISPONIBLE uniquement si une réservation existante sur ce créneau a un statut confirmé, à savoir : "Confirmé", "Devis signé", "Acompte reçu" ou "Soldé".
+Tout autre statut (option, en attente, devis envoyé, etc.) ne bloque pas le créneau — tu peux proposer l'espace, en précisant que la disponibilité sera confirmée sous peu.
+
+COMPORTEMENT SELON LA SITUATION :
+1. Espace demandé DISPONIBLE sur le créneau
+→ Confirme la disponibilité avec enthousiasme
+→ Propose les prochaines étapes (devis, visite, confirmation)
+2. Espace demandé INDISPONIBLE sur le créneau
+→ Ne dis jamais simplement "ce n'est pas possible"
+→ Exprime des regrets sincères mais brefs
+→ Rebondis immédiatement sur un autre espace disponible
+→ Vends cet espace alternatif en le mettant en valeur :
+   - Si RDC pris → valorise le Patio (intimité, végétation, ambiance cosy) ou le Belvédère (vue BNF, espace premium, lumière naturelle)
+   - Si Patio pris → valorise le Belvédère (vue panoramique, cadre unique) ou le RDC (grande capacité, polyvalence)
+   - Si Belvédère pris → valorise le Patio (charme intimiste) ou le RDC (capacité et flexibilité maximales)
+→ Si AUCUN espace n'est disponible sur ce créneau : propose une date ou un horaire alternatif avec bienveillance
+3. Créneau non précisé dans l'email
+→ Ne fais pas de suppositions sur les disponibilités
+→ Demande la date et l'heure souhaitées avant de te prononcer
+4. Plusieurs espaces disponibles
+→ Oriente vers le plus adapté selon le type d'événement et le nombre de personnes mentionnés
+→ Évite de tout lister mécaniquement — guide le client vers le meilleur choix pour lui
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✍️ STYLE & TONALITÉ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TOUJOURS :
+- Chaleureux mais professionnel — jamais familier, jamais froid
+- Personnalisé : utilise le prénom ou le nom de l'expéditeur dès que disponible
+- Concis et clair : pas de phrases inutiles, chaque mot compte
+- Positif et orienté solution : même face à une contrainte, propose une alternative
+- En français impeccable, sans fautes, avec une ponctuation soignée
+
+JAMAIS :
+- De formules génériques creuses ("Suite à votre mail…", "N'hésitez pas à…")
+- De jargon administratif ("Dans l'attente de vous lire", "Bien à vous")
+- De réponses trop longues qui noient l'essentiel
+- D'informations inventées sur les disponibilités ou les tarifs
+- De fautes d'orthographe ou de grammaire
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📬 TYPES D'EMAILS ET COMPORTEMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Demande de réservation ou d'information sur un événement
+→ Accueille la demande avec enthousiasme sincère
+→ Reformule brièvement le projet pour montrer que tu as bien compris
+→ Consulte le planning pour évaluer la disponibilité sur le créneau mentionné
+→ Mets en avant l'espace le plus adapté à leur besoin (selon nombre de personnes, type d'événement)
+→ Pose 1 ou 2 questions ciblées si des informations manquent (date, nombre de personnes, type de repas)
+→ Propose un prochain pas concret (appel, visite, envoi de devis)
+
+2. Demande de devis
+→ Remercie pour l'intérêt porté à RÊVA
+→ Confirme la réception et le délai de traitement
+→ Demande les informations manquantes si nécessaire (date, nombre de convives, budget indicatif, type de prestation)
+→ Valorise la flexibilité de l'offre RÊVA
+
+3. Confirmation ou modification d'une réservation existante
+→ Confirme les éléments avec précision
+→ Résume les informations clés (date, heure, espace, nombre de personnes)
+→ Confirme les prochaines étapes (acompte, menu, plan d'accès, etc.)
+→ Exprime une anticipation positive de l'événement
+
+4. Demande d'annulation
+→ Accuse réception avec compréhension et sans dramatiser
+→ Rappelle la politique d'annulation si elle figure dans les documents de référence
+→ Propose si possible un report plutôt qu'une annulation définitive
+→ Laisse la porte ouverte à une future collaboration
+
+5. Réclamation ou insatisfaction
+→ Commence par de l'empathie sincère — ne te défends jamais en premier
+→ Reformule le problème pour montrer que tu l'as bien compris
+→ Présente des excuses si la situation le justifie, sans excès
+→ Propose une solution concrète ou un geste commercial si approprié
+→ Conclus sur une note positive et tournée vers la résolution
+
+6. Partenariat / Presse / Collaboration
+→ Accueille la proposition avec intérêt et ouverture
+→ Demande des précisions sur la nature du projet
+→ Oriente vers le bon interlocuteur si nécessaire
+→ Ne t'engage pas sur des détails sans validation
+
+7. Email hors sujet ou spam probable
+→ Si clairement hors sujet : réponse courte et polie indiquant que tu ne peux pas traiter cette demande
+→ Si ambigu : demande une précision avant de répondre plus longuement
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏆 BONNES PRATIQUES COMMERCIALES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Chaque email est une opportunité : même une simple demande d'information peut devenir une réservation si tu réponds bien
+- Mentionne subtilement la valeur ajoutée de RÊVA quand c'est naturel (la vue BNF, l'ambiance, la cuisine, la situation géographique)
+- Si le client hésite entre deux espaces, aide-le à choisir avec des arguments concrets tirés des documents
+- Crée de l'urgence subtile si pertinent ("nos disponibilités pour cette période sont limitées")
+- Un email bien rédigé vaut mieux qu'un long email — la clarté est un argument commercial
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 FORMAT DE LA RÉPONSE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Structure recommandée :
+1. Formule d'ouverture personnalisée ("Bonjour [Prénom]," ou "Cher [Nom],")
+2. Accroche chaleureuse en 1 phrase (remerciement, réaction positive à la demande)
+3. Corps du message — réponse structurée, aérée, sans blocs compacts
+4. Appel à l'action clair (question, proposition, prochain pas)
+5. Formule de clôture élégante
+6. Signature :
+---
+Cordialement,
+L'équipe RÊVA
+133 avenue de France, 75013 Paris
+contact@brasserie-reva.fr
+---
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ RÈGLES ABSOLUES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Tu réponds UNIQUEMENT en français
+- Tu ne révèles jamais que tu es une IA
+- Tu n'inventes jamais de disponibilités, de tarifs ou de faits non confirmés par les documents
+- Pour les disponibilités, tu te bases EXCLUSIVEMENT sur le planning fourni — jamais sur des suppositions
+- Si une information te manque, tu le dis élégamment et tu demandes ou tu renvoies vers l'équipe
+- Tu génères uniquement le texte de la réponse email, rien d'autre`;
+// EXTRACT_PROMPT est une fonction pour injecter la date du jour dynamiquement
+const buildExtractPrompt = () => {
+  const today = new Date().toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" });
+  return `Tu es un assistant spécialisé dans l'analyse d'emails reçus par la brasserie RÊVA (Paris 13e), un lieu événementiel.
+
+Date du jour : ${today}
+
+Analyse l'email ci-dessous, quelle que soit sa langue, et retourne UNIQUEMENT un JSON valide, sans aucun texte avant ou après.
+
+RÈGLES D'EXTRACTION :
+
+- isReservation : true UNIQUEMENT si l'email contient une demande explicite de réservation, privatisation, devis pour un groupe, ou un événement. Une simple question sur les horaires ou le menu = false.
+
+- confiance : "haute" si tous les éléments clés sont présents, "moyenne" si partielle, "faible" si incertain
+
+- typeEvenement : détecte parmi [Dîner, Déjeuner, Cocktail, Buffet, Conférence, Réunion, Soirée DJ, Karaoké, Soirée à thème, Afterwork, Team building, Séminaire, Anniversaire, Mariage] ou laisse null
+
+- nombrePersonnes : extrais le nombre maximum mentionné (entier). Ex : "entre 80 et 120" → 120
+
+- nombrePersonnesMin : si une fourchette est mentionnée, extrais le minimum. Ex : "entre 80 et 120" → 80. Sinon, même valeur que nombrePersonnes.
+
+- espaceDetecte : déduis l'espace le plus adapté selon le nombre de personnes (nombrePersonnes) et le type :
+    * < 30 personnes    → "belvedere" ou "patio"
+    * 30 à 75 personnes → "patio" ou "belvedere"
+    * 76 à 100 personnes → "rdc"
+    * > 100 personnes   → "rdc" (capacité maximale à signaler)
+  Si l'espace est mentionné explicitement dans l'email, utilise-le en priorité.
+
+- dateDebut : format YYYY-MM-DD. Pour les dates relatives, utilise la date du jour fournie en référence. Si le mois est mentionné sans année, prends l'année en cours si la date n'est pas encore passée, sinon l'année suivante. Si non mentionné → null.
+
+- heureDebut / heureFin : format HH:MM. Si non mentionné → null
+
+- budget : extrais le budget si mentionné (ex: "1900€", "45€/pers"), sinon null
+
+- notes : résume en 1-2 phrases les détails importants non couverts par les autres champs. Si l'email est dans une autre langue que le français, indique-le ici.
+
+- statutSuggere : suggère un statut parmi [nouveau, en_cours, en_attente, confirme] selon le contenu du mail
+
+JSON à retourner :
+{
+  "isReservation": false,
+  "confiance": "haute|moyenne|faible",
+  "nom": null,
+  "email": null,
+  "telephone": null,
+  "entreprise": null,
+  "typeEvenement": null,
+  "nombrePersonnes": null,
+  "nombrePersonnesMin": null,
+  "espaceDetecte": null,
+  "dateDebut": null,
+  "heureDebut": null,
+  "heureFin": null,
+  "budget": null,
+  "notes": null,
+  "statutSuggere": "nouveau"
+}`;
+};
 
 const INIT_EMAILS = [
   { id:"z1", from:"Brigitte FLORIN", fromEmail:"bflogold@gmail.com", subject:"[Zenchef] Privatisation cocktail dînatoire – 13 juin", date:"22 mars", snippet:"Privatiser un espace pour 50 personnes, cocktail dînatoire, musique pour danser, 13 juin", body:"Bonjour,\n\nJ'aimerais privatiser un espace pour 50 personnes avec cocktail dînatoire et possibilité de passer notre musique pour danser. Ce serait pour le 13 juin.\n\nNom : FLORIN · Prénom : BRIGITTE · Email : bflogold@gmail.com · Tél : +33 6 18 12 29 57", flags:[], aTraiter:true, unread:true },
@@ -234,6 +463,22 @@ export default function App() {
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [planForm, setPlanForm] = useState({});
   const [planErrors, setPlanErrors] = useState({});
+  // Suggestions de modifications de fiche événement par l'IA
+  type SuggestionModif = {
+    champ: string;
+    label: string;
+    ancienne: any;
+    nouvelle: any;
+    raison: string;
+    selectionnee: boolean;
+  };
+  type PendingSuggestions = {
+    resaId: string;
+    emailId: string;
+    suggestions: SuggestionModif[];
+  };
+  const [pendingSuggestions, setPendingSuggestions] = useState<PendingSuggestions|null>(null);
+
   // Général view state
   const [statuts, setStatuts] = useState<StatutDef[]>(DEFAULT_STATUTS);
   const [showCreateStatut, setShowCreateStatut] = useState(false);
@@ -248,6 +493,9 @@ export default function App() {
   const [subCollapsed, setSubCollapsed] = useState(false);
   // Relances
   const [relances, setRelances] = useState<any[]>([]);
+  // Liens email ↔ événement — persistés en Supabase
+  // Structure : { [emailId]: resaId }
+  const [emailResaLinks, setEmailResaLinks] = useState<Record<string,string>>({});
   const [showRelanceForm, setShowRelanceForm] = useState<string|null>(null); // resaId
   const [relanceDate, setRelanceDate] = useState("");
   const [relanceHeure, setRelanceHeure] = useState("");
@@ -257,6 +505,22 @@ export default function App() {
   const [showRelanceIA, setShowRelanceIA] = useState<any>(null); // resa
   const [relanceIAText, setRelanceIAText] = useState("");
   const [genRelanceIA, setGenRelanceIA] = useState(false);
+  // Motifs de relance — personnalisables, persistés en Supabase
+  const DEFAULT_MOTIFS_RELANCE = [
+    "Devis envoyé sans réponse",
+    "Confirmation de réservation attendue",
+    "Acompte non reçu",
+    "Informations manquantes (date, nb personnes, menu...)",
+    "Prise de contact suite à visite",
+    "Relance à J-30 avant l'événement",
+    "Relance à J-7 avant l'événement",
+    "Autre",
+  ];
+  const [motifsRelance, setMotifsRelance] = useState<string[]>(DEFAULT_MOTIFS_RELANCE);
+  const [motifSelectionne, setMotifSelectionne] = useState<string>("");
+  const [motifPersonnalise, setMotifPersonnalise] = useState<string>("");
+  const [showAddMotif, setShowAddMotif] = useState(false);
+  const [newMotifLabel, setNewMotifLabel] = useState("");
   // Modal envoyer mail
   const [showSendMail, setShowSendMail] = useState<any>(null); // resa
   const [sendMailSubject, setSendMailSubject] = useState("");
@@ -280,6 +544,24 @@ export default function App() {
   const daysInMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
   const firstDay = (d: Date) => { const f = new Date(d.getFullYear(),d.getMonth(),1).getDay(); return f===0?6:f-1; };
   const resasDay = (day: number) => { const ds=calDate.getFullYear()+"-"+String(calDate.getMonth()+1).padStart(2,"0")+"-"+String(day).padStart(2,"0"); return resas.filter(r=>r.dateDebut===ds); };
+
+  // ─── Récupère tous les emails liés à un événement ─────────────────────────
+  // Combine : lien IA explicite OU match par email du contact OU match par nom
+  const getLinkedEmails = (resa: any) => {
+    if (!resa) return [];
+    return emails.filter(m => {
+      // 1. Lien IA explicite sauvegardé
+      if (emailResaLinks[m.id] === resa.id) return true;
+      // 2. Match exact par adresse email
+      if (resa.email && m.fromEmail && m.fromEmail.toLowerCase() === resa.email.toLowerCase()) return true;
+      // 3. Match par nom (fallback) — premier mot du nom du contact dans l'expéditeur
+      if (resa.nom && m.from) {
+        const firstWord = resa.nom.toLowerCase().split(" ")[0];
+        if (firstWord.length > 2 && m.from.toLowerCase().includes(firstWord)) return true;
+      }
+      return false;
+    });
+  };
 
   // Sauvegarde Supabase — debounce par clé pour éviter les écrasements
   const _saveTimers = React.useRef<Record<string,any>>({});
@@ -305,6 +587,14 @@ export default function App() {
   const saveStatuts = async (s: StatutDef[]) => { setStatuts(s); saveToSupabase({statuts:JSON.stringify(s)}); };
   const saveResas = async r => { setResas(r); saveToSupabase({resas:JSON.stringify(r)}); };
   const saveRelances = async (r: any[]) => { setRelances(r); saveToSupabase({relances:JSON.stringify(r)}); };
+  const saveEmailResaLinks = (links: Record<string,string>) => {
+    setEmailResaLinks(links);
+    saveToSupabase({ email_resa_links: JSON.stringify(links) });
+  };
+  const saveMotifsRelance = (m: string[]) => {
+    setMotifsRelance(m);
+    saveToSupabase({ motifs_relance: JSON.stringify(m) });
+  };
   const saveDocs = async (d: any[]) => {
     setDocs(d);
     // PDFs : stocker le base64 en sessionStorage (survit au refresh, pas au fermé/ouvert)
@@ -398,6 +688,8 @@ export default function App() {
         try { if (d.statuts)  { const s = JSON.parse(d.statuts); if (Array.isArray(s) && s.length > 0) setStatuts(s); } } catch {}
         try { if (d.relances)  setRelances(JSON.parse(d.relances)); }  catch {}
         try { if (d.note_ia)   setNoteIA(JSON.parse(d.note_ia)); }     catch {}
+        try { if (d.email_resa_links) setEmailResaLinks(JSON.parse(d.email_resa_links)); } catch {}
+        try { if (d.motifs_relance) { const m = JSON.parse(d.motifs_relance); if (Array.isArray(m) && m.length > 0) setMotifsRelance(m); } } catch {}
       } else {
         console.error("Chargement données utilisateur échoué :", userData.reason);
       }
@@ -467,13 +759,52 @@ export default function App() {
     setGenReply(true);
     setReply(""); setEditReply(""); setExtracted(null);
     try {
-      const prompt = `Email:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${sel.body || sel.snippet || ""}`;
+      // ── Valider les documents avant envoi ──────────────────────────────────
+      const docsValides = docs.filter(d =>
+        (d.isPdf && d.base64) || (!d.isPdf && d.content?.trim())
+      );
+      const docsManquants = docs.filter(d =>
+        d.isPdf && !d.base64
+      );
+      if (docsManquants.length > 0) {
+        toast(`⚠️ ${docsManquants.length} PDF(s) non chargés — réimportez-les pour les inclure`, "err");
+      }
+
+      // ── Construire la liste des sources utilisées ──────────────────────────
+      const sourcesList = docsValides.length > 0
+        ? "\n\n=== DOCUMENTS DE RÉFÉRENCE ===\n" +
+          docsValides.map(d => `- ${d.name} (${d.isPdf ? "PDF" : "Texte"})`).join("\n") +
+          "\nLis intégralement ces documents avant de répondre. Utilise leurs informations avec précision."
+        : "";
+
+      // ── Construire le planning temps réel ─────────────────────────────────
+      const planningCtx = "\n\n=== PLANNING EN COURS ===\n" + (
+        resas.length > 0
+          ? resas.map(r => {
+              const espace = ESPACES.find(e => e.id === r.espaceId)?.nom || r.espaceId;
+              const statut = statuts.find(s => s.id === (r.statut || "nouveau"))?.label || r.statut;
+              return `- ${espace} | ${r.dateDebut || "date?"} ${r.heureDebut || ""}→${r.heureFin || ""} | ${r.nombrePersonnes || "?"} pers. | ${r.typeEvenement || ""} | ${r.nom || ""} | Statut: ${statut}`;
+            }).join("\n")
+          : "Aucune réservation enregistrée."
+      );
+
+      // ── Construire le contexte complet ─────────────────────────────────────
       const linkCtx = Object.values(linksFetched).filter(Boolean).map((l: any) => l.summary).join("\n\n");
-      const sys = SYSTEM_PROMPT + (customCtx ? "\n\nContexte:\n" + customCtx : "") + (linkCtx ? "\n\nInfos web:\n" + linkCtx : "");
+      const sys = SYSTEM_PROMPT
+        + sourcesList
+        + planningCtx
+        + (customCtx ? "\n\n=== CONTEXTE PERSONNALISÉ ===\n" + customCtx : "")
+        + (linkCtx ? "\n\n=== INFOS WEB ANALYSÉES ===\n" + linkCtx : "");
+
+      // ── Prompt email ───────────────────────────────────────────────────────
+      const prompt = `Email reçu:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${sel.body || sel.snippet || ""}\n\nRédige une réponse professionnelle en te basant sur tous les documents fournis et le planning ci-dessus.`;
 
       const [reponse, infoRaw] = await Promise.allSettled([
-        callClaude(prompt + "\n\nRédige une réponse.", sys, docs),
-        callClaude(prompt, EXTRACT_PROMPT, null),
+        callClaude(prompt, sys, docsValides.length > 0 ? docsValides : null),
+        callClaude(
+          `Email:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${sel.body || sel.snippet || ""}`,
+          buildExtractPrompt(), null
+        ),
       ]);
 
       let newReply = "";
@@ -501,23 +832,97 @@ export default function App() {
           [sel.id]: { reply: newReply, editReply: newReply, extracted: newExtracted }
         }));
       }
-      // Point 4 — Association automatique email ↔ événement
-      // Si l'IA détecte que c'est une réservation et qu'un événement correspond, on lie l'email
-      if (newExtracted?.isReservation || newExtracted?.nom || newExtracted?.email) {
-        const emailCandidat = newExtracted?.email || sel.fromEmail;
-        const nomCandidat = (newExtracted?.nom || sel.from || "").toLowerCase();
-        const resaMatch = resas.find(r =>
-          (r.email && r.email.toLowerCase() === emailCandidat?.toLowerCase()) ||
-          (r.nom && nomCandidat && r.nom.toLowerCase().includes(nomCandidat.split(" ")[0]))
-        );
-        if (resaMatch) {
-          // Lier l'email à la réservation en stockant l'association dans noteIA
-          const linkKey = `__email_link_${sel.id}`;
-          if (!noteIA[linkKey]) {
-            const upd = { ...noteIA, [linkKey]: { text: resaMatch.id, date: new Date().toLocaleDateString("fr-FR") } };
-            saveNoteIA(upd);
+
+      // ── Association IA email ↔ événement ────────────────────────────────────
+      // Si des événements existent et que le lien n'est pas déjà établi
+      if (resas.length > 0 && !emailResaLinks[sel.id]) {
+        try {
+          const resaList = resas.map(r =>
+            `- ID:${r.id} | Nom:${r.nom || "?"} | Entreprise:${r.entreprise || "?"} | Email:${r.email || "?"} | Type:${r.typeEvenement || "?"} | Date:${r.dateDebut || "?"} | Personnes:${r.nombrePersonnes || "?"}`
+          ).join("\n");
+
+          const matchPrompt = `Analyse cet email et détermine à quel événement il correspond parmi la liste ci-dessous.
+
+EMAIL REÇU :
+De: ${sel.from} <${sel.fromEmail}>
+Objet: ${sel.subject}
+Corps: ${(sel.body || sel.snippet || "").substring(0, 800)}
+
+ÉVÉNEMENTS EN COURS :
+${resaList}
+
+Réponds UNIQUEMENT avec un JSON valide et rien d'autre :
+{"resaId": "ID_DE_L_EVENEMENT_ou_null", "confiance": "haute|moyenne|faible", "raison": "explication courte"}
+
+Critères de matching (par ordre de priorité) :
+1. Email de l'expéditeur correspond à l'email de l'événement
+2. Nom de l'expéditeur correspond au nom du contact de l'événement
+3. Entreprise mentionnée dans le mail correspond à l'entreprise de l'événement
+4. Date ou type d'événement mentionné correspond
+5. Si aucune correspondance évidente → resaId: null`;
+
+          const matchResult = await callClaude(matchPrompt, "Tu es un assistant qui analyse des emails pour les associer aux bons événements. Réponds uniquement en JSON valide.", null);
+          const match = JSON.parse(matchResult.replace(/```json|```/g, "").trim());
+
+          if (match.resaId && match.confiance !== "faible") {
+            const resaExists = resas.find(r => r.id === match.resaId);
+            if (resaExists) {
+              const newLinks = { ...emailResaLinks, [sel.id]: match.resaId };
+              saveEmailResaLinks(newLinks);
+
+              // ── Détecter les modifications sur la fiche événement ──────────
+              try {
+                const ficheActuelle = { ...resaExists };
+                delete ficheActuelle.id; // on ne modifie pas l'id
+
+                // Labels lisibles pour chaque champ (extensible automatiquement)
+                const LABELS_CHAMPS: Record<string,string> = {
+                  nom: "Nom du contact", email: "Email", telephone: "Téléphone",
+                  entreprise: "Entreprise", typeEvenement: "Type d'événement",
+                  nombrePersonnes: "Nombre de personnes", espaceId: "Espace",
+                  dateDebut: "Date", heureDebut: "Heure de début", heureFin: "Heure de fin",
+                  statut: "Statut", notes: "Notes", budget: "Budget",
+                  noteDirecteur: "Note directeur",
+                };
+
+                const modifPrompt = `Tu es un assistant qui analyse un email pour détecter si le client communique des informations modifiant sa réservation.
+
+FICHE ÉVÉNEMENT ACTUELLE :
+${JSON.stringify(ficheActuelle, null, 2)}
+
+EMAIL REÇU :
+De: ${sel.from} <${sel.fromEmail}>
+Objet: ${sel.subject}
+${sel.body || sel.snippet || ""}
+
+INSTRUCTIONS :
+- Analyse uniquement les informations EXPLICITEMENT mentionnées dans l'email
+- Ne propose une modification que si l'email contient clairement une nouvelle valeur différente de l'actuelle
+- Pour le statut, utilise uniquement ces valeurs : nouveau, en_cours, en_attente, confirme, annule
+- Si aucune modification n'est détectée, retourne {"modifications": []}
+- Pour les champs absents de la fiche actuelle mais mentionnés dans l'email, inclus-les quand même
+
+Retourne UNIQUEMENT ce JSON valide :
+{"modifications": [{"champ": "nomDuChamp", "ancienne": "valeurActuelle", "nouvelle": "nouvelleValeur", "raison": "explication courte en français"}]}`;
+
+                const modifResult = await callClaude(modifPrompt, "Tu analyses des emails pour détecter des modifications de réservation. Réponds uniquement en JSON valide.", null);
+                const modifData = JSON.parse(modifResult.replace(/```json|```/g, "").trim());
+
+                if (modifData.modifications && modifData.modifications.length > 0) {
+                  const suggestions: SuggestionModif[] = modifData.modifications.map((m: any) => ({
+                    champ: m.champ,
+                    label: LABELS_CHAMPS[m.champ] || m.champ,
+                    ancienne: m.ancienne,
+                    nouvelle: m.nouvelle,
+                    raison: m.raison,
+                    selectionnee: true, // cochée par défaut
+                  }));
+                  setPendingSuggestions({ resaId: resaExists.id, emailId: sel.id, suggestions });
+                }
+              } catch { /* détection silencieuse */ }
+            }
           }
-        }
+        } catch { /* matching silencieux — ne bloque pas la génération */ }
       }
     } catch (e: any) {
       toast("Erreur : " + (e.message || "connexion impossible"), "err");
@@ -526,20 +931,28 @@ export default function App() {
   };
 
   const openPlanForm = () => {
+    const pers = parseInt(String(extracted?.nombrePersonnes || "0"), 10);
+    const espaceAuto = extracted?.espaceDetecte || (
+      pers > 100 ? "rdc" : pers > 75 ? "rdc" : pers > 30 ? "patio" : "belvedere"
+    );
+    // Si fourchette détectée, on l'indique dans les notes
+    const min = extracted?.nombrePersonnesMin;
+    const max = extracted?.nombrePersonnes;
+    const fourchette = (min && max && min !== max) ? `Fourchette : ${min}–${max} personnes. ` : "";
     const f = {
-      nom:            extracted?.nom          || sel?.from         || "",
-      email:          extracted?.email        || sel?.fromEmail    || "",
-      telephone:      extracted?.telephone    || "",
-      entreprise:     extracted?.entreprise   || "",
-      typeEvenement:  extracted?.typeEvenement|| "Dîner",
-      nombrePersonnes:extracted?.nombrePersonnes != null ? String(extracted.nombrePersonnes) : "",
-      espaceId:       extracted?.espaceDetecte|| "rdc",
-      dateDebut:      extracted?.dateDebut    || "",
-      heureDebut:     extracted?.heureDebut   || "",
-      heureFin:       extracted?.heureFin     || "",
-      notes:          extracted?.notes        || "",
-      statut:         "nouveau",
-      budget:         "",
+      nom:            extracted?.nom            || sel?.from      || "",
+      email:          extracted?.email          || sel?.fromEmail || "",
+      telephone:      extracted?.telephone      || "",
+      entreprise:     extracted?.entreprise     || "",
+      typeEvenement:  extracted?.typeEvenement  || "",
+      nombrePersonnes:max != null ? String(max) : "",
+      espaceId:       espaceAuto,
+      dateDebut:      extracted?.dateDebut      || "",
+      heureDebut:     extracted?.heureDebut     || "",
+      heureFin:       extracted?.heureFin       || "",
+      notes:          fourchette + (extracted?.notes || ""),
+      budget:         extracted?.budget         || "",
+      statut:         extracted?.statutSuggere  || "nouveau",
       noteDirecteur:  "",
     };
     setPlanForm(f); setPlanErrors({}); setShowPlanForm(true);
@@ -605,14 +1018,75 @@ export default function App() {
   };
 
   const genRelanceIAFn = async (resa: any) => {
-    setShowRelanceIA(resa); setRelanceIAText(""); setGenRelanceIA(true);
+    setRelanceIAText(""); setGenRelanceIA(true);
     try {
-      const linkedMails = emails.filter(m => m.fromEmail === resa.email);
+      const linkedMails = getLinkedEmails(resa);
       const hist = linkedMails.length > 0
-        ? linkedMails.map(m => `---\nDe: ${m.from}\nObjet: ${m.subject}\n${m.body || m.snippet || ""}`).join("\n\n")
+        ? linkedMails.map(m => `---\nDe: ${m.from}\nDate: ${m.date}\nObjet: ${m.subject}\n${m.body || m.snippet || ""}`).join("\n\n")
         : "Aucun échange précédent.";
-      const prompt = `Client: ${resa.nom || "—"}${resa.entreprise ? " (" + resa.entreprise + ")" : ""}\nType: ${resa.typeEvenement || "—"}\nDate: ${resa.dateDebut || "—"}\nPersonnes: ${resa.nombrePersonnes || "—"}\nNotes: ${resa.notes || "—"}\n\nHistorique emails:\n${hist}\n\nRédige un email de relance chaleureux et professionnel. Email complet avec objet en première ligne (format "Objet: ..."), puis le corps.`;
-      const txt = await callClaude(prompt, SYSTEM_PROMPT, docs);
+
+      // Calculer le dernier contact
+      const dernierMail = linkedMails.length > 0 ? linkedMails[0] : null;
+      const dernierContact = dernierMail
+        ? `${dernierMail.date} — "${dernierMail.subject}"`
+        : "Aucun échange précédent";
+
+      // Date du jour et délai avant événement
+      const today = new Date().toLocaleDateString("fr-FR", {day:"2-digit", month:"2-digit", year:"numeric"});
+      const statutLabel = statuts.find(s => s.id === (resa.statut || "nouveau"))?.label || resa.statut || "Nouveau";
+      const espaceName = ESPACES.find(e => e.id === resa.espaceId)?.nom || "—";
+
+      // Motif final — personnalisé ou sélectionné
+      const motifFinal = motifSelectionne === "Autre"
+        ? (motifPersonnalise || "Relance générale")
+        : (motifSelectionne || "Relance sans motif spécifique");
+
+      const sys = SYSTEM_PROMPT;
+
+      const prompt = `Tu dois rédiger un email de relance pour la brasserie RÊVA.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DOSSIER ÉVÉNEMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Client : ${resa.nom || "—"}${resa.entreprise ? " (" + resa.entreprise + ")" : ""}
+Email : ${resa.email || "—"}
+Type : ${resa.typeEvenement || "—"} | Espace : ${espaceName}
+Date événement : ${resa.dateDebut || "non définie"} | Horaires : ${resa.heureDebut || "—"} → ${resa.heureFin || "—"}
+Personnes : ${resa.nombrePersonnes || "—"} | Budget : ${resa.budget || "non mentionné"}
+Statut actuel : ${statutLabel}
+Notes internes : ${resa.notes || "—"}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MISSION PRÉALABLE — ANALYSE DU DOSSIER (silencieuse)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Avant de rédiger, analyse silencieusement :
+1. Le statut actuel du dossier : ${statutLabel}
+2. Le dernier échange : ${dernierContact}
+3. Ce qui est en suspens dans les échanges (réponse non reçue, validation attendue, acompte non confirmé, détail non résolu)
+4. Le délai restant avant l'événement (${resa.dateDebut || "date inconnue"} vs date du jour ${today})
+
+Le directeur a identifié le motif suivant : ${motifFinal}
+Base ta relance principalement sur ce motif.
+
+En complément, si ton analyse révèle d'autres points en suspens importants non couverts par ce motif, mentionne-les subtilement dans l'email sans les imposer. Cela sert de double vérification bienveillante.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HISTORIQUE DES ÉCHANGES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${hist}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INSTRUCTIONS DE RÉDACTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Rédige un email de relance complet
+- Première ligne obligatoirement : Objet: [objet du mail]
+- Puis le corps du mail
+- Ton chaleureux, professionnel, jamais insistant
+- Personnalise selon le profil et l'historique du client
+- Appel à l'action clair en fin de mail
+- Signature : L'équipe RÊVA`;
+
+      const txt = await callClaude(prompt, sys, docs);
       setRelanceIAText(txt);
     } catch (e: any) {
       toast("Erreur génération : " + (e.message || "IA indisponible"), "err");
@@ -624,16 +1098,78 @@ export default function App() {
   const generateNoteIA = async (resa: any) => {
     setGenNoteIA(resa.id);
     try {
-      const linkedMails = emails.filter(m =>
-        (resa.email && m.fromEmail === resa.email) ||
-        (resa.nom && m.from?.toLowerCase().includes(resa.nom.toLowerCase().split(" ")[0]))
-      );
+      const linkedMails = getLinkedEmails(resa);
       const hist = linkedMails.length > 0
         ? linkedMails.map(m => `---\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n${m.body || m.snippet || ""}`).join("\n\n")
         : "Aucun échange email trouvé pour cet événement.";
       const espaceName = ESPACES.find(e => e.id === resa.espaceId)?.nom || "—";
-      const prompt = `Événement: ${resa.nom || "—"}${resa.entreprise ? " (" + resa.entreprise + ")" : ""}\nType: ${resa.typeEvenement || "—"} | Date: ${resa.dateDebut || "—"} | Horaires: ${resa.heureDebut || "—"} → ${resa.heureFin || "—"} | Espace: ${espaceName} | Personnes: ${resa.nombrePersonnes || "—"} | Budget: ${resa.budget || "—"}\nNotes internes: ${resa.notes || "—"}\n\nÉchanges emails:\n${hist}`;
-      const sys = `Tu es un coordinateur événementiel. Rédige une note de briefing concise pour l'équipe RÊVA en bullet points : date/heure, nombre de personnes, espace, type d'événement, prestations, contraintes, budget si mentionné, interlocuteur. Juste les faits, pas de formules de politesse.`;
+      const statutLabel = statuts.find(s => s.id === (resa.statut || "nouveau"))?.label || resa.statut || "—";
+      const prompt = `DOSSIER ÉVÉNEMENT :
+Nom : ${resa.nom || "—"}${resa.entreprise ? " (" + resa.entreprise + ")" : ""}
+Email : ${resa.email || "—"} | Tél : ${resa.telephone || "—"}
+Type : ${resa.typeEvenement || "—"} | Date : ${resa.dateDebut || "—"} | Horaires : ${resa.heureDebut || "—"} → ${resa.heureFin || "—"}
+Espace : ${espaceName} | Personnes : ${resa.nombrePersonnes || "—"} | Budget : ${resa.budget || "—"}
+Statut : ${statutLabel}
+Notes internes : ${resa.notes || "—"}
+
+ÉCHANGES EMAILS :
+${hist}`;
+
+      const sys = `Tu es un coordinateur événementiel senior chez RÊVA, expert dans la lecture et l'analyse d'échanges clients. Tu as lu l'intégralité des emails de ce dossier.
+
+Rédige une note de briefing destinée au directeur de RÊVA. Cette note a deux niveaux de lecture distincts.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NIVEAU 1 — FICHE ÉVÉNEMENT (faits bruts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Synthétise les informations factuelles confirmées :
+- Interlocuteur : nom, email, téléphone, entreprise si applicable
+- Type d'événement
+- Date et horaires (arrivée / fin)
+- Espace réservé
+- Nombre de personnes (min / max si fourchette)
+- Prestations demandées (restauration, sono, décoration, etc.)
+- Budget mentionné ou budget indicatif
+- Statut actuel du dossier
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NIVEAU 2 — ANALYSE PERSONNALISÉE ⚠️ PRIORITÉ HAUTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+C'est la partie la plus importante de cette note. Elle ne se substitue pas aux faits — elle les dépasse.
+
+Analyse les échanges en profondeur et réponds à ces questions :
+
+PROFIL CLIENT
+→ Quel type de client est-ce ? (professionnel aguerri, particulier stressé, client exigeant, organisateur expérimenté, premier événement, etc.)
+→ Quel est son niveau d'implication et d'exigence perçu dans les échanges ?
+→ Y a-t-il des signaux d'inquiétude, d'hésitation ou au contraire de grande confiance ?
+
+DEMANDES PARTICULIÈRES & HORS CADRE
+→ Quelles sont les demandes qui sortent du cadre standard de RÊVA ? (décoration, contraintes alimentaires, exigences techniques, flexibilité horaires, etc.)
+→ Y a-t-il des points non résolus ou en attente de confirmation dans les échanges ?
+→ Des promesses ou engagements ont-ils été pris dans les emails ? Lesquels exactement ?
+
+POINTS DE VIGILANCE
+→ Quels sont les risques ou points de friction potentiels ? (malentendu sur un tarif, attente irréaliste, délai serré, détail oublié)
+→ Y a-t-il des non-dits ou des sous-entendus importants à interpréter ?
+
+INFORMATIONS MANQUANTES
+→ Liste explicitement les informations cruciales absentes des échanges et à obtenir impérativement avant de confirmer (budget, date définitive, nombre exact de personnes, choix du menu, acompte, etc.)
+
+RECOMMANDATION DIRECTEUR
+→ En 2-3 phrases maximum : ce que le directeur doit absolument savoir avant de rencontrer ou recontacter ce client. Le ton, l'état d'esprit, ce qui compte vraiment pour lui.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Bullet points pour le Niveau 1
+- Paragraphes courts et directs pour le Niveau 2
+- Pas de formules de politesse
+- Pas d'informations inventées : si un élément est absent des échanges, indique "non mentionné" plutôt que de supposer
+- Longueur totale : aussi longue que nécessaire pour le Niveau 2 — ne sacrifie jamais la profondeur d'analyse par souci de concision`;
       const txt = await callClaude(prompt, sys, docs);
       const upd = { ...noteIA, [resa.id]: { text: txt, date: new Date().toLocaleDateString("fr-FR") } };
       saveNoteIA(upd);
@@ -663,8 +1199,12 @@ export default function App() {
   const parType=TYPES_EVT.map(t=>({t,n:resas.filter(r=>r.typeEvenement===t).length})).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
   const maxN=Math.max(...parEspace.map(e=>e.n),1);
   const srcActives = React.useMemo(
-    () => Object.values(linksFetched).filter(Boolean).length + docs.length + (customCtx ? 1 : 0),
+    () => Object.values(linksFetched).filter(Boolean).length + docs.filter(d => (d.isPdf && d.base64) || (!d.isPdf && d.content?.trim())).length + (customCtx ? 1 : 0),
     [linksFetched, docs, customCtx]
+  );
+  const docsInvalides = React.useMemo(
+    () => docs.filter(d => d.isPdf && !d.base64).length,
+    [docs]
   );
 
   const NAV=[
@@ -905,7 +1445,7 @@ export default function App() {
                     <div style={{display:"flex",flexDirection:"column",gap:8}}>
                       {group.map(r=>{
                         const st=statuts.find(s=>s.id===(r.statut||"nouveau"))||statuts[0];
-                        const linkedEmails=emails.filter(m=>m.fromEmail===r.email);
+                        const linkedEmails=getLinkedEmails(r);
                         return (
                           <div key={r.id} onClick={()=>setSelResaGeneral(r)} style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",padding:"13px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,borderLeft:`3px solid ${st.color}`,boxShadow:selResaGeneral?.id===r.id?"0 2px 10px rgba(28,24,20,.07)":"0 1px 3px rgba(28,24,20,.04)"}}>
                             <Avatar name={r.nom||"?"} size={34}/>
@@ -971,7 +1511,7 @@ export default function App() {
 
                 {/* Onglets */}
                 <div style={{display:"flex",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
-                  {[["details","📋 Détails",false],["mails","✉ Mails "+(emails.filter(m=>m.fromEmail===selResaGeneral.email).length>0?"("+emails.filter(m=>m.fromEmail===selResaGeneral.email).length+")":""),true]].map(([tab,label,isMail])=>(
+                  {[["details","📋 Détails",false],["mails","✉ Mails "+(getLinkedEmails(selResaGeneral).length>0?"("+getLinkedEmails(selResaGeneral).length+")":""),true]].map(([tab,label,isMail])=>(
                     <button key={tab} onClick={()=>setShowMailHistory(isMail)} style={{flex:1,padding:"11px 0",fontSize:12,fontWeight:showMailHistory===isMail?600:400,color:showMailHistory===isMail?"#1C1814":"#8A8178",background:"transparent",border:"none",borderBottom:showMailHistory===isMail?"2px solid #C9A96E":"2px solid transparent",cursor:"pointer"}}>{label}</button>
                   ))}
                 </div>
@@ -1099,14 +1639,14 @@ export default function App() {
                     </div>
                   ):(
                     <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                      {emails.filter(m=>m.fromEmail===selResaGeneral.email).length===0?(
+                      {getLinkedEmails(selResaGeneral).length===0?(
                         <div style={{textAlign:"center",padding:"40px 16px",color:"#8A8178"}}>
                           <div style={{fontSize:32,marginBottom:10}}>✉</div>
                           <div style={{fontSize:13}}>Aucun mail associé</div>
                           <div style={{fontSize:11,marginTop:4}}>à l'adresse {selResaGeneral.email}</div>
                         </div>
                       ):(
-                        emails.filter(m=>m.fromEmail===selResaGeneral.email).map(m=>(
+                        getLinkedEmails(selResaGeneral).map(m=>(
                           <div key={m.id} style={{background:"#F5F3EF",borderRadius:10,padding:"13px 15px",border:"1px solid #EAE6E1"}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                               <div style={{fontSize:13,fontWeight:600,color:"#1C1814",flex:1,paddingRight:8}}>{m.subject}</div>
@@ -1287,10 +1827,13 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Bouton ajouter au planning / déjà dans le planning */}
+                  {/* Bannière détection réservation */}
                   {extracted?.isReservation && !showPlanForm && (()=>{
-                    const alreadyIn = resas.find(r => r.email === (extracted.email || sel.fromEmail));
-                    if(alreadyIn) {
+                    const alreadyIn = resas.find(r =>
+                      emailResaLinks[sel?.id || ""] === r.id ||
+                      (r.email && extracted.email && r.email.toLowerCase() === extracted.email.toLowerCase())
+                    );
+                    if (alreadyIn) {
                       const st = statuts.find(s=>s.id===(alreadyIn.statut||"nouveau"))||statuts[0];
                       return (
                         <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:12,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
@@ -1299,21 +1842,50 @@ export default function App() {
                             <div style={{fontSize:12,fontWeight:600,color:"#065F46",marginBottom:3}}>Cet événement est déjà dans le planning</div>
                             <div style={{fontSize:11,color:"#059669"}}>{alreadyIn.nom} · <span style={{padding:"1px 7px",borderRadius:100,background:st.bg,color:st.color,fontWeight:600}}>{st.label}</span></div>
                           </div>
-                          <button onClick={()=>{setSelResaGeneral(alreadyIn);setView("general");}} style={{fontSize:11,padding:"6px 12px",borderRadius:8,border:"1px solid #BBF7D0",background:"#D1FAE5",color:"#065F46",cursor:"pointer",fontWeight:600,flexShrink:0}}>Voir l'événement →</button>
+                          <button onClick={()=>{setSelResaGeneral(alreadyIn);setView("general");}} style={{fontSize:11,padding:"6px 12px",borderRadius:8,border:"1px solid #BBF7D0",background:"#D1FAE5",color:"#065F46",cursor:"pointer",fontWeight:600,flexShrink:0}}>Voir →</button>
                         </div>
                       );
                     }
+                    const confColors: Record<string,{bg:string,border:string,text:string,badge:string,badgeText:string}> = {
+                      haute:   {bg:"#EFF6FF",border:"#BFDBFE",text:"#1D4ED8",badge:"#DBEAFE",badgeText:"#1E40AF"},
+                      moyenne: {bg:"#FFFBEB",border:"#FDE68A",text:"#92400E",badge:"#FEF3C7",badgeText:"#92400E"},
+                      faible:  {bg:"#F9FAFB",border:"#E5E7EB",text:"#6B7280",badge:"#F3F4F6",badgeText:"#6B7280"},
+                    };
+                    const c = confColors[extracted.confiance || "haute"];
                     return (
-                      <div style={{background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:12,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                        <div>
-                          <div style={{fontSize:12,fontWeight:600,color:"#1D4ED8",marginBottom:4}}>📅 Demande de réservation détectée</div>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                            {[["Type",extracted.typeEvenement],["Personnes",extracted.nombrePersonnes],["Date",extracted.dateDebut],["Espace",ESPACES.find(e=>e.id===extracted.espaceDetecte)?.nom]].filter(([,v])=>v).map(([k,v])=>(
-                              <span key={k} style={{fontSize:11,background:"#DBEAFE",color:"#1E40AF",padding:"3px 8px",borderRadius:100}}><span style={{opacity:.7}}>{k} </span><strong>{v}</strong></span>
-                            ))}
+                      <div style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                            <span style={{fontSize:12,fontWeight:700,color:c.text}}>📅 Demande de réservation détectée</span>
+                            {extracted.confiance && (
+                              <span style={{fontSize:10,padding:"2px 8px",borderRadius:100,background:c.badge,color:c.badgeText,fontWeight:600}}>
+                                Confiance {extracted.confiance}
+                              </span>
+                            )}
                           </div>
+                          <button onClick={openPlanForm} style={{...gold,fontSize:11,padding:"7px 14px",flexShrink:0}}>+ Ajouter au planning</button>
                         </div>
-                        <button onClick={openPlanForm} style={{...gold,fontSize:12,padding:"8px 14px",flexShrink:0,marginLeft:12}}>+ Ajouter au planning</button>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                          {[
+                            ["👤", extracted.nom],
+                            ["🏢", extracted.entreprise],
+                            ["🎉", extracted.typeEvenement],
+                            ["👥", extracted.nombrePersonnes
+                              ? (extracted.nombrePersonnesMin && extracted.nombrePersonnesMin !== extracted.nombrePersonnes
+                                  ? `${extracted.nombrePersonnesMin}–${extracted.nombrePersonnes} pers.`
+                                  : `${extracted.nombrePersonnes} pers.`)
+                              : null],
+                            ["📅", extracted.dateDebut],
+                            ["🕐", extracted.heureDebut ? extracted.heureDebut + (extracted.heureFin ? "→"+extracted.heureFin : "") : null],
+                            ["📍", ESPACES.find(e=>e.id===extracted.espaceDetecte)?.nom],
+                            ["💰", extracted.budget],
+                          ].filter(([,v])=>v).map(([icon,v],i)=>(
+                            <span key={i} style={{fontSize:11,background:c.badge,color:c.badgeText,padding:"3px 9px",borderRadius:100}}>{icon} {v}</span>
+                          ))}
+                        </div>
+                        {extracted.notes && (
+                          <div style={{fontSize:11,color:c.text,marginTop:8,fontStyle:"italic",opacity:.8}}>📝 {extracted.notes}</div>
+                        )}
                       </div>
                     );
                   })()}
@@ -1378,6 +1950,7 @@ export default function App() {
                         {genReply&&<Spin s={12}/>}
                       </div>
                       {srcActives>0&&<span style={{fontSize:11,background:"rgba(232,184,109,.15)",color:"#E8B86D",padding:"3px 8px",borderRadius:100}}>🧠 {srcActives} source{srcActives>1?"s":""}</span>}
+                      {docsInvalides>0&&<span title="PDFs non chargés — réimportez-les dans Sources IA" style={{fontSize:11,background:"rgba(239,68,68,.1)",color:"#DC2626",padding:"3px 8px",borderRadius:100,cursor:"help"}}>⚠️ {docsInvalides} PDF{docsInvalides>1?"s":""} à réimporter</span>}
                     </div>
                     {genReply
                       ? <div style={{padding:"20px",fontSize:13,color:"#8A8178",display:"flex",alignItems:"center",gap:10}}><Spin/> Rédaction en cours…</div>
@@ -1571,10 +2144,10 @@ export default function App() {
                       </div>
                     ))}
                     {/* Mails liés */}
-                    {selResa.email&&emails.filter(m=>m.fromEmail===selResa.email).length>0&&(
+                    {getLinkedEmails(selResa).length>0&&(
                       <div style={{marginTop:12,padding:"12px 14px",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10}}>
-                        <div style={{fontSize:11,color:"#92400E",fontWeight:600,marginBottom:8}}>✉ {emails.filter(m=>m.fromEmail===selResa.email).length} conversation(s)</div>
-                        {emails.filter(m=>m.fromEmail===selResa.email).map(m=>(
+                        <div style={{fontSize:11,color:"#92400E",fontWeight:600,marginBottom:8}}>✉ {getLinkedEmails(selResa).length} conversation(s)</div>
+                        {getLinkedEmails(selResa).map(m=>(
                           <div key={m.id} onClick={()=>{ setView("mails"); setMailFilter("all"); setSel(m); handleSel(m); }} style={{fontSize:12,color:"#92400E",padding:"5px 0",cursor:"pointer",borderBottom:"1px solid #FDE68A",display:"flex",justifyContent:"space-between"}}>
                             <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{m.subject}</span>
                             <span style={{flexShrink:0,marginLeft:8,opacity:.6}}>{m.date}</span>
@@ -1839,49 +2412,145 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* ══ MODALE SUGGESTIONS MODIFICATIONS IA ══ */}
+      {pendingSuggestions && (() => {
+        const resa = resas.find(r => r.id === pendingSuggestions.resaId);
+        if (!resa) return null;
+        const nbSel = pendingSuggestions.suggestions.filter(s => s.selectionnee).length;
+        return (
+          <div style={{position:"fixed",inset:0,background:"rgba(28,24,20,0.6)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+            <div style={{background:"#FFFFFF",borderRadius:16,width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,.25)"}}>
+              {/* Header */}
+              <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #EAE6E1"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                  <span style={{fontSize:20}}>⚡</span>
+                  <div style={{fontSize:15,fontWeight:700,color:"#1C1814"}}>Modifications détectées</div>
+                </div>
+                <div style={{fontSize:12,color:"#8A8178"}}>
+                  ARCHANGE a détecté des changements dans l'email de <strong>{resa.nom || "ce contact"}</strong>. Validez les modifications à appliquer.
+                </div>
+              </div>
+
+              {/* Liste des suggestions */}
+              <div style={{padding:"16px 24px",display:"flex",flexDirection:"column",gap:8}}>
+                {pendingSuggestions.suggestions.map((s, i) => (
+                  <div key={i} onClick={()=>setPendingSuggestions(prev => prev ? {
+                    ...prev,
+                    suggestions: prev.suggestions.map((x,j) => j===i ? {...x, selectionnee:!x.selectionnee} : x)
+                  } : null)}
+                  style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",borderRadius:10,border:`1.5px solid ${s.selectionnee?"#C9A96E":"#E8E4DF"}`,background:s.selectionnee?"#FFFBF0":"#F9F8F6",cursor:"pointer",transition:"all .15s"}}>
+                    {/* Checkbox */}
+                    <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${s.selectionnee?"#C9A96E":"#C8C0B4"}`,background:s.selectionnee?"#C9A96E":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
+                      {s.selectionnee&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}
+                    </div>
+                    {/* Contenu */}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:"#1C1814",marginBottom:4}}>{s.label}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <span style={{fontSize:12,color:"#8A8178",background:"#F0EDE8",padding:"2px 8px",borderRadius:6,textDecoration:"line-through"}}>
+                          {s.ancienne !== null && s.ancienne !== "" ? String(s.ancienne) : "(vide)"}
+                        </span>
+                        <span style={{fontSize:12,color:"#8A8178"}}>→</span>
+                        <span style={{fontSize:12,color:"#1C1814",fontWeight:600,background:s.selectionnee?"#FEF3C7":"#F0EDE8",padding:"2px 8px",borderRadius:6}}>
+                          {s.nouvelle !== null && s.nouvelle !== "" ? String(s.nouvelle) : "(vide)"}
+                        </span>
+                      </div>
+                      <div style={{fontSize:11,color:"#A09890",marginTop:4,fontStyle:"italic"}}>{s.raison}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Actions */}
+              <div style={{padding:"16px 24px",borderTop:"1px solid #EAE6E1",display:"flex",gap:10}}>
+                <button
+                  disabled={nbSel===0}
+                  onClick={()=>{
+                    if (!pendingSuggestions) return;
+                    const selected = pendingSuggestions.suggestions.filter(s => s.selectionnee);
+                    if (selected.length === 0) return;
+                    const patch: Record<string,any> = {};
+                    selected.forEach(s => { patch[s.champ] = s.nouvelle; });
+                    const updated = resas.map(r => r.id === pendingSuggestions.resaId ? {...r, ...patch} : r);
+                    saveResas(updated);
+                    // Mettre à jour selResaGeneral si c'est l'événement ouvert
+                    if (selResaGeneral?.id === pendingSuggestions.resaId) setSelResaGeneral((prev:any) => ({...prev, ...patch}));
+                    setPendingSuggestions(null);
+                    toast(`${selected.length} modification${selected.length>1?"s":""} appliquée${selected.length>1?"s":""}  ✓`);
+                  }}
+                  style={{flex:2,padding:"11px",borderRadius:8,border:"none",background:nbSel>0?"#C9A96E":"#E8E4DF",color:nbSel>0?"#1C1814":"#A09890",fontSize:13,fontWeight:600,cursor:nbSel>0?"pointer":"not-allowed",transition:"all .15s"}}>
+                  Appliquer {nbSel>0?`(${nbSel})`:""}
+                </button>
+                <button onClick={()=>setPendingSuggestions(null)} style={{flex:1,padding:"11px",borderRadius:8,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",fontSize:13,cursor:"pointer"}}>
+                  Ignorer tout
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {showRelanceIA&&(
-        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"#111111",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99999,padding:32}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:"#FFFFFF",borderRadius:16,width:"min(680px, 100%)",height:"min(700px, 90vh)",display:"flex",flexDirection:"column",boxShadow:"0 32px 100px rgba(0,0,0,.6)",border:"1px solid #D1D5DB"}}>
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(17,17,17,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99999,padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#FFFFFF",borderRadius:16,width:"min(700px, 100%)",height:"min(760px, 95vh)",display:"flex",flexDirection:"column",boxShadow:"0 32px 100px rgba(0,0,0,.6)",border:"1px solid #D1D5DB"}}>
+
             {/* Header */}
             <div style={{padding:"20px 24px",borderBottom:"1px solid #E5E7EB",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
               <div>
                 <div style={{fontSize:16,fontWeight:700,color:"#111111"}}>✨ Mail de relance IA</div>
-                <div style={{fontSize:12,color:"#9CA3AF",marginTop:3}}>{showRelanceIA.nom} · {showRelanceIA.email}</div>
+                <div style={{fontSize:12,color:"#9CA3AF",marginTop:3}}>{showRelanceIA.nom}{showRelanceIA.email ? " · " + showRelanceIA.email : ""}</div>
               </div>
-              <button onClick={()=>{setShowRelanceIA(null);setRelanceIAText("");}} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"#F3F4F6",color:"#111111",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:300}}>×</button>
+              <button onClick={()=>{setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"#F3F4F6",color:"#111111",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:300}}>×</button>
             </div>
+
+            {/* Sélecteur de motif */}
+            <div style={{padding:"14px 24px",borderBottom:"1px solid #EAE6E1",flexShrink:0,background:"#FAFAFA"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#8A8178",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:9}}>Motif de la relance</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
+                {motifsRelance.map((m, i) => (
+                  <div key={i} style={{display:"flex",alignItems:"center",borderRadius:100,border:`1.5px solid ${motifSelectionne===m?"#C9A96E":"#DDD8D0"}`,background:motifSelectionne===m?"#FEF3C7":"#FFFFFF",overflow:"hidden"}}>
+                    <button onClick={()=>setMotifSelectionne(motifSelectionne===m?"":m)} style={{padding:"5px 10px",fontSize:11,fontWeight:motifSelectionne===m?600:400,color:motifSelectionne===m?"#92400E":"#5C564F",background:"transparent",border:"none",cursor:"pointer"}}>{m}</button>
+                    <button onClick={()=>{const upd=motifsRelance.filter((_,j)=>j!==i);saveMotifsRelance(upd);if(motifSelectionne===m)setMotifSelectionne("");}} title="Supprimer" style={{padding:"5px 8px 5px 0",fontSize:10,color:"#C0BAB2",background:"transparent",border:"none",cursor:"pointer"}} onMouseEnter={e=>(e.currentTarget.style.color="#DC2626")} onMouseLeave={e=>(e.currentTarget.style.color="#C0BAB2")}>×</button>
+                  </div>
+                ))}
+                {showAddMotif?(
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
+                    <input autoFocus value={newMotifLabel} onChange={e=>setNewMotifLabel(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newMotifLabel.trim()){const upd=[...motifsRelance,newMotifLabel.trim()];saveMotifsRelance(upd);setNewMotifLabel("");setShowAddMotif(false);}if(e.key==="Escape"){setShowAddMotif(false);setNewMotifLabel("");}}} placeholder="Nouveau motif…" style={{padding:"5px 10px",fontSize:11,borderRadius:100,border:"1.5px solid #C9A96E",outline:"none",width:150}}/>
+                    <button onClick={()=>{if(newMotifLabel.trim()){const upd=[...motifsRelance,newMotifLabel.trim()];saveMotifsRelance(upd);setNewMotifLabel("");setShowAddMotif(false);}}} style={{padding:"5px 10px",fontSize:11,borderRadius:100,border:"none",background:"#C9A96E",color:"#1C1814",cursor:"pointer",fontWeight:600}}>+</button>
+                    <button onClick={()=>{setShowAddMotif(false);setNewMotifLabel("");}} style={{padding:"5px 8px",fontSize:11,borderRadius:100,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer"}}>✕</button>
+                  </div>
+                ):(
+                  <button onClick={()=>setShowAddMotif(true)} style={{padding:"5px 12px",fontSize:11,borderRadius:100,border:"1.5px dashed #C9A96E",background:"transparent",color:"#C9A96E",cursor:"pointer",fontWeight:500}}>+ Ajouter</button>
+                )}
+              </div>
+              {motifSelectionne==="Autre"&&<input value={motifPersonnalise} onChange={e=>setMotifPersonnalise(e.target.value)} placeholder="Précisez le motif…" style={{width:"100%",padding:"7px 12px",fontSize:12,borderRadius:8,border:"1px solid #C9A96E",outline:"none",marginTop:4}}/>}
+              {!motifSelectionne&&<div style={{fontSize:11,color:"#B0AAA2",fontStyle:"italic",marginTop:2}}>Optionnel — guide la rédaction</div>}
+            </div>
+
             {/* Corps */}
             <div style={{flex:1,overflow:"hidden",padding:24,display:"flex",flexDirection:"column"}}>
               {genRelanceIA?(
                 <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,color:"#9CA3AF"}}>
                   <Spin s={32}/>
                   <div style={{fontSize:14,fontWeight:500}}>Rédaction en cours…</div>
-                  <div style={{fontSize:12,opacity:.6}}>L'IA analyse l'historique des échanges</div>
+                  <div style={{fontSize:12,opacity:.6}}>Analyse de l'historique et du motif sélectionné</div>
                 </div>
               ):relanceIAText?(
-                <textarea
-                  value={relanceIAText}
-                  onChange={e=>setRelanceIAText(e.target.value)}
-                  style={{flex:1,width:"100%",padding:"16px 18px",fontSize:13,color:"#111111",lineHeight:1.9,border:"1px solid #D1D5DB",borderRadius:12,background:"#F3F4F6",resize:"none",outline:"none",fontFamily:"inherit"}}
-                />
+                <textarea value={relanceIAText} onChange={e=>setRelanceIAText(e.target.value)} style={{flex:1,width:"100%",padding:"16px 18px",fontSize:13,color:"#111111",lineHeight:1.9,border:"1px solid #D1D5DB",borderRadius:12,background:"#F3F4F6",resize:"none",outline:"none",fontFamily:"inherit"}}/>
               ):(
                 <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,color:"#9CA3AF"}}>
                   <div style={{fontSize:36}}>✨</div>
-                  <div style={{fontSize:14}}>Cliquez sur "Générer" pour rédiger le mail</div>
+                  <div style={{fontSize:13,textAlign:"center",maxWidth:280}}>{motifSelectionne?`Motif sélectionné : "${motifSelectionne==="Autre"?motifPersonnalise||"Autre":motifSelectionne}"` : "Sélectionnez un motif ou générez directement"}</div>
+                  <button onClick={()=>genRelanceIAFn(showRelanceIA)} style={{...gold,fontSize:12,padding:"9px 20px"}}>✨ Générer le mail</button>
                 </div>
               )}
             </div>
+
             {/* Footer */}
             <div style={{padding:"16px 24px",borderTop:"1px solid #EAE6E1",display:"flex",gap:8,flexShrink:0}}>
-              <button
-                onClick={()=>{ if(!relanceIAText) return; window.sendPrompt("CREATE_DRAFT|"+showRelanceIA.email+"|Relance — "+showRelanceIA.nom+"|"+relanceIAText); toast("Brouillon créé !"); setShowRelanceIA(null); setRelanceIAText(""); }}
-                disabled={!relanceIAText||genRelanceIA}
-                style={{...gold,flex:1,padding:"11px",fontSize:13,opacity:(!relanceIAText||genRelanceIA)?0.4:1,cursor:(!relanceIAText||genRelanceIA)?"not-allowed":"pointer"}}
-              >📧 Créer le brouillon</button>
-              <button onClick={()=>genRelanceIAFn(showRelanceIA)} disabled={genRelanceIA} style={{...out,padding:"11px 18px",fontSize:13,opacity:genRelanceIA?0.4:1,display:"flex",alignItems:"center",gap:6}}>
-                {genRelanceIA?<Spin s={12}/>:"↻"} {relanceIAText?"Regénérer":"Générer"}
-              </button>
-              <button onClick={()=>{setShowRelanceIA(null);setRelanceIAText("");}} style={{...out,padding:"11px 18px",fontSize:13}}>Fermer</button>
+              <button onClick={()=>{if(!relanceIAText) return;window.sendPrompt("CREATE_DRAFT|"+showRelanceIA.email+"|Relance — "+showRelanceIA.nom+"|"+relanceIAText);toast("Brouillon créé !");setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} disabled={!relanceIAText||genRelanceIA} style={{...gold,flex:1,padding:"11px",fontSize:13,opacity:(!relanceIAText||genRelanceIA)?0.4:1,cursor:(!relanceIAText||genRelanceIA)?"not-allowed":"pointer"}}>📧 Créer le brouillon</button>
+              <button onClick={()=>genRelanceIAFn(showRelanceIA)} disabled={genRelanceIA} style={{...out,padding:"11px 18px",fontSize:13,opacity:genRelanceIA?0.4:1,display:"flex",alignItems:"center",gap:6}}>{genRelanceIA?<Spin s={12}/>:"↻"} {relanceIAText?"Regénérer":"Générer"}</button>
+              <button onClick={()=>{setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} style={{...out,padding:"11px 18px",fontSize:13}}>Fermer</button>
             </div>
           </div>
         </div>
