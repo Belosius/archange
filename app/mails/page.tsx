@@ -467,6 +467,8 @@ export default function App() {
     return () => document.removeEventListener("keydown", handler);
   }, [sel, emails]);
   const [loadingMail, setLoadingMail] = useState(false);
+  const [analysing, setAnalysing] = useState(false);
+  const [analysingProgress, setAnalysingProgress] = useState("");
   const [calDate, setCalDate] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [selResa, setSelResa] = useState(null);
   const [editResa, setEditResa] = useState(null);
@@ -684,6 +686,10 @@ export default function App() {
     setMotifsRelance(m);
     saveToSupabase({ motifs_relance: JSON.stringify(m) });
   };
+  // Sauvegarder uniquement les extractions IA (JSON léger) dans Supabase
+  const saveExtractions = (cache: Record<string,any>) => {
+    saveToSupabase({ extractions: JSON.stringify(cache) });
+  };
   // ─── Sauvegarde groupée des Sources IA dans la clé 'context' ──────────────
   // On sérialise toutes les sections dans un JSON pour éviter les colonnes inconnues
   const saveSourcesIA = (menus: string, conditions: string, espaces: string, ton: string, custom: string) => {
@@ -718,6 +724,43 @@ export default function App() {
     attachments: Array.isArray(m.attachments) ? m.attachments : [],
   });
 
+  // Analyse IA en arrière-plan — uniquement les emails sans extraction
+  const analyserEmailsEnArrierePlan = async (emailsList: any[]) => {
+    const aAnalyser = emailsList.filter(m => !repliesCache[m.id]?.extracted);
+    if (aAnalyser.length === 0) return;
+    setAnalysing(true);
+    let cache: Record<string,any> = {};
+    for (let i = 0; i < aAnalyser.length; i++) {
+      const m = aAnalyser[i];
+      setAnalysingProgress(`${i + 1}/${aAnalyser.length}`);
+      try {
+        const raw = await callClaude(
+          `Email:\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n\n${(m.body || m.snippet || "").slice(0, 1500)}`,
+          buildExtractPrompt(), null
+        );
+        const extracted = JSON.parse(raw.replace(/```json|```/g, "").trim());
+        cache[m.id] = extracted;
+        // Mettre à jour le cache React au fur et à mesure
+        setRepliesCache(prev => ({
+          ...prev,
+          [m.id]: { ...(prev[m.id] || { reply: "", editReply: "" }), extracted },
+        }));
+      } catch { /* email ignoré silencieusement */ }
+    }
+    // Persister toutes les nouvelles extractions en Supabase
+    setRepliesCache(prev => {
+      const allExtractions: Record<string,any> = {};
+      Object.entries(prev).forEach(([id, v]: [string, any]) => {
+        if (v.extracted) allExtractions[id] = v.extracted;
+      });
+      Object.entries(cache).forEach(([id, ext]) => { allExtractions[id] = ext; });
+      saveExtractions(allExtractions);
+      return prev;
+    });
+    setAnalysing(false);
+    setAnalysingProgress("");
+  };
+
   // Chargement/synchronisation des emails — déclenche d'abord une sync Gmail, puis relit Supabase
   const loadEmailsFromApi = async (withSync = false) => {
     setLoadingMail(true);
@@ -729,7 +772,6 @@ export default function App() {
       if (!r.ok) throw new Error("Erreur " + r.status);
       const data = await r.json();
       if (Array.isArray(data) && data.length > 0) {
-        // Fusionner métadonnées persistées
         let emailMeta: Record<string,any> = {};
         try { const m = localStorage.getItem("arc_email_meta"); if(m) emailMeta = JSON.parse(m); } catch {}
         const mapped = data.map(m => {
@@ -739,6 +781,8 @@ export default function App() {
         });
         setEmails(mapped);
         toast(mapped.length + " emails chargés");
+        // Lancer l'analyse en arrière-plan (non bloquant)
+        if (withSync) setTimeout(() => analyserEmailsEnArrierePlan(mapped), 500);
       } else {
         setEmails([]);
         toast("Aucun email — vérifiez la connexion Gmail", "err");
@@ -790,8 +834,19 @@ export default function App() {
         try { if (d.motifs_relance) { const m = JSON.parse(d.motifs_relance); if (Array.isArray(m) && m.length > 0) setMotifsRelance(m); } } catch {}
         try { if (d.email_meta) {
           const meta = JSON.parse(d.email_meta);
-          // sera fusionné avec les emails au chargement
           try { localStorage.setItem("arc_email_meta", JSON.stringify(meta)); } catch {}
+        } } catch {}
+        // Charger les extractions IA persistées → alimente directement repliesCache
+        try { if (d.extractions) {
+          const extr = JSON.parse(d.extractions);
+          setRepliesCache(prev => {
+            const merged: Record<string,any> = { ...prev };
+            Object.entries(extr).forEach(([id, extracted]) => {
+              if (!merged[id]) merged[id] = { reply: "", editReply: "", extracted };
+              else if (!merged[id].extracted) merged[id] = { ...merged[id], extracted };
+            });
+            return merged;
+          });
         } } catch {}
       } else {
         console.error("Chargement données utilisateur échoué :", userData.reason);
@@ -1817,21 +1872,27 @@ FORMAT
                 </button>
               </div>
               {subCollapsed?(
-                <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center"}}>
+                <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center",height:"100%"}}>
                   <button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13}}>↺</button>
                   <button onClick={()=>setMailFilter("all")} title="Tous les mails" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>📬</button>
-                  <button onClick={()=>setMailFilter("priorites")} title="Priorités ARCHANGE" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="priorites"?"rgba(232,184,109,0.18)":"transparent",cursor:"pointer",fontSize:13,color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.7)",fontWeight:700,position:"relative"}}>
-                    ◆
-                    {prioritesArchange.length>0&&<span style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:"50%",background:"#E24B4A"}}/>}
-                  </button>
                   {MAIL_CATS.filter(c=>c.id!=="priorites").map(c=>(
                     <button key={c.id} onClick={()=>setMailFilter(c.id)} title={c.label} style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>
                       {c.icon}
                     </button>
                   ))}
+                  {/* Priorités séparée en bas */}
+                  <div style={{marginTop:"auto",paddingTop:6,borderTop:"1px solid rgba(209,196,178,0.1)",width:"100%",display:"flex",justifyContent:"center"}}>
+                    <button onClick={()=>setMailFilter("priorites")} title="Priorités ARCHANGE" style={{width:32,height:32,borderRadius:8,border:`1px solid ${mailFilter==="priorites"?"rgba(201,169,110,0.5)":"rgba(201,169,110,0.2)"}`,background:mailFilter==="priorites"?"rgba(201,169,110,0.15)":"rgba(201,169,110,0.06)",cursor:"pointer",fontSize:12,color:"#C9A96E",fontWeight:700,position:"relative"}}>
+                      ◆
+                      {prioritesArchange.length>0&&<span style={{position:"absolute",top:1,right:1,width:8,height:8,borderRadius:"50%",background:"#E24B4A"}}/>}
+                    </button>
+                  </div>
+                </div>
                 </div>
               ):(
-                <div style={{padding:"4px 6px",flex:1}}>
+                <div style={{padding:"4px 6px",flex:1,display:"flex",flexDirection:"column"}}>
+                  {/* Catégories standard */}
+                  <div style={{flex:1}}>
                   <button onClick={()=>setMailFilter("all")} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="all"?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                       <span style={{fontSize:12}}>📬</span>
                       <span style={{flex:1}}>Tous les mails</span>
@@ -1848,6 +1909,25 @@ FORMAT
                       <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.5)"}}>{emails.filter(m=>c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id)).length||""}</span>
                     </button>
                   ))}
+                  </div>
+
+                  {/* Priorités ARCHANGE — section détachée en bas */}
+                  <div style={{marginTop:"auto",paddingTop:10,borderTop:"1px solid rgba(209,196,178,0.1)"}}>
+                    {analysing&&(
+                      <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",marginBottom:4}}>
+                        <Spin s={10}/>
+                        <span style={{fontSize:10,color:"rgba(209,196,178,0.5)"}}>Analyse {analysingProgress}…</span>
+                      </div>
+                    )}
+                    <button onClick={()=>setMailFilter("priorites")} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 11px",borderRadius:9,border:`1px solid ${mailFilter==="priorites"?"rgba(201,169,110,0.5)":"rgba(201,169,110,0.18)"}`,background:mailFilter==="priorites"?"rgba(201,169,110,0.12)":"rgba(201,169,110,0.06)",color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.7)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",transition:"all .15s"}}>
+                      <span style={{fontSize:13,color:"#C9A96E"}}>◆</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:600,fontSize:11,color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.88)"}}>Priorités ARCHANGE</div>
+                        <div style={{fontSize:10,color:"rgba(209,196,178,0.45)",marginTop:1}}>{analysing?`Analyse en cours…`:`${prioritesArchange.length} demande${prioritesArchange.length!==1?"s":""}`}</div>
+                      </div>
+                      {prioritesArchange.length>0&&<span style={{fontSize:11,background:"#E24B4A",color:"#fff",padding:"2px 7px",borderRadius:100,fontWeight:700,flexShrink:0}}>{prioritesArchange.length}</span>}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
