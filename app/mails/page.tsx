@@ -323,6 +323,10 @@ function cleanEmailBody(raw: string): string {
   return text;
 }
 
+const Spin = ({s=16}: {s?: number}) => (
+  <div style={{width:s,height:s,borderRadius:"50%",border:`${Math.max(1.5,s*.1)}px solid rgba(201,169,110,0.2)`,borderTopColor:"#C9A96E",animation:"spin .7s linear infinite",flexShrink:0}} />
+);
+
 const Avatar = ({name, size=34}) => {
   const i = name.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
   const p = ["#E8B86D","#6DB8A0","#6D9BE8","#B86D9B","#E86D6D"];
