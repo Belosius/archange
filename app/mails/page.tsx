@@ -465,7 +465,6 @@ export default function App() {
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [sel, emails]);
-  const [docs, setDocs] = useState([]);
   const [loadingMail, setLoadingMail] = useState(false);
   const [calDate, setCalDate] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [selResa, setSelResa] = useState(null);
@@ -553,11 +552,18 @@ export default function App() {
   const [calView, setCalView] = useState<"mois"|"semaine"|"jour">("mois");
   const [calWeekStart, setCalWeekStart] = useState(()=>{ const d=new Date(); d.setDate(d.getDate()-((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d; });
   // Sources IA sections open/collapsed state
-  const [srcSections, setSrcSections] = useState({liens:true, contexte:true, docs:true});  const [showNewEvent, setShowNewEvent] = useState(false);
+  const [srcSections, setSrcSections] = useState({liens:false, menus:true, conditions:false, espaces:false, ton:false});
+  // Nouvelles sections Sources IA — texte structuré persisté en Supabase
+  const [menusCtx, setMenusCtx] = useState("");
+  const [conditionsCtx, setConditionsCtx] = useState("");
+  const [espacesCtx, setEspacesCtx] = useState("");
+  const [tonCtx, setTonCtx] = useState("");
+  // Édition en cours pour chaque section
+  const [editingSrc, setEditingSrc] = useState<Record<string,boolean>>({});
+  const [showNewEvent, setShowNewEvent] = useState(false);
   const [newEvent, setNewEvent] = useState<any>({...EMPTY_RESA});
   const [newEventErrors, setNewEventErrors] = useState<any>({});
   const [initializing, setInitializing] = useState(true);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const daysInMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
   const firstDay = (d: Date) => { const f = new Date(d.getFullYear(),d.getMonth(),1).getDay(); return f===0?6:f-1; };
@@ -613,23 +619,10 @@ export default function App() {
     setMotifsRelance(m);
     saveToSupabase({ motifs_relance: JSON.stringify(m) });
   };
-  const saveDocs = async (d: any[]) => {
-    setDocs(d);
-    // Tous les docs (y compris PDFs convertis en texte) sont sauvegardés en Supabase
-    // Les PDFs en base64 (fallback) : on garde uniquement la méta sans le base64
-    const docsToSave = d.map(x => x.isPdf && x.base64
-      ? { id: x.id, name: x.name, size: x.size, isPdf: true } // méta uniquement
-      : x // doc texte complet
-    );
-    // Conserver le base64 en localStorage uniquement pour les PDFs non-extraits (fallback)
-    try {
-      const pdfData: Record<string,string> = {};
-      d.filter(x => x.isPdf && x.base64).forEach(x => { pdfData[x.id] = x.base64; });
-      if (Object.keys(pdfData).length > 0) localStorage.setItem("arc_pdf_data", JSON.stringify(pdfData));
-      else localStorage.removeItem("arc_pdf_data");
-    } catch {}
-    saveToSupabase({ docs: JSON.stringify(docsToSave) });
-  };
+  const saveMenusCtx = (v: string) => { setMenusCtx(v); saveToSupabase({menus:v}); };
+  const saveConditionsCtx = (v: string) => { setConditionsCtx(v); saveToSupabase({conditions:v}); };
+  const saveEspacesCtx = (v: string) => { setEspacesCtx(v); saveToSupabase({espaces_info:v}); };
+  const saveTonCtx = (v: string) => { setTonCtx(v); saveToSupabase({ton_ia:v}); };
   const saveLinks = async (l: any) => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
   const saveEmails = (e: any[]) => {
     setEmails(e);
@@ -699,27 +692,24 @@ export default function App() {
 
       if (userData.status === "fulfilled") {
         const d = userData.value;
-        try { if (d.resas)         setResas(JSON.parse(d.resas)); }         catch { /* garde l'état initial */ }
-        try {
-          if (d.docs) {
-            const parsed = JSON.parse(d.docs);
-            // Réhydrater les PDFs avec leur base64 depuis sessionStorage
-            let pdfData: Record<string,string> = {};
-            try { pdfData = JSON.parse(localStorage.getItem("arc_pdf_data") || "{}"); } catch {}
-            const rehydrated = parsed.map((doc: any) =>
-              doc.isPdf && pdfData[doc.id] ? { ...doc, base64: pdfData[doc.id] } : doc
-            );
-            setDocs(rehydrated);
-          }
-        } catch {}
+        try { if (d.resas)         setResas(JSON.parse(d.resas)); }         catch {}
         try { if (d.links)         setLinks(JSON.parse(d.links)); }         catch {}
         try { if (d.links_fetched) setLinksFetched(JSON.parse(d.links_fetched)); } catch {}
-        if (d.context) setCustomCtx(d.context);
+        if (d.context)      setCustomCtx(d.context);
+        if (d.menus)        setMenusCtx(d.menus);
+        if (d.conditions)   setConditionsCtx(d.conditions);
+        if (d.espaces_info) setEspacesCtx(d.espaces_info);
+        if (d.ton_ia)       setTonCtx(d.ton_ia);
         try { if (d.statuts)  { const s = JSON.parse(d.statuts); if (Array.isArray(s) && s.length > 0) setStatuts(s); } } catch {}
         try { if (d.relances)  setRelances(JSON.parse(d.relances)); }  catch {}
         try { if (d.note_ia)   setNoteIA(JSON.parse(d.note_ia)); }     catch {}
         try { if (d.email_resa_links) setEmailResaLinks(JSON.parse(d.email_resa_links)); } catch {}
         try { if (d.motifs_relance) { const m = JSON.parse(d.motifs_relance); if (Array.isArray(m) && m.length > 0) setMotifsRelance(m); } } catch {}
+        try { if (d.email_meta) {
+          const meta = JSON.parse(d.email_meta);
+          // sera fusionné avec les emails au chargement
+          try { localStorage.setItem("arc_email_meta", JSON.stringify(meta)); } catch {}
+        } } catch {}
       } else {
         console.error("Chargement données utilisateur échoué :", userData.reason);
         toast("⚠️ Impossible de charger vos données — vérifiez votre connexion", "err");
@@ -802,24 +792,6 @@ export default function App() {
     setGenReply(true);
     setReply(""); setEditReply(""); setExtracted(null);
     try {
-      // ── Valider les documents avant envoi ──────────────────────────────────
-      const docsValides = docs.filter(d =>
-        (d.isPdf && d.base64) || (!d.isPdf && d.content?.trim())
-      );
-      const docsManquants = docs.filter(d =>
-        d.isPdf && !d.base64
-      );
-      if (docsManquants.length > 0) {
-        toast(`⚠️ ${docsManquants.length} PDF(s) non chargés — réimportez-les pour les inclure`, "err");
-      }
-
-      // ── Construire la liste des sources utilisées ──────────────────────────
-      const sourcesList = docsValides.length > 0
-        ? "\n\n=== DOCUMENTS DE RÉFÉRENCE ===\n" +
-          docsValides.map(d => `- ${d.name} (${d.isPdf ? "PDF" : "Texte"})`).join("\n") +
-          "\nLis intégralement ces documents avant de répondre. Utilise leurs informations avec précision."
-        : "";
-
       // ── Construire le planning temps réel ─────────────────────────────────
       const planningCtx = "\n\n=== PLANNING EN COURS ===\n" + (
         resas.length > 0
@@ -831,28 +803,24 @@ export default function App() {
           : "Aucune réservation enregistrée."
       );
 
-      // ── Construire le contexte complet — tronqué pour éviter le 413 ─────────
-      // Les résumés web sont tronqués à 500 chars chacun
+      // ── Construire le contexte complet — sections structurées ─────────────
       const linkCtx = Object.values(linksFetched).filter(Boolean)
         .map((l: any) => (l.summary || "").slice(0, 500)).join("\n\n");
-      const sysBase = SYSTEM_PROMPT
-        + sourcesList
-        + planningCtx
-        + (customCtx ? "\n\n=== CONTEXTE PERSONNALISÉ ===\n" + customCtx.slice(0, 1000) : "")
-        + (linkCtx ? "\n\n=== INFOS WEB ANALYSÉES ===\n" + linkCtx : "");
-      // Tronquer le system prompt global à 12 000 chars max
-      const sys = sysBase.slice(0, 12000);
+      const sys = SYSTEM_PROMPT
+        + (menusCtx      ? "\n\n=== MENUS & TARIFS ===\n"          + menusCtx.slice(0, 3000)      : "")
+        + (conditionsCtx ? "\n\n=== CONDITIONS & POLITIQUE ===\n"  + conditionsCtx.slice(0, 2000) : "")
+        + (espacesCtx    ? "\n\n=== ESPACES & CAPACITÉS ===\n"     + espacesCtx.slice(0, 2000)    : "")
+        + (tonCtx        ? "\n\n=== RÈGLES & TON IA ===\n"         + tonCtx.slice(0, 1500)        : "")
+        + (customCtx     ? "\n\n=== CONTEXTE SUPPLÉMENTAIRE ===\n" + customCtx.slice(0, 1000)     : "")
+        + (linkCtx       ? "\n\n=== INFOS WEB ANALYSÉES ===\n"     + linkCtx                      : "")
+        + planningCtx;
 
       // ── Prompt email — corps tronqué à 3000 chars ─────────────────────────
       const bodyTronque = (sel.body || sel.snippet || "").slice(0, 3000);
-      const prompt = `Email reçu:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${bodyTronque}${(sel.body||"").length > 3000 ? "\n[…message tronqué]" : ""}\n\nRédige une réponse professionnelle en te basant sur tous les documents fournis et le planning ci-dessus.`;
-
-      // Tous les docs texte sont envoyés (PDFs extraits = texte léger)
-      // Seuls les PDFs en base64 brut (fallback) sont exclus
-      const docsEnvoyes = docsValides.filter(d => !d.isPdf);
+      const prompt = `Email reçu:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${bodyTronque}${(sel.body||"").length > 3000 ? "\n[…message tronqué]" : ""}\n\nRédige une réponse professionnelle.`;
 
       const [reponse, infoRaw] = await Promise.allSettled([
-        callClaude(prompt, sys, docsEnvoyes.length > 0 ? docsEnvoyes : null),
+        callClaude(prompt, sys, null),
         callClaude(
           `Email:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${sel.body || sel.snippet || ""}`,
           buildExtractPrompt(), null
@@ -1047,49 +1015,6 @@ Retourne UNIQUEMENT ce JSON valide :
     setFetchingLink(null);
   };
 
-  const handleDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { toast("Fichier trop volumineux (max 10 Mo)", "err"); return; }
-    try {
-      const isPdf = file.type === "application/pdf" || file.name.endsWith(".pdf");
-      let doc: any;
-      if (isPdf) {
-        // Lire le PDF en base64 pour extraction
-        const b64 = await new Promise<string>((res, rej) => {
-          const r = new FileReader();
-          r.onload = () => res((r.result as string).split(",")[1]);
-          r.onerror = () => rej(new Error("Lecture du fichier échouée"));
-          r.readAsDataURL(file);
-        });
-        // Extraire le texte via l'IA — on envoie le PDF une seule fois
-        toast(`📄 Extraction du texte de "${file.name}" en cours…`);
-        try {
-          const extracted = await callClaude(
-            "Extrais intégralement le texte de ce document PDF. Reproduis tout le contenu textuel (menus, tarifs, conditions, horaires, etc.) de façon fidèle et structurée, sans commentaire ni reformulation.",
-            "Tu es un extracteur de texte PDF. Tu reproduis le contenu exact du document sans l'interpréter ni le résumer.",
-            [{ id: Date.now(), name: file.name, base64: b64, isPdf: true, size: file.size }]
-          );
-          // Stocker le texte extrait comme un doc texte classique — léger, persistant en Supabase
-          doc = { id: Date.now(), name: file.name, content: extracted, isPdf: false, size: file.size, extractedFromPdf: true };
-          toast(`✅ "${file.name}" extrait et ajouté aux sources IA`);
-        } catch {
-          // Fallback : stocker le base64 si l'extraction échoue
-          doc = { id: Date.now(), name: file.name, base64: b64, isPdf: true, size: file.size };
-          toast(`⚠️ Extraction échouée — PDF importé en mode basique`);
-        }
-      } else {
-        const content = await file.text();
-        doc = { id: Date.now(), name: file.name, content, isPdf: false, size: file.size };
-        toast(`"${file.name}" ajouté aux sources IA`);
-      }
-      saveDocs([...docs, doc]);
-    } catch (err: any) {
-      toast("Erreur : " + (err.message || "impossible de lire le fichier"), "err");
-    }
-    e.target.value = "";
-  };
-
   const genRelanceIAFn = async (resa: any) => {
     setRelanceIAText(""); setGenRelanceIA(true);
     try {
@@ -1249,7 +1174,7 @@ FORMAT
 - Pas de formules de politesse
 - Pas d'informations inventées : si un élément est absent des échanges, indique "non mentionné" plutôt que de supposer
 - Longueur totale : aussi longue que nécessaire pour le Niveau 2 — ne sacrifie jamais la profondeur d'analyse par souci de concision`;
-      const txt = await callClaude(prompt, sys, docs);
+      const txt = await callClaude(prompt, sys, null);
       const upd = { ...noteIA, [resa.id]: { text: txt, date: new Date().toLocaleDateString("fr-FR") } };
       saveNoteIA(upd);
     } catch (e: any) {
@@ -1264,7 +1189,6 @@ FORMAT
     setSendMailBody("");
   };
 
-  const removeDoc = id => saveDocs(docs.filter(d=>d.id!==id));
   const fmt = s => s>1048576?(s/1048576).toFixed(1)+" Mo":Math.round(s/1024)+" Ko";
 
   const fmtDateFr = (s: string) => {
@@ -1287,13 +1211,13 @@ FORMAT
   const parType=TYPES_EVT.map(t=>({t,n:resas.filter(r=>r.typeEvenement===t).length})).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
   const maxN=Math.max(...parEspace.map(e=>e.n),1);
   const srcActives = React.useMemo(
-    () => Object.values(linksFetched).filter(Boolean).length + docs.filter(d => (d.isPdf && d.base64) || (!d.isPdf && d.content?.trim())).length + (customCtx ? 1 : 0),
-    [linksFetched, docs, customCtx]
-  );
-  const docsInvalides = React.useMemo(
-    // Seuls les PDFs encore en base64 brut (fallback non extrait) sont invalides
-    () => docs.filter(d => d.isPdf && !d.base64 && !d.content).length,
-    [docs]
+    () => Object.values(linksFetched).filter(Boolean).length
+      + (menusCtx ? 1 : 0)
+      + (conditionsCtx ? 1 : 0)
+      + (espacesCtx ? 1 : 0)
+      + (tonCtx ? 1 : 0)
+      + (customCtx ? 1 : 0),
+    [linksFetched, menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx]
   );
 
   const NAV=[
@@ -2069,7 +1993,6 @@ FORMAT
                         {genReply&&<Spin s={12}/>}
                       </div>
                       {srcActives>0&&<span style={{fontSize:11,background:"rgba(232,184,109,.15)",color:"#E8B86D",padding:"3px 8px",borderRadius:100}}>🧠 {srcActives} source{srcActives>1?"s":""}</span>}
-                      {docsInvalides>0&&<span title="PDFs non chargés — réimportez-les dans Sources IA" style={{fontSize:11,background:"rgba(239,68,68,.1)",color:"#DC2626",padding:"3px 8px",borderRadius:100,cursor:"help"}}>⚠️ {docsInvalides} PDF{docsInvalides>1?"s":""} à réimporter</span>}
                     </div>
                     {genReply
                       ? <div style={{padding:"20px",fontSize:13,color:"#8A8178",display:"flex",alignItems:"center",gap:10}}><Spin/> Rédaction en cours…</div>
@@ -2368,31 +2291,75 @@ FORMAT
             {/* ── Header fixe — titre + stats ── */}
             <div style={{padding:"24px 28px 16px",flexShrink:0,borderBottom:"1px solid #EAE6E1",background:"#F5F3EF"}}>
               <div style={{fontSize:22,fontWeight:300,color:"#1C1814",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.02em"}}>Sources IA</div>
-              <div style={{fontSize:12,color:"#8A8178",marginTop:4,marginBottom:14}}>Tout ce que vous ajoutez ici nourrit ARCHANGE.</div>
+              <div style={{fontSize:12,color:"#8A8178",marginTop:4,marginBottom:14}}>Tout ce que vous écrivez ici est transmis à ARCHANGE à chaque génération.</div>
               <div style={{display:"flex",background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",overflow:"hidden"}}>
-                {[["Liens analysés",Object.values(linksFetched).filter(Boolean).length,"🔗"],["Documents",docs.length,"📄"],["Contexte",customCtx?"Actif":"—","✏️"],["Sources totales",srcActives,"⟡"]].map(([l,v,icon],i,arr)=>(
-                  <div key={l} style={{flex:1,padding:"12px 16px",borderRight:i<arr.length-1?"1px solid #EAE6E1":"none"}}>
-                    <div style={{fontSize:10,color:"#8A8178",fontWeight:600,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:4}}>{icon} {l}</div>
-                    <div style={{fontSize:18,fontWeight:600,color:"#1C1814"}}>{v}</div>
+                {[
+                  ["Menus", menusCtx?"Actif":"—","🍽️"],
+                  ["Conditions", conditionsCtx?"Actif":"—","📜"],
+                  ["Espaces", espacesCtx?"Actif":"—","🏛️"],
+                  ["Ton & Règles", tonCtx?"Actif":"—","✏️"],
+                  ["Liens web", Object.values(linksFetched).filter(Boolean).length||"—","🔗"],
+                ].map(([l,v,icon],i,arr)=>(
+                  <div key={String(l)} style={{flex:1,padding:"10px 12px",borderRight:i<arr.length-1?"1px solid #EAE6E1":"none",textAlign:"center"}}>
+                    <div style={{fontSize:9,color:"#8A8178",fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:3}}>{icon} {l}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:v==="—"?"#C0BAB2":"#1C1814"}}>{v}</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* ── Zone scrollable — sections accordéon ── */}
+            {/* ── Zone scrollable ── */}
             <div style={{flex:1,overflowY:"scroll",padding:"16px 28px 28px",display:"flex",flexDirection:"column",gap:12,minHeight:0}}>
 
+            {/* Composant réutilisable pour chaque section texte */}
+            {([
+              ["menus",      "🍽️", "Menus & Tarifs",        "Collez ici vos menus, formules, tarifs par personne, options boissons…",            menusCtx,      saveMenusCtx],
+              ["conditions", "📜", "Conditions & Politique", "Politique d'annulation, acomptes, délais de confirmation, horaires d'accès…",       conditionsCtx, saveConditionsCtx],
+              ["espaces",    "🏛️", "Espaces & Capacités",    "Détails des espaces, configurations, équipements, accès PMR, parking…",            espacesCtx,    saveEspacesCtx],
+              ["ton",        "✏️", "Règles & Ton IA",        "Ex: Toujours proposer une visite. Ne pas mentionner les prix avant une demande de devis. Signature personnalisée…", tonCtx, saveTonCtx],
+            ] as [string, string, string, string, string, (v:string)=>void][]).map(([key, icon, title, ph, val, save]) => (
+              <div key={key} style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#F7F5F1",borderBottom:srcSections[key]?"1px solid #EAE6E1":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,[key]:!s[key]}))}>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:16}}>{icon}</span>
+                      <span style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>{title}</span>
+                      {val&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#D1FAE5",color:"#065F46",fontWeight:600}}>Actif</span>}
+                    </div>
+                    <div style={{fontSize:11,color:"#8A8178",marginTop:3,paddingLeft:24}}>{ph.slice(0,60)}…</div>
+                  </div>
+                  <span style={{fontSize:12,color:"#8A8178",flexShrink:0,marginLeft:12}}>{srcSections[key]?"▲":"▼"}</span>
+                </div>
+                {srcSections[key]&&(
+                  <div style={{padding:20,display:"flex",flexDirection:"column",gap:10}}>
+                    <textarea
+                      value={val}
+                      onChange={e=>save(e.target.value)}
+                      placeholder={ph}
+                      rows={8}
+                      style={{...inp,lineHeight:1.75,resize:"vertical",width:"100%",fontFamily:"inherit"}}
+                    />
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:11,color:"#A09890"}}>{val.length} caractères</span>
+                      {val&&<button onClick={()=>save("")} style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}}>Vider ×</button>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Liens web — section existante conservée */}
             <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1"}}>
               <button onClick={()=>setSrcSections(s=>({...s,liens:!s.liens}))} style={{width:"100%",padding:"14px 20px",background:"#F7F5F1",border:"none",borderBottom:srcSections.liens?"1px solid #EAE6E1":"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left"}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>🔗 Liens web</div>
-                  <div style={{fontSize:11,color:"#8A8178",marginTop:2}}>ARCHANGE analysera ces pages pour mieux vous connaître.</div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>🔗 Liens web analysés</div>
+                  <div style={{fontSize:11,color:"#8A8178",marginTop:2}}>Site internet, Instagram, Facebook — ARCHANGE analyse le contenu.</div>
                 </div>
                 <span style={{fontSize:12,color:"#8A8178"}}>{srcSections.liens?"▲":"▼"}</span>
               </button>
               {srcSections.liens&&(
                 <div style={{padding:20,display:"flex",flexDirection:"column",gap:16}}>
-                  {[["website","🌐","Site internet","Entrez le lien de votre site internet..."],["instagram","📸","Instagram","https://instagram.com/..."],["facebook","👍","Facebook","https://facebook.com/..."],["other","🔗","Autre lien","https://..."]].map(([key,icon,label,ph])=>(
+                  {[["website","🌐","Site internet","https://..."],["instagram","📸","Instagram","https://instagram.com/..."],["facebook","👍","Facebook","https://facebook.com/..."],["other","🔗","Autre lien","https://..."]].map(([key,icon,label,ph])=>(
                     <div key={key}>
                       <label style={{fontSize:11,color:"#7A736A",display:"block",marginBottom:6,fontWeight:600,letterSpacing:"0.04em",textTransform:"uppercase"}}>{icon} {label}</label>
                       <div style={{display:"flex",gap:8}}>
@@ -2413,63 +2380,6 @@ FORMAT
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-
-            <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#F7F5F1",borderBottom:srcSections.contexte?"1px solid #EAE6E1":"none"}}>
-                <button onClick={()=>setSrcSections(s=>({...s,contexte:!s.contexte}))} style={{background:"none",border:"none",cursor:"pointer",textAlign:"left",padding:0,flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>✏️ Contexte personnalisé</div>
-                  <div style={{fontSize:11,color:"#8A8178",marginTop:2}}>Instructions spéciales, ton, infos clés pour ARCHANGE.</div>
-                </button>
-                <div style={{display:"flex",gap:8,flexShrink:0,marginLeft:12}}>
-                  <button onClick={()=>{ if(editingCtx){ saveToSupabase({context:customCtx}); } setEditingCtx(v=>!v); }} style={{...out,fontSize:11,padding:"6px 12px"}}>{editingCtx?"✓ Sauvegarder":"Modifier"}</button>
-                  <button onClick={()=>setSrcSections(s=>({...s,contexte:!s.contexte}))} style={{background:"none",border:"none",cursor:"pointer",color:"#8A8178",fontSize:12}}>{srcSections.contexte?"▲":"▼"}</button>
-                </div>
-              </div>
-              {srcSections.contexte&&(
-                <div style={{padding:20}}>
-                  {editingCtx
-                    ?<textarea value={customCtx} onChange={e=>setCustomCtx(e.target.value)} placeholder="Ex: Ouverts 7j/7 de 9h à 2h. Responsable événements : Marie. Menus à partir de 35€/pers…" rows={6} style={{...inp,lineHeight:1.75,resize:"vertical",width:"100%"}}/>
-                    :customCtx
-                      ?<div style={{fontSize:13,color:"#5C564F",lineHeight:1.75,whiteSpace:"pre-wrap"}}>{customCtx}</div>
-                      :<div style={{fontSize:13,color:"#A09890",fontStyle:"italic"}}>Aucun contexte défini. Cliquez sur "Modifier" pour en ajouter un.</div>
-                  }
-                </div>
-              )}
-            </div>
-
-            <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#F7F5F1",borderBottom:srcSections.docs&&docs.length>0?"1px solid #EAE6E1":"none"}}>
-                <button onClick={()=>setSrcSections(s=>({...s,docs:!s.docs}))} style={{background:"none",border:"none",cursor:"pointer",textAlign:"left",padding:0,flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>📄 Documents <span style={{fontSize:11,fontWeight:400,color:"#8A8178",marginLeft:4}}>({docs.length})</span></div>
-                  <div style={{fontSize:11,color:"#8A8178",marginTop:2}}>PDF, menus, tarifs, conditions générales…</div>
-                </button>
-                <div style={{display:"flex",gap:8,flexShrink:0,marginLeft:12}}>
-                  <button onClick={()=>fileRef.current?.click()} style={{...gold,fontSize:11,padding:"7px 14px"}}>+ Ajouter</button>
-                  <input ref={fileRef} type="file" accept=".txt,.md,.csv,.json,.pdf,application/pdf" style={{display:"none"}} onChange={handleDoc}/>
-                  {docs.length>0&&<button onClick={()=>setSrcSections(s=>({...s,docs:!s.docs}))} style={{background:"none",border:"none",cursor:"pointer",color:"#8A8178",fontSize:12}}>{srcSections.docs?"▲":"▼"}</button>}
-                </div>
-              </div>
-              {srcSections.docs&&(
-                docs.length===0
-                  ?<div style={{padding:"28px 24px",textAlign:"center"}}>
-                      <div style={{fontSize:28,marginBottom:10}}>📂</div>
-                      <div style={{fontSize:13,color:"#8A8178",marginBottom:4}}>Aucun document ajouté</div>
-                      <div style={{fontSize:11,color:"#A09890"}}>Ajoutez vos PDF, menus ou tarifs pour qu'ARCHANGE les utilise</div>
-                    </div>
-                  :<div style={{padding:12,display:"flex",flexDirection:"column",gap:6}}>
-                      {docs.map(doc=>(
-                        <div key={doc.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:10,border:"1px solid #EAE6E1",background:"#FDFCFA"}}>
-                          <div style={{width:36,height:36,borderRadius:8,background:doc.isPdf?"#FEE9E9":"#EEF3FE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{doc.isPdf?"📄":"📝"}</div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:500,color:"#1C1814",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{doc.name}</div>
-                            <div style={{fontSize:11,color:"#8A8178",marginTop:1}}>{fmt(doc.size)} · {doc.isPdf?"PDF":"Texte"}</div>
-                          </div>
-                          <button onClick={()=>removeDoc(doc.id)} style={{width:28,height:28,borderRadius:6,border:"1px solid #EAE6E1",background:"transparent",color:"#C09888",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
-                        </div>
-                      ))}
-                    </div>
               )}
             </div>
 
