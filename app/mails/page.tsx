@@ -1030,8 +1030,13 @@ Retourne UNIQUEMENT ce JSON valide :
     setRelanceIAText(""); setGenRelanceIA(true);
     try {
       const linkedMails = getLinkedEmails(resa);
-      const hist = linkedMails.length > 0
-        ? linkedMails.map(m => `---\nDe: ${m.from}\nDate: ${m.date}\nObjet: ${m.subject}\n${m.body || m.snippet || ""}`).join("\n\n")
+      // Garder les 3 emails les plus récents, corps tronqué à 800 chars chacun
+      const mailsRecents = linkedMails.slice(0, 3);
+      const hist = mailsRecents.length > 0
+        ? mailsRecents.map(m => {
+            const corps = (m.body || m.snippet || "").slice(0, 800);
+            return `---\nDe: ${m.from}\nDate: ${m.date}\nObjet: ${m.subject}\n${corps}${(m.body||"").length > 800 ? "\n[…tronqué]" : ""}`;
+          }).join("\n\n")
         : "Aucun échange précédent.";
 
       // Calculer le dernier contact
@@ -1095,7 +1100,8 @@ INSTRUCTIONS DE RÉDACTION
 - Appel à l'action clair en fin de mail
 - Signature : L'équipe RÊVA`;
 
-      const txt = await callClaude(prompt, sys, docs);
+      // Docs exclus volontairement — non nécessaires pour une relance et trop lourds (PDFs base64)
+      const txt = await callClaude(prompt, sys, null);
       setRelanceIAText(txt);
     } catch (e: any) {
       toast("Erreur génération : " + (e.message || "IA indisponible"), "err");
