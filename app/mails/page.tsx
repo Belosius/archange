@@ -615,20 +615,20 @@ export default function App() {
   };
   const saveDocs = async (d: any[]) => {
     setDocs(d);
-    // PDFs : stocker le base64 en sessionStorage (survit au refresh, pas au fermé/ouvert)
-    // Docs texte : stocker en Supabase
-    const textDocs = d.filter(x => !x.isPdf);
-    const pdfMeta  = d.filter(x =>  x.isPdf).map(x => ({ id: x.id, name: x.name, size: x.size, isPdf: true }));
-    // Sauvegarder base64 des PDFs en localStorage (persiste entre sessions)
+    // Tous les docs (y compris PDFs convertis en texte) sont sauvegardés en Supabase
+    // Les PDFs en base64 (fallback) : on garde uniquement la méta sans le base64
+    const docsToSave = d.map(x => x.isPdf && x.base64
+      ? { id: x.id, name: x.name, size: x.size, isPdf: true } // méta uniquement
+      : x // doc texte complet
+    );
+    // Conserver le base64 en localStorage uniquement pour les PDFs non-extraits (fallback)
     try {
       const pdfData: Record<string,string> = {};
       d.filter(x => x.isPdf && x.base64).forEach(x => { pdfData[x.id] = x.base64; });
-      localStorage.setItem("arc_pdf_data", JSON.stringify(pdfData));
-    } catch (storageErr) {
-      toast("⚠️ Stockage local plein — les PDFs devront être réimportés à la prochaine session", "err");
-    }
-    // Sauvegarder meta + texte en Supabase
-    saveToSupabase({ docs: JSON.stringify([...textDocs, ...pdfMeta]) });
+      if (Object.keys(pdfData).length > 0) localStorage.setItem("arc_pdf_data", JSON.stringify(pdfData));
+      else localStorage.removeItem("arc_pdf_data");
+    } catch {}
+    saveToSupabase({ docs: JSON.stringify(docsToSave) });
   };
   const saveLinks = async (l: any) => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
   const saveEmails = (e: any[]) => {
@@ -831,22 +831,25 @@ export default function App() {
           : "Aucune réservation enregistrée."
       );
 
-      // ── Construire le contexte complet ─────────────────────────────────────
-      const linkCtx = Object.values(linksFetched).filter(Boolean).map((l: any) => l.summary).join("\n\n");
-      const sys = SYSTEM_PROMPT
+      // ── Construire le contexte complet — tronqué pour éviter le 413 ─────────
+      // Les résumés web sont tronqués à 500 chars chacun
+      const linkCtx = Object.values(linksFetched).filter(Boolean)
+        .map((l: any) => (l.summary || "").slice(0, 500)).join("\n\n");
+      const sysBase = SYSTEM_PROMPT
         + sourcesList
         + planningCtx
-        + (customCtx ? "\n\n=== CONTEXTE PERSONNALISÉ ===\n" + customCtx : "")
+        + (customCtx ? "\n\n=== CONTEXTE PERSONNALISÉ ===\n" + customCtx.slice(0, 1000) : "")
         + (linkCtx ? "\n\n=== INFOS WEB ANALYSÉES ===\n" + linkCtx : "");
+      // Tronquer le system prompt global à 12 000 chars max
+      const sys = sysBase.slice(0, 12000);
 
-      // ── Prompt email — corps tronqué à 4000 chars pour éviter le 413 ──────────
-      const bodyTronque = (sel.body || sel.snippet || "").slice(0, 4000);
-      const prompt = `Email reçu:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${bodyTronque}${(sel.body||"").length > 4000 ? "\n[…message tronqué]" : ""}\n\nRédige une réponse professionnelle en te basant sur tous les documents fournis et le planning ci-dessus.`;
+      // ── Prompt email — corps tronqué à 3000 chars ─────────────────────────
+      const bodyTronque = (sel.body || sel.snippet || "").slice(0, 3000);
+      const prompt = `Email reçu:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${bodyTronque}${(sel.body||"").length > 3000 ? "\n[…message tronqué]" : ""}\n\nRédige une réponse professionnelle en te basant sur tous les documents fournis et le planning ci-dessus.`;
 
-      // Limiter les PDFs envoyés à 2 max pour éviter le 413 (les textes n'ont pas de limite)
-      const docsPdf = docsValides.filter(d => d.isPdf).slice(0, 2);
-      const docsTexte = docsValides.filter(d => !d.isPdf);
-      const docsEnvoyes = [...docsTexte, ...docsPdf];
+      // Tous les docs texte sont envoyés (PDFs extraits = texte léger)
+      // Seuls les PDFs en base64 brut (fallback) sont exclus
+      const docsEnvoyes = docsValides.filter(d => !d.isPdf);
 
       const [reponse, infoRaw] = await Promise.allSettled([
         callClaude(prompt, sys, docsEnvoyes.length > 0 ? docsEnvoyes : null),
@@ -1052,19 +1055,35 @@ Retourne UNIQUEMENT ce JSON valide :
       const isPdf = file.type === "application/pdf" || file.name.endsWith(".pdf");
       let doc: any;
       if (isPdf) {
+        // Lire le PDF en base64 pour extraction
         const b64 = await new Promise<string>((res, rej) => {
           const r = new FileReader();
           r.onload = () => res((r.result as string).split(",")[1]);
           r.onerror = () => rej(new Error("Lecture du fichier échouée"));
           r.readAsDataURL(file);
         });
-        doc = { id: Date.now(), name: file.name, base64: b64, isPdf: true, size: file.size };
+        // Extraire le texte via l'IA — on envoie le PDF une seule fois
+        toast(`📄 Extraction du texte de "${file.name}" en cours…`);
+        try {
+          const extracted = await callClaude(
+            "Extrais intégralement le texte de ce document PDF. Reproduis tout le contenu textuel (menus, tarifs, conditions, horaires, etc.) de façon fidèle et structurée, sans commentaire ni reformulation.",
+            "Tu es un extracteur de texte PDF. Tu reproduis le contenu exact du document sans l'interpréter ni le résumer.",
+            [{ id: Date.now(), name: file.name, base64: b64, isPdf: true, size: file.size }]
+          );
+          // Stocker le texte extrait comme un doc texte classique — léger, persistant en Supabase
+          doc = { id: Date.now(), name: file.name, content: extracted, isPdf: false, size: file.size, extractedFromPdf: true };
+          toast(`✅ "${file.name}" extrait et ajouté aux sources IA`);
+        } catch {
+          // Fallback : stocker le base64 si l'extraction échoue
+          doc = { id: Date.now(), name: file.name, base64: b64, isPdf: true, size: file.size };
+          toast(`⚠️ Extraction échouée — PDF importé en mode basique`);
+        }
       } else {
         const content = await file.text();
         doc = { id: Date.now(), name: file.name, content, isPdf: false, size: file.size };
+        toast(`"${file.name}" ajouté aux sources IA`);
       }
       saveDocs([...docs, doc]);
-      toast(`"${file.name}" ajouté aux sources IA`);
     } catch (err: any) {
       toast("Erreur : " + (err.message || "impossible de lire le fichier"), "err");
     }
@@ -1272,7 +1291,8 @@ FORMAT
     [linksFetched, docs, customCtx]
   );
   const docsInvalides = React.useMemo(
-    () => docs.filter(d => d.isPdf && !d.base64).length,
+    // Seuls les PDFs encore en base64 brut (fallback non extrait) sont invalides
+    () => docs.filter(d => d.isPdf && !d.base64 && !d.content).length,
     [docs]
   );
 
