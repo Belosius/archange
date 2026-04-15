@@ -305,6 +305,9 @@ function cleanEmailBody(raw: string): string {
     "&iuml;":"ï","&ccedil;":"ç","&oslash;":"ø","&copy;":"©","&reg;":"®",
   };
   let text = raw;
+  // Supprimer le contenu des blocs <style> et <script> (CSS/JS brut)
+  text = text.replace(/<style[\s\S]*?<\/style>/gi, "");
+  text = text.replace(/<script[\s\S]*?<\/script>/gi, "");
   // Remplacer les entités nommées
   Object.entries(entities).forEach(([entity, char]) => {
     text = text.replace(new RegExp(entity, "gi"), char);
