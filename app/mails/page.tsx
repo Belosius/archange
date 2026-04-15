@@ -619,10 +619,16 @@ export default function App() {
     setMotifsRelance(m);
     saveToSupabase({ motifs_relance: JSON.stringify(m) });
   };
-  const saveMenusCtx = (v: string) => { setMenusCtx(v); saveToSupabase({menus:v}); };
-  const saveConditionsCtx = (v: string) => { setConditionsCtx(v); saveToSupabase({conditions:v}); };
-  const saveEspacesCtx = (v: string) => { setEspacesCtx(v); saveToSupabase({espaces_info:v}); };
-  const saveTonCtx = (v: string) => { setTonCtx(v); saveToSupabase({ton_ia:v}); };
+  // ─── Sauvegarde groupée des Sources IA dans la clé 'context' ──────────────
+  // On sérialise toutes les sections dans un JSON pour éviter les colonnes inconnues
+  const saveSourcesIA = (menus: string, conditions: string, espaces: string, ton: string, custom: string) => {
+    const payload = JSON.stringify({ menus, conditions, espaces, ton, custom });
+    saveToSupabase({ context: payload });
+  };
+  const saveMenusCtx = (v: string) => { setMenusCtx(v); saveSourcesIA(v, conditionsCtx, espacesCtx, tonCtx, customCtx); };
+  const saveConditionsCtx = (v: string) => { setConditionsCtx(v); saveSourcesIA(menusCtx, v, espacesCtx, tonCtx, customCtx); };
+  const saveEspacesCtx = (v: string) => { setEspacesCtx(v); saveSourcesIA(menusCtx, conditionsCtx, v, tonCtx, customCtx); };
+  const saveTonCtx = (v: string) => { setTonCtx(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, v, customCtx); };
   const saveLinks = async (l: any) => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
   const saveEmails = (e: any[]) => {
     setEmails(e);
@@ -695,11 +701,23 @@ export default function App() {
         try { if (d.resas)         setResas(JSON.parse(d.resas)); }         catch {}
         try { if (d.links)         setLinks(JSON.parse(d.links)); }         catch {}
         try { if (d.links_fetched) setLinksFetched(JSON.parse(d.links_fetched)); } catch {}
-        if (d.context)      setCustomCtx(d.context);
-        if (d.menus)        setMenusCtx(d.menus);
-        if (d.conditions)   setConditionsCtx(d.conditions);
-        if (d.espaces_info) setEspacesCtx(d.espaces_info);
-        if (d.ton_ia)       setTonCtx(d.ton_ia);
+        if (d.context) {
+          // Le champ context contient soit un JSON avec les sections Sources IA,
+          // soit une chaîne de texte brut (ancienne valeur legacy)
+          try {
+            const parsed = JSON.parse(d.context);
+            if (parsed && typeof parsed === "object") {
+              if (parsed.menus)     setMenusCtx(parsed.menus);
+              if (parsed.conditions) setConditionsCtx(parsed.conditions);
+              if (parsed.espaces)   setEspacesCtx(parsed.espaces);
+              if (parsed.ton)       setTonCtx(parsed.ton);
+              if (parsed.custom)    setCustomCtx(parsed.custom);
+            }
+          } catch {
+            // Valeur legacy texte brut → mettre dans customCtx
+            setCustomCtx(d.context);
+          }
+        }
         try { if (d.statuts)  { const s = JSON.parse(d.statuts); if (Array.isArray(s) && s.length > 0) setStatuts(s); } } catch {}
         try { if (d.relances)  setRelances(JSON.parse(d.relances)); }  catch {}
         try { if (d.note_ia)   setNoteIA(JSON.parse(d.note_ia)); }     catch {}
