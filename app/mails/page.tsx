@@ -969,10 +969,8 @@ Retourne UNIQUEMENT ce JSON valide :
     const pers = parseInt(String(planForm.nombrePersonnes), 10);
     const r = { ...planForm, id: "r" + Date.now(), nombrePersonnes: isNaN(pers) ? planForm.nombrePersonnes : pers };
     saveResas([...resas, r]);
-    // Lier l'email source à la réservation créée — persisté en Supabase
-    if (sel?.id) {
-      saveEmailResaLinks({ ...emailResaLinks, [sel.id]: r.id });
-    }
+    // Lier l'email source à la réservation créée et persister en Supabase
+    if (sel?.id) saveEmailResaLinks({ ...emailResaLinks, [sel.id]: r.id });
     toast("Réservation ajoutée au planning !");
     setShowPlanForm(false); setExtracted(null);
   };
