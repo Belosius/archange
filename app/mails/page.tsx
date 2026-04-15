@@ -1933,7 +1933,7 @@ FORMAT
             </div>
 
             {/* ══ VUE PRIORITÉS ARCHANGE ══ */}
-            {mailFilter==="priorites" ? (
+            {mailFilter==="priorites" && (
               <div style={{flex:1,overflowY:"auto",background:"#F5F3EF",padding:"20px 24px"}}>
                 <div style={{maxWidth:600,margin:"0 auto"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
@@ -2026,7 +2026,10 @@ FORMAT
                   })()}
                 </div>
               </div>
-            ) : (
+            )}
+
+            {/* Liste emails standard */}
+            {mailFilter!=="priorites" && (
             <div style={{width:260,borderRight:"1px solid #EAE6E1",background:"#FFFFFF",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
               <div style={{padding:"10px 12px",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:7,background:"#F5F3EF",borderRadius:8,padding:"6px 10px",border:"1px solid #EAE6E1"}}>
