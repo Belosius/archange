@@ -1888,7 +1888,6 @@ FORMAT
                     </button>
                   </div>
                 </div>
-                </div>
               ):(
                 <div style={{padding:"4px 6px",flex:1,display:"flex",flexDirection:"column"}}>
                   {/* Catégories standard */}
