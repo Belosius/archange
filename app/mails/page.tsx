@@ -315,12 +315,13 @@ function cleanEmailBody(raw: string): string {
   // Remplacer les entités numériques (&#123; ou &#x7B;)
   text = text.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
   text = text.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
-  // Remplacer les <br> et <p> par des sauts de ligne avant de striper
-  text = text.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<\/div>/gi, "\n");
+  text = text.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<\/div>/gi, "\n").replace(/<\/li>/gi, "\n").replace(/<\/tr>/gi, "\n");
   // Supprimer toutes les balises HTML restantes
   text = text.replace(/<[^>]+>/g, "");
+  // Nettoyer les espaces en début/fin de chaque ligne
+  text = text.split("\n").map(l => l.replace(/^[ \t]+|[ \t]+$/g, "")).join("\n");
   // Nettoyer les espaces et lignes vides excessives
-  text = text.replace(/[ \t]+/g, " ");
+  text = text.replace(/[ \t]{2,}/g, " ");
   text = text.replace(/\n{3,}/g, "\n\n");
   text = text.trim();
   return text;
@@ -454,6 +455,25 @@ export default function App() {
     notifTimer.current = setTimeout(() => setNotif(null), 3000);
   };
   useEffect(() => () => { if (notifTimer.current) clearTimeout(notifTimer.current); }, []);
+
+  // Suppression mail au clavier (Delete ou Backspace) quand un mail est sélectionné
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!sel) return;
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      // Ne pas intercepter si on est dans un champ de saisie
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || (e.target as HTMLElement)?.isContentEditable) return;
+      e.preventDefault();
+      if (!window.confirm("Supprimer cet email de l'app ? (Pas supprimé de Gmail)")) return;
+      const upd = emails.filter(m => m.id !== sel.id);
+      saveEmails(upd);
+      setSel(null);
+      toast("Email supprimé de l'app");
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [sel, emails]);
   const [docs, setDocs] = useState([]);
   const [loadingMail, setLoadingMail] = useState(false);
   const [calDate, setCalDate] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
@@ -608,11 +628,11 @@ export default function App() {
     // Docs texte : stocker en Supabase
     const textDocs = d.filter(x => !x.isPdf);
     const pdfMeta  = d.filter(x =>  x.isPdf).map(x => ({ id: x.id, name: x.name, size: x.size, isPdf: true }));
-    // Sauvegarder base64 des PDFs en sessionStorage
+    // Sauvegarder base64 des PDFs en localStorage (persiste entre sessions)
     try {
       const pdfData: Record<string,string> = {};
       d.filter(x => x.isPdf && x.base64).forEach(x => { pdfData[x.id] = x.base64; });
-      sessionStorage.setItem("arc_pdf_data", JSON.stringify(pdfData));
+      localStorage.setItem("arc_pdf_data", JSON.stringify(pdfData));
     } catch {}
     // Sauvegarder meta + texte en Supabase
     saveToSupabase({ docs: JSON.stringify([...textDocs, ...pdfMeta]) });
@@ -622,16 +642,17 @@ export default function App() {
 
   // Fonction partagée de mapping email API → état React
   const mapEmail = (m: any) => ({
-    id:        m.id,
-    from:      m.from_name  || "",
-    fromEmail: m.from_email || "",
-    subject:   m.subject    || "(sans objet)",
-    date:      m.date       || "",
-    snippet:   cleanEmailBody(m.snippet || ""),
-    body:      cleanEmailBody(m.body || m.snippet || ""),
-    flags:     Array.isArray(m.flags) ? m.flags : [],
-    aTraiter:  m.a_traiter  || false,
-    unread:    m.is_unread  || false,
+    id:          m.id,
+    from:        m.from_name  || "",
+    fromEmail:   m.from_email || "",
+    subject:     m.subject    || "(sans objet)",
+    date:        m.date       || "",
+    snippet:     cleanEmailBody(m.snippet || ""),
+    body:        cleanEmailBody(m.body || m.snippet || ""),
+    flags:       Array.isArray(m.flags) ? m.flags : [],
+    aTraiter:    m.a_traiter  || false,
+    unread:      m.is_unread  || false,
+    attachments: Array.isArray(m.attachments) ? m.attachments : [],
   });
 
   // Chargement/synchronisation des emails — déclenche d'abord une sync Gmail, puis relit Supabase
@@ -682,7 +703,7 @@ export default function App() {
             const parsed = JSON.parse(d.docs);
             // Réhydrater les PDFs avec leur base64 depuis sessionStorage
             let pdfData: Record<string,string> = {};
-            try { pdfData = JSON.parse(sessionStorage.getItem("arc_pdf_data") || "{}"); } catch {}
+            try { pdfData = JSON.parse(localStorage.getItem("arc_pdf_data") || "{}"); } catch {}
             const rehydrated = parsed.map((doc: any) =>
               doc.isPdf && pdfData[doc.id] ? { ...doc, base64: pdfData[doc.id] } : doc
             );
@@ -803,11 +824,17 @@ export default function App() {
         + (customCtx ? "\n\n=== CONTEXTE PERSONNALISÉ ===\n" + customCtx : "")
         + (linkCtx ? "\n\n=== INFOS WEB ANALYSÉES ===\n" + linkCtx : "");
 
-      // ── Prompt email ───────────────────────────────────────────────────────
-      const prompt = `Email reçu:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${sel.body || sel.snippet || ""}\n\nRédige une réponse professionnelle en te basant sur tous les documents fournis et le planning ci-dessus.`;
+      // ── Prompt email — corps tronqué à 4000 chars pour éviter le 413 ──────────
+      const bodyTronque = (sel.body || sel.snippet || "").slice(0, 4000);
+      const prompt = `Email reçu:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${bodyTronque}${(sel.body||"").length > 4000 ? "\n[…message tronqué]" : ""}\n\nRédige une réponse professionnelle en te basant sur tous les documents fournis et le planning ci-dessus.`;
+
+      // Limiter les PDFs envoyés à 2 max pour éviter le 413 (les textes n'ont pas de limite)
+      const docsPdf = docsValides.filter(d => d.isPdf).slice(0, 2);
+      const docsTexte = docsValides.filter(d => !d.isPdf);
+      const docsEnvoyes = [...docsTexte, ...docsPdf];
 
       const [reponse, infoRaw] = await Promise.allSettled([
-        callClaude(prompt, sys, docsValides.length > 0 ? docsValides : null),
+        callClaude(prompt, sys, docsEnvoyes.length > 0 ? docsEnvoyes : null),
         callClaude(
           `Email:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${sel.body || sel.snippet || ""}`,
           buildExtractPrompt(), null
@@ -1227,7 +1254,7 @@ FORMAT
     {id:"mails",    icon:"⌁",  label:"Mails",       badge:emails.filter(m=>m.unread).length||null},
     {id:"planning", icon:"⧖", label:"Planning"},
     {id:"stats",    icon:"◎", label:"Stats"},
-    {id:"sources",  icon:"⟡", label:"Sources IA",  badge:srcActives||null},
+    {id:"sources",  icon:"⟡", label:"Sources IA"},
   ];
 
   const inp = {padding:"9px 12px",borderRadius:8,border:"1.5px solid #C8C0B4",background:"#FFFFFF",color:"#1C1814",fontSize:13,width:"100%",outline:"none",transition:"border-color .15s",fontFamily:"'DM Sans',sans-serif"};
@@ -1262,7 +1289,7 @@ FORMAT
         </div>
         <div style={{flex:1,padding:navCollapsed?"8px 6px":"12px 10px",display:"flex",flexDirection:"column",gap:1,overflowY:"auto"}}>
           {NAV.map(n=>(
-            <button key={n.id} onClick={()=>{setView(n.id);setSubCollapsed(false);}} title={navCollapsed?n.label:undefined} style={{display:"flex",alignItems:"center",gap:navCollapsed?0:10,width:"100%",padding:navCollapsed?"11px 0":"10px 12px",borderRadius:8,border:"none",background:view===n.id?"rgba(209,196,178,0.1)":"transparent",color:view===n.id?"#D1C4B2":"rgba(209,196,178,0.65)",fontSize:11,textAlign:"left",cursor:"pointer",justifyContent:navCollapsed?"center":"flex-start",position:"relative",transition:"all .15s",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:view===n.id?600:400}}>
+            <button key={n.id} onClick={()=>{setView(n.id);setSubCollapsed(false);}} title={navCollapsed?n.label:undefined} style={{display:"flex",alignItems:"center",gap:navCollapsed?0:10,width:"100%",padding:navCollapsed?"11px 0":"10px 12px",borderRadius:8,border:"none",background:view===n.id?"rgba(209,196,178,0.1)":"transparent",color:view===n.id?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,textAlign:"left",cursor:"pointer",justifyContent:navCollapsed?"center":"flex-start",position:"relative",transition:"all .15s",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:view===n.id?600:400}}>
               <span style={{fontSize:15,opacity:.8,fontFamily:"serif"}}>{n.icon}</span>
               {!navCollapsed&&<><span style={{flex:1}}>{n.label}</span>{n.badge>0&&<span style={{fontSize:9,background:view===n.id?"rgba(209,196,178,0.15)":"rgba(209,196,178,0.06)",color:view===n.id?"#D1C4B2":"rgba(209,196,178,0.3)",padding:"2px 7px",borderRadius:100,fontWeight:700,letterSpacing:"0.04em"}}>{n.badge}</span>}</>}              {navCollapsed&&n.badge>0&&<span style={{position:"absolute",top:6,right:6,width:6,height:6,borderRadius:"50%",background:"#C9A96E"}}/>}
             </button>
@@ -1747,16 +1774,15 @@ FORMAT
                 </div>
               ):(
                 <div style={{padding:"4px 6px",flex:1}}>
-                  <button onClick={()=>setMailFilter("all")} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="all"?"#D1C4B2":"rgba(209,196,178,0.75)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                  <button onClick={()=>setMailFilter("all")} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="all"?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                       <span style={{fontSize:12}}>📬</span>
                       <span style={{flex:1}}>Tous les mails</span>
-                      <span style={{fontSize:10,color:mailFilter==="all"?"#C9A96E":"rgba(209,196,178,0.45)"}}>{emails.length}</span>
                   </button>
                   {MAIL_CATS.map(c=>(
-                    <button key={c.id} onClick={()=>setMailFilter(c.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(209,196,178,0.1)":"transparent",color:mailFilter===c.id?"#D1C4B2":"rgba(209,196,178,0.75)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                    <button key={c.id} onClick={()=>setMailFilter(c.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(209,196,178,0.1)":"transparent",color:mailFilter===c.id?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                       <span style={{fontSize:12}}>{c.icon}</span>
                       <span style={{flex:1}}>{c.label}</span>
-                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.45)"}}>{emails.filter(m=>c.id==="all"?true:c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id)).length}</span>
+                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.5)"}}>{emails.filter(m=>c.id==="all"?true:c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id)).length||""}</span>
                     </button>
                   ))}
                 </div>
@@ -1839,6 +1865,29 @@ FORMAT
                     <div style={{padding:"16px 20px"}}>
                       <div style={{fontSize:16,fontWeight:600,color:"#1C1814",marginBottom:14}}>{sel.subject}</div>
                       <div style={{fontSize:14,color:"#5C564F",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{sel.body||sel.snippet}</div>
+                      {/* Pièces jointes */}
+                      {(sel.attachments||[]).length > 0 && (
+                        <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid #EAE6E1"}}>
+                          <div style={{fontSize:11,fontWeight:600,color:"#8A8178",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>📎 Pièces jointes ({sel.attachments.length})</div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                            {sel.attachments.map((att: any, i: number) => {
+                              const ext = (att.filename||att.name||"").split(".").pop()?.toLowerCase() || "";
+                              const icons: Record<string,string> = {pdf:"📄",doc:"📝",docx:"📝",xls:"📊",xlsx:"📊",ppt:"📋",pptx:"📋",jpg:"🖼",jpeg:"🖼",png:"🖼",gif:"🖼",webp:"🖼",zip:"🗜",csv:"📊",txt:"📃"};
+                              const icon = icons[ext] || "📎";
+                              const size = att.size ? (att.size > 1048576 ? (att.size/1048576).toFixed(1)+" Mo" : Math.round(att.size/1024)+" Ko") : "";
+                              return (
+                                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#F5F3EF",borderRadius:8,border:"1px solid #EAE6E1",fontSize:12,color:"#3D3530",maxWidth:220}}>
+                                  <span style={{fontSize:16,flexShrink:0}}>{icon}</span>
+                                  <div style={{overflow:"hidden"}}>
+                                    <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{att.filename||att.name||"Fichier"}</div>
+                                    {size&&<div style={{fontSize:10,color:"#8A8178"}}>{size}</div>}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -2062,9 +2111,12 @@ FORMAT
                             <div style={{display:"flex",justifyContent:"center",marginBottom:4}}>
                               <span style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:isToday?700:400,background:isToday?"#C9A96E":"transparent",color:isToday?"#FFFFFF":"#9E9890"}}>{day}</span>
                             </div>
-                            {dr.slice(0,3).map(r=>{ const st=getStatut(r); return (
-                              <div key={r.id} onClick={()=>setSelResa(r)} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
-                                {r.heureDebut&&<span style={{opacity:.7,marginRight:3}}>{r.heureDebut}</span>}{r.nom}
+                            {dr.slice(0,3).map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
+                              <div key={r.id} onClick={()=>setSelResa(r)} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
+                                <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                                  {r.heureDebut&&<span style={{opacity:.7,marginRight:3}}>{r.heureDebut}{r.heureFin&&`→${r.heureFin}`}</span>}{r.nom}
+                                </div>
+                                {(r.entreprise||espace)&&<div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",opacity:.7,fontSize:9}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
                               </div>
                             );})}
                             {dr.length>3&&<div style={{fontSize:10,color:"#8A8178",paddingLeft:4}}>+{dr.length-3} autre{dr.length-3>1?"s":""}</div>}
@@ -2091,10 +2143,11 @@ FORMAT
                       <div/>
                       {weekDays.map(d=>{ const ds=fmtDate(d); const dr=resasForDate(ds); const isTd=ds===todayStr; return (
                         <div key={ds} style={{borderLeft:"1px solid #EAE6E1",minHeight:300,padding:"6px 4px",background:isTd?"rgba(232,184,109,0.03)":"transparent"}}>
-                          {dr.map(r=>{ const st=getStatut(r); return (
+                          {dr.map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
                             <div key={r.id} onClick={()=>setSelResa(r)} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
                               <div style={{fontWeight:600,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.nom}</div>
                               {r.heureDebut&&<div style={{fontSize:10,color:st.color,opacity:.8}}>{r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</div>}
+                              {(r.entreprise||espace)&&<div style={{fontSize:9,color:st.color,opacity:.65,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
                             </div>
                           );})}
                         </div>
@@ -2116,11 +2169,14 @@ FORMAT
                       <div style={{display:"flex",flexDirection:"column",gap:12}}>
                         {dayResas.map(r=>{ const st=getStatut(r); return (
                           <div key={r.id} onClick={()=>setSelResa(r)} style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                              <div style={{fontSize:15,fontWeight:600,color:"#1C1814"}}>{r.nom}</div>
-                              <span style={{fontSize:11,padding:"3px 10px",borderRadius:100,background:st.bg,color:st.color,fontWeight:600}}>{st.label}</span>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                              <div>
+                                <div style={{fontSize:15,fontWeight:600,color:"#1C1814"}}>{r.nom}</div>
+                                {r.entreprise&&<div style={{fontSize:12,color:"#8A8178",marginTop:1}}>{r.entreprise}</div>}
+                              </div>
+                              <span style={{fontSize:11,padding:"3px 10px",borderRadius:100,background:st.bg,color:st.color,fontWeight:600,flexShrink:0,marginLeft:8}}>{st.label}</span>
                             </div>
-                            <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+                            <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:8}}>
                               {r.heureDebut&&<span style={{fontSize:12,color:"#5C564F"}}>🕐 {r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</span>}
                               {r.typeEvenement&&<span style={{fontSize:12,color:"#5C564F"}}>🎉 {r.typeEvenement}</span>}
                               {r.nombrePersonnes&&<span style={{fontSize:12,color:"#5C564F"}}>👥 {r.nombrePersonnes} pers.</span>}
