@@ -2079,7 +2079,7 @@ FORMAT
                 ))}
               </div>
             </div>
-            )} {/* fin ternaire priorites */}
+            )}
 
             {/* Zone lecture — scrollable indépendamment */}
             <div style={{flex:1,overflowY:"auto",background:"#EEEAE4"}}>
