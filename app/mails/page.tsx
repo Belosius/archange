@@ -257,18 +257,6 @@ JSON à retourner :
 }`;
 };
 
-const INIT_EMAILS = [
-  { id:"z1", from:"Brigitte FLORIN", fromEmail:"bflogold@gmail.com", subject:"[Zenchef] Privatisation cocktail dînatoire – 13 juin", date:"22 mars", snippet:"Privatiser un espace pour 50 personnes, cocktail dînatoire, musique pour danser, 13 juin", body:"Bonjour,\n\nJ'aimerais privatiser un espace pour 50 personnes avec cocktail dînatoire et possibilité de passer notre musique pour danser. Ce serait pour le 13 juin.\n\nNom : FLORIN · Prénom : BRIGITTE · Email : bflogold@gmail.com · Tél : +33 6 18 12 29 57", flags:[], aTraiter:true, unread:true },
-  { id:"z2", from:"Anne Légier", fromEmail:"anne.legier@u-paris.fr", subject:"[Zenchef] Devis déjeuner 6 personnes – 16 avril", date:"25 mars", snippet:"Devis pour 6 personnes, déjeuner midi 16 avril, bon de commande Université Paris Cité, option végétarienne", body:"Bonjour,\n\nSerait-il possible d'avoir un devis pour 6 personnes pour le repas de midi le 16 avril (entrée, plat, dessert, café, boisson avec option végétarienne). Nous aimerions faire un bon de commande université Paris Cité.\n\nNom : Légier · Prénom : Anne · Email : anne.legier@u-paris.fr · Tél : 0628058529", flags:["flag"], aTraiter:true, unread:true },
-  { id:"z3", from:"Dooanistah Bumma", fromEmail:"dooanistah.bumma@accenture.com", subject:"[Zenchef] Dîner corporate 20 personnes – 15 avril", date:"26 mars", snippet:"Dîner corporate 20 personnes, buffet chic avec places assises, 19h-23h45, budget 1900€ – Accenture", body:"Bonjour,\n\nNous souhaitons organiser un dîner corporate avec un client.\n\nDate : Mercredi 15 avril 2026 · 19h00 à 23h45\nPersonnes : 20\nFormat : Buffet chic assis, options végétariennes, boissons (3-4 verres/pers)\nBudget : 1 900€\n\nNom : Bumma · Prénom : Dooanistah · Email : dooanistah.bumma@accenture.com · Tél : +33176708333", flags:["star","flag"], aTraiter:true, unread:true },
-  { id:"z4", from:"Sandra Robin", fromEmail:"groups@railtour.ch", subject:"[Zenchef] Groupe 36 personnes – 17 oct. 2026", date:"27 mars", snippet:"Groupe touristique 36 personnes, dîner 19h30, vendredi 17 octobre 2026 – Railtour Suisse", body:"Bonjour,\n\nRailtour Suisse SA est un tour-opérateur. Pour un groupe voyageant à Paris nous recherchons un restaurant.\n\nDate : Vendredi 17/10/2026 · Heure : 19h/19h30\nNom du groupe : Xware · Personnes : env. 36\n\nNom : Robin · Prénom : Sandra · Email : groups@railtour.ch · Tél : +41584554560", flags:[], aTraiter:true, unread:true },
-  { id:"z5", from:"Rishita Rastogi", fromEmail:"rishita.rastogi007@gmail.com", subject:"[Zenchef] Options végétariennes ?", date:"1 avr.", snippet:"Demande d'options végétariennes au menu", body:"What options do you have for vegetarian?\n\nNom : Rastogi · Prénom : Rishita · Email : rishita.rastogi007@gmail.com · Tél : +91 6390754841", flags:[], aTraiter:false, unread:true },
-  { id:"z6", from:"Amélie Fabre", fromEmail:"amelie.fabre@toohotel.com", subject:"[Zenchef] Salle plénière 80 personnes – sept. 2027", date:"2 avr.", snippet:"Salle plénière 80 personnes, 21-23 septembre 2027, pause + déjeuner – Too Hotel", body:"Bonjour,\n\nUn client organise un événement du 21 au 23 septembre 2027. Besoin d'une salle plénière 80 personnes + pause matinée + déjeuner.\n\nNom : Fabre · Prénom : Amélie · Email : Amelie.fabre@toohotel.com · Tél : 07 88 74 51 77", flags:[], aTraiter:true, unread:true },
-  { id:"z7", from:"Samuel ROBERT", fromEmail:"samuel.robert@natixis.com", subject:"[Zenchef] Relance devis 20 personnes – Natixis", date:"3 avr.", snippet:"Relance devis 20 personnes, budget 45€/pers – Natixis", body:"Bonjour,\n\nCela fait une semaine que j'ai fait une demande de devis pour 21 personnes (corrigé à 20, budget 45€/pers). Pourriez-vous me dire si cela sera fait bientôt ? Nous avons besoin du devis rapidement.\n\nNom : Robert · Prénom : Samuel · Email : samuel.robert@natixis.com · Tél : 0651943878", flags:["flag"], aTraiter:true, unread:true },
-];
-const INIT_RESAS = [
-  { id:"r1", nom:"Forum INCYBER", email:"theanmolee.arunakiridas@forwardglobal.com", telephone:"+33752520304", entreprise:"ForwardGlobal", typeEvenement:"Cocktail", nombrePersonnes:150, espaceId:"rdc", dateDebut:"2026-06-25", heureDebut:"19:00", heureFin:"00:00", statut:"nouveau", notes:"15 pièces cocktail/pers, softs+alcools, micro HF" },
-];
 const EMPTY_RESA = { id:null, nom:"", email:"", telephone:"", entreprise:"", typeEvenement:"", nombrePersonnes:"", espaceId:"rdc", dateDebut:"", heureDebut:"", heureFin:"", statut:"nouveau", notes:"", budget:"", noteDirecteur:"" };
 
 async function callClaude(msg: string, system: string, docs: any[] | null): Promise<string> {
@@ -324,6 +312,8 @@ function cleanEmailBody(raw: string): string {
   text = text.replace(/[ \t]{2,}/g, " ");
   text = text.replace(/\n{3,}/g, "\n\n");
   text = text.trim();
+  // Tronquer à 20 000 chars pour éviter des rendus trop lourds
+  if (text.length > 20000) text = text.slice(0, 20000) + "\n\n[…message tronqué pour l'affichage]";
   return text;
 }
 
@@ -331,10 +321,11 @@ const Spin = ({s=16}: {s?: number}) => (
   <div style={{width:s,height:s,borderRadius:"50%",border:`${Math.max(1.5,s*.1)}px solid rgba(201,169,110,0.2)`,borderTopColor:"#C9A96E",animation:"spin .7s linear infinite",flexShrink:0}} />
 );
 
-const Avatar = ({name, size=34}) => {
-  const i = name.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
+const Avatar = ({name: nameProp, size=34}) => {
+  const name = nameProp || "?";
+  const i = name.split(" ").map(w=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase() || "?";
   const p = ["#E8B86D","#6DB8A0","#6D9BE8","#B86D9B","#E86D6D"];
-  const bg = p[name.charCodeAt(0)%p.length];
+  const bg = p[name.charCodeAt(0)%p.length] || p[0];
   return <div style={{width:size,height:size,borderRadius:"50%",background:bg+"25",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.33,fontWeight:700,color:bg,flexShrink:0}}>{i}</div>;
 };
 
@@ -570,28 +561,28 @@ export default function App() {
 
   const daysInMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
   const firstDay = (d: Date) => { const f = new Date(d.getFullYear(),d.getMonth(),1).getDay(); return f===0?6:f-1; };
-  const resasDay = (day: number) => { const ds=calDate.getFullYear()+"-"+String(calDate.getMonth()+1).padStart(2,"0")+"-"+String(day).padStart(2,"0"); return resas.filter(r=>r.dateDebut===ds); };
 
-  // ─── Récupère tous les emails liés à un événement ─────────────────────────
-  // Combine : lien IA explicite OU match par email du contact OU match par nom
-  const getLinkedEmails = (resa: any) => {
+  // Ref pour tracker l'email en cours de génération IA (évite les race conditions)
+  const genReplyForEmailId = React.useRef<string|null>(null);
+
+  // ─── Récupère tous les emails liés à un événement — mémoïsé ──────────────
+  const getLinkedEmails = React.useCallback((resa: any) => {
     if (!resa) return [];
     return emails.filter(m => {
-      // 1. Lien IA explicite sauvegardé
       if (emailResaLinks[m.id] === resa.id) return true;
-      // 2. Match exact par adresse email
       if (resa.email && m.fromEmail && m.fromEmail.toLowerCase() === resa.email.toLowerCase()) return true;
-      // 3. Match par nom (fallback) — premier mot du nom du contact dans l'expéditeur
       if (resa.nom && m.from) {
         const firstWord = resa.nom.toLowerCase().split(" ")[0];
         if (firstWord.length > 2 && m.from.toLowerCase().includes(firstWord)) return true;
       }
       return false;
     });
-  };
+  }, [emails, emailResaLinks]);
 
   // Sauvegarde Supabase — debounce par clé pour éviter les écrasements
   const _saveTimers = React.useRef<Record<string,any>>({});
+  // Cleanup timers à l'unmount pour éviter les appels réseau après démontage
+  useEffect(() => () => { Object.values(_saveTimers.current).forEach(clearTimeout); }, []);
   const saveToSupabase = (data: Record<string, string>) => {
     Object.entries(data).forEach(([key, value]) => {
       if (_saveTimers.current[key]) clearTimeout(_saveTimers.current[key]);
@@ -610,10 +601,10 @@ export default function App() {
     });
   };
 
-  const saveNoteIA = async (n: Record<string,{text:string,date:string}>) => { setNoteIA(n); saveToSupabase({note_ia:JSON.stringify(n)}); };
-  const saveStatuts = async (s: StatutDef[]) => { setStatuts(s); saveToSupabase({statuts:JSON.stringify(s)}); };
-  const saveResas = async r => { setResas(r); saveToSupabase({resas:JSON.stringify(r)}); };
-  const saveRelances = async (r: any[]) => { setRelances(r); saveToSupabase({relances:JSON.stringify(r)}); };
+  const saveNoteIA = (n: Record<string,{text:string,date:string}>) => { setNoteIA(n); saveToSupabase({note_ia:JSON.stringify(n)}); };
+  const saveStatuts = (s: StatutDef[]) => { setStatuts(s); saveToSupabase({statuts:JSON.stringify(s)}); };
+  const saveResas = (r: any[]) => { setResas(r); saveToSupabase({resas:JSON.stringify(r)}); };
+  const saveRelances = (r: any[]) => { setRelances(r); saveToSupabase({relances:JSON.stringify(r)}); };
   const saveEmailResaLinks = (links: Record<string,string>) => {
     setEmailResaLinks(links);
     saveToSupabase({ email_resa_links: JSON.stringify(links) });
@@ -633,12 +624,20 @@ export default function App() {
       const pdfData: Record<string,string> = {};
       d.filter(x => x.isPdf && x.base64).forEach(x => { pdfData[x.id] = x.base64; });
       localStorage.setItem("arc_pdf_data", JSON.stringify(pdfData));
-    } catch {}
+    } catch (storageErr) {
+      toast("⚠️ Stockage local plein — les PDFs devront être réimportés à la prochaine session", "err");
+    }
     // Sauvegarder meta + texte en Supabase
     saveToSupabase({ docs: JSON.stringify([...textDocs, ...pdfMeta]) });
   };
   const saveLinks = async (l: any) => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
-  const saveEmails = (e: any[]) => { setEmails(e); };
+  const saveEmails = (e: any[]) => {
+    setEmails(e);
+    const meta: Record<string,{flags:string[],aTraiter:boolean,unread:boolean}> = {};
+    e.forEach(m => { meta[m.id] = { flags: m.flags||[], aTraiter: !!m.aTraiter, unread: !!m.unread }; });
+    saveToSupabase({ email_meta: JSON.stringify(meta) });
+    try { localStorage.setItem("arc_email_meta", JSON.stringify(meta)); } catch {}
+  };
 
   // Fonction partagée de mapping email API → état React
   const mapEmail = (m: any) => ({
@@ -659,20 +658,23 @@ export default function App() {
   const loadEmailsFromApi = async (withSync = false) => {
     setLoadingMail(true);
     try {
-      // Si demandé, déclencher une synchronisation Gmail avant de lire
       if (withSync) {
-        try {
-          await fetch("/api/emails/sync", { method: "POST" });
-        } catch {
-          // sync non critique — on continue même si ça échoue
-        }
+        try { await fetch("/api/emails/sync", { method: "POST" }); } catch {}
       }
       const r = await fetch("/api/emails");
       if (!r.ok) throw new Error("Erreur " + r.status);
       const data = await r.json();
       if (Array.isArray(data) && data.length > 0) {
-        setEmails(data.map(mapEmail));
-        toast(data.length + " emails chargés");
+        // Fusionner métadonnées persistées
+        let emailMeta: Record<string,any> = {};
+        try { const m = localStorage.getItem("arc_email_meta"); if(m) emailMeta = JSON.parse(m); } catch {}
+        const mapped = data.map(m => {
+          const em = mapEmail(m);
+          const meta = emailMeta[em.id];
+          return meta ? { ...em, flags: meta.flags ?? em.flags, aTraiter: meta.aTraiter ?? em.aTraiter, unread: meta.unread ?? em.unread } : em;
+        });
+        setEmails(mapped);
+        toast(mapped.length + " emails chargés");
       } else {
         setEmails([]);
         toast("Aucun email — vérifiez la connexion Gmail", "err");
@@ -720,11 +722,22 @@ export default function App() {
         try { if (d.motifs_relance) { const m = JSON.parse(d.motifs_relance); if (Array.isArray(m) && m.length > 0) setMotifsRelance(m); } } catch {}
       } else {
         console.error("Chargement données utilisateur échoué :", userData.reason);
+        toast("⚠️ Impossible de charger vos données — vérifiez votre connexion", "err");
       }
 
       if (emailsData.status === "fulfilled") {
         const data = emailsData.value;
-        setEmails(Array.isArray(data) && data.length > 0 ? data.map(mapEmail) : []);
+        // Fusionner les métadonnées persistées (flags, aTraiter, unread) avec les emails de l'API
+        let emailMeta: Record<string,any> = {};
+        if (userData.status === "fulfilled") {
+          try { if (userData.value.email_meta) emailMeta = JSON.parse(userData.value.email_meta); } catch {}
+        }
+        const mapped = Array.isArray(data) && data.length > 0 ? data.map(m => {
+          const mapped = mapEmail(m);
+          const meta = emailMeta[mapped.id];
+          return meta ? { ...mapped, flags: meta.flags ?? mapped.flags, aTraiter: meta.aTraiter ?? mapped.aTraiter, unread: meta.unread ?? mapped.unread } : mapped;
+        }) : [];
+        setEmails(mapped);
       } else {
         console.error("Chargement emails échoué :", emailsData.reason);
         setEmails([]);
@@ -784,6 +797,8 @@ export default function App() {
 
   const genererReponse = async () => {
     if (!sel) return;
+    const emailId = sel.id;
+    genReplyForEmailId.current = emailId;
     setGenReply(true);
     setReply(""); setEditReply(""); setExtracted(null);
     try {
@@ -843,6 +858,9 @@ export default function App() {
 
       let newReply = "";
       let newExtracted: any = null;
+
+      // Abandonner si l'utilisateur a changé d'email pendant la génération
+      if (genReplyForEmailId.current !== emailId) { setGenReply(false); return; }
 
       if (reponse.status === "fulfilled" && reponse.value) {
         newReply = reponse.value;
@@ -1230,6 +1248,15 @@ FORMAT
   const removeDoc = id => saveDocs(docs.filter(d=>d.id!==id));
   const fmt = s => s>1048576?(s/1048576).toFixed(1)+" Mo":Math.round(s/1024)+" Ko";
 
+  const fmtDateFr = (s: string) => {
+    if (!s) return "";
+    const d = new Date(s + "T12:00:00");
+    if (isNaN(d.getTime())) return s;
+    return d.getDate() + " " + MOIS[d.getMonth()] + " " + d.getFullYear();
+  };
+
+  const mailListRef = useRef<HTMLDivElement>(null);
+
   const toggleUnread = id => {
     const upd = emails.map(m=>m.id===id?{...m,unread:!m.unread}:m);
     saveEmails(upd); if(sel?.id===id) setSel(upd.find(m=>m.id===id));
@@ -1577,7 +1604,7 @@ FORMAT
 
                       {/* Infos en grille 2 col aérée */}
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                        {[["🎉","Type",selResaGeneral.typeEvenement],["👥","Personnes",selResaGeneral.nombrePersonnes?selResaGeneral.nombrePersonnes+" pers.":null],["📅","Date",selResaGeneral.dateDebut],["🕐","Horaires",selResaGeneral.heureDebut+(selResaGeneral.heureFin?" → "+selResaGeneral.heureFin:"")],["📍","Espace",ESPACES.find(e=>e.id===selResaGeneral.espaceId)?.nom],["💰","Budget",selResaGeneral.budget]].map(([icon,k,v])=>(
+                        {[["🎉","Type",selResaGeneral.typeEvenement],["👥","Personnes",selResaGeneral.nombrePersonnes?selResaGeneral.nombrePersonnes+" pers.":null],["📅","Date",fmtDateFr(selResaGeneral.dateDebut)],["🕐","Horaires",selResaGeneral.heureDebut+(selResaGeneral.heureFin?" → "+selResaGeneral.heureFin:"")],["📍","Espace",ESPACES.find(e=>e.id===selResaGeneral.espaceId)?.nom],["💰","Budget",selResaGeneral.budget]].map(([icon,k,v])=>(
                           <div key={k} style={{background:"#F5F2EE",borderRadius:10,padding:"13px 15px"}}>
                             <div style={{fontSize:10,color:"#A09890",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.04em"}}>{icon} {k}</div>
                             <div style={{fontSize:14,fontWeight:500,color:v?"#1C1814":"#C0BAB2",fontStyle:v?"normal":"italic"}}>{v||"Non renseigné"}</div>
@@ -1798,8 +1825,16 @@ FORMAT
                   {search&&<button onClick={()=>setSearch("")} style={{background:"none",border:"none",color:"#8A8178",cursor:"pointer",fontSize:14,padding:0}}>×</button>}
                 </div>
               </div>
-              <div style={{flex:1,overflowY:"auto"}}>
-                {filtered.length===0&&<div style={{padding:24,textAlign:"center",color:"#8A8178",fontSize:12}}>Aucun email</div>}
+              <div ref={mailListRef} style={{flex:1,overflowY:"auto"}}>
+                {filtered.length===0&&(
+                  <div style={{padding:"32px 16px",textAlign:"center",color:"#8A8178"}}>
+                    <div style={{fontSize:28,marginBottom:8}}>{mailFilter==="all"?"📭":"🔍"}</div>
+                    <div style={{fontSize:12,fontWeight:500,marginBottom:4}}>
+                      {mailFilter==="nonlus"?"Aucun email non lu":mailFilter==="atraiter"?"Aucun email à traiter":mailFilter==="star"?"Aucun email favori":mailFilter==="flag"?"Aucun email flaggé":search?"Aucun résultat pour cette recherche":"Aucun email"}
+                    </div>
+                    {mailFilter!=="all"&&<button onClick={()=>{setMailFilter("all");setSearch("");}} style={{fontSize:11,color:"#C9A96E",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Voir tous les mails</button>}
+                  </div>
+                )}
                 {filtered.map(em=>(
                   <div key={em.id} className="mail-row" style={{position:"relative",display:"flex",gap:9,padding:"11px 12px",borderBottom:"1px solid #EAE6E1",cursor:"pointer",background:sel?.id===em.id?"#F5F3EF":"transparent",borderLeft:sel?.id===em.id?"3px solid #C9A96E":em.unread?"3px solid #7BA8C4":"3px solid transparent"}}>
                     <div onClick={()=>handleSel(em)} style={{display:"flex",gap:9,flex:1,minWidth:0}}>
@@ -2021,16 +2056,16 @@ FORMAT
                       : !reply
                         ? <div style={{padding:"20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
                             <div style={{fontSize:12,color:"#8A8178",textAlign:"center"}}>Cliquez pour demander à ARCHANGE de rédiger une réponse.</div>
-                            <button onClick={genererReponse} style={{...gold,padding:"10px 20px",fontSize:12,display:"flex",alignItems:"center",gap:8}}>✨ Générer une réponse</button>
+                            <button onClick={genererReponse} disabled={genReply} style={{...gold,padding:"10px 20px",fontSize:12,display:"flex",alignItems:"center",gap:8,opacity:genReply?0.7:1}}>{genReply?<><Spin s={12}/> Génération en cours…</>:"✨ Générer une réponse"}</button>
                           </div>
                         : editing
                           ? <textarea value={editReply} onChange={e=>setEditReply(e.target.value)} style={{width:"100%",padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,border:"none",outline:"none",resize:"vertical",background:"transparent",minHeight:200}}/>
                           : <div style={{padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{reply}</div>
                     }
                     <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #EAE6E1",background:"#F5F3EF"}}>
-                      {reply && <><button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+(editing?editReply:reply)); setDrafted(p=>new Set([...p,sel.id])); toast("Brouillon créé !"); }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
+                      {reply && <><button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+(editing?editReply:reply)); setDrafted(p=>new Set([...p,sel.id])); toast("Brouillon créé dans Gmail ✓"); }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
                       <button onClick={()=>{ if(editing){setReply(editReply);setEditing(false);if(sel)setRepliesCache(prev=>({...prev,[sel.id]:{...prev[sel.id],reply:editReply,editReply}}));}else{setEditing(true);setEditReply(reply);} }} disabled={genReply} style={{...out}}>{editing?"Valider":"Modifier"}</button>
-                      <button onClick={genererReponse} disabled={genReply} style={{...out,color:"#8A8178"}}>↻ Regénérer</button></>}
+                      <button onClick={genererReponse} disabled={genReply} style={{...out,color:"#8A8178",display:"flex",alignItems:"center",gap:5}}>{genReply?<><Spin s={11}/> En cours…</>:"↻ Regénérer"}</button></>}
                     </div>
                   </div>
                 </div>
@@ -2208,7 +2243,7 @@ FORMAT
                       ))}
                     </div>
                     {/* Infos */}
-                    {[["🎉","Type",selResa.typeEvenement],["👥","Personnes",selResa.nombrePersonnes],["📍","Espace",ESPACES.find(e=>e.id===selResa.espaceId)?.nom],["📅","Date",selResa.dateDebut],["🕐","Horaires",selResa.heureDebut+(selResa.heureFin?" → "+selResa.heureFin:"")],["💰","Budget",selResa.budget],["📧","Email",selResa.email],["📞","Tél",selResa.telephone],["📝","Notes",selResa.notes]].filter(([,,v])=>v).map(([icon,k,v])=>(
+                    {[["🎉","Type",selResa.typeEvenement],["👥","Personnes",selResa.nombrePersonnes],["📍","Espace",ESPACES.find(e=>e.id===selResa.espaceId)?.nom],["📅","Date",fmtDateFr(selResa.dateDebut)],["🕐","Horaires",selResa.heureDebut+(selResa.heureFin?" → "+selResa.heureFin:"")],["💰","Budget",selResa.budget],["📧","Email",selResa.email],["📞","Tél",selResa.telephone],["📝","Notes",selResa.notes]].filter(([,,v])=>v).map(([icon,k,v])=>(
                       <div key={k} style={{display:"flex",gap:10,marginBottom:10,alignItems:"flex-start"}}>
                         <span style={{fontSize:14,width:20,flexShrink:0}}>{icon}</span>
                         <div><div style={{fontSize:10,color:"#8A8178",marginBottom:1}}>{k}</div><div style={{fontSize:13,color:"#1C1814"}}>{v}</div></div>
