@@ -416,6 +416,7 @@ const DatePicker = ({value, onChange, light=false}: {value:string, onChange:(v:s
 };
 
 const MAIL_CATS = [
+  {id:"priorites", icon:"◆", label:"Priorités ARCHANGE"},
   {id:"nonlus",   icon:"🔵", label:"Non lus"},
   {id:"atraiter", icon:"📋", label:"À traiter"},
   {id:"star",     icon:"⭐", label:"Favoris"},
@@ -571,7 +572,71 @@ export default function App() {
   // Ref pour tracker l'email en cours de génération IA (évite les race conditions)
   const genReplyForEmailId = React.useRef<string|null>(null);
 
-  // ─── Récupère tous les emails liés à un événement — mémoïsé ──────────────
+  // ─── Priorités ARCHANGE — calcul JS pur, zéro appel API ─────────────────
+  const prioritesArchange = React.useMemo(() => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const in7 = new Date(today); in7.setDate(today.getDate() + 7);
+
+    // Construire les cartes uniquement à partir des emails avec isReservation détectée
+    const cartes = emails.flatMap(m => {
+      const cache = repliesCache[m.id];
+      const ext = cache?.extracted;
+      if (!ext?.isReservation) return [];
+
+      // Ignorer si brouillon créé
+      if (drafted.has(m.id)) return [];
+
+      // Trouver la réservation liée
+      const resaId = emailResaLinks[m.id];
+      const resa = resas.find(r => r.id === resaId) ||
+        resas.find(r => r.email && m.fromEmail && r.email.toLowerCase() === m.fromEmail.toLowerCase());
+
+      // Ignorer si réservation confirmée ou annulée
+      if (resa && (resa.statut === "confirme" || resa.statut === "annule")) return [];
+
+      // Ignorer si date passée
+      const dateStr = ext.dateDebut || resa?.dateDebut;
+      if (dateStr) {
+        const d = new Date(dateStr + "T12:00:00");
+        if (d < today) return [];
+      }
+
+      // Calculer le score de priorité
+      let priorite = 4; // neutre par défaut
+      let type: "rouge"|"or"|"neutre" = "neutre";
+
+      // Priorité 1 — événement dans -7 jours
+      if (dateStr) {
+        const d = new Date(dateStr + "T12:00:00");
+        if (d >= today && d <= in7) { priorite = 1; type = "rouge"; }
+      }
+
+      // Priorité 2 — relance sans réponse +3 jours (email flaggé ou aTraiter depuis longtemps)
+      if (priorite > 2 && (m.flags||[]).includes("flag")) {
+        // Vérifier si la date de l'email est ancienne (+3j)
+        const emailDateMs = m.rawDate || 0;
+        if (emailDateMs && (Date.now() - emailDateMs) > 3 * 86400000) {
+          priorite = 2; type = "rouge";
+        }
+      }
+
+      // Priorité 3 — budget + date précis
+      const budget = ext.budget || resa?.budget;
+      if (priorite > 3 && budget && dateStr) { priorite = 3; type = "or"; }
+
+      // Priorité 4 — nouvelle demande sans date/budget
+      if (priorite > 4) { priorite = 4; type = "neutre"; }
+
+      return [{ m, ext, resa, priorite, type, dateStr, budget }];
+    });
+
+    // Trier : 1 urgent rouge > 2 relance rouge > 3 or > 4 neutre, puis par date
+    return cartes.sort((a, b) => {
+      if (a.priorite !== b.priorite) return a.priorite - b.priorite;
+      if (a.dateStr && b.dateStr) return a.dateStr.localeCompare(b.dateStr);
+      return 0;
+    });
+  }, [emails, repliesCache, drafted, emailResaLinks, resas]);
   const getLinkedEmails = React.useCallback((resa: any) => {
     if (!resa) return [];
     return emails.filter(m => {
@@ -1755,7 +1820,11 @@ FORMAT
                 <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center"}}>
                   <button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13}}>↺</button>
                   <button onClick={()=>setMailFilter("all")} title="Tous les mails" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>📬</button>
-                  {MAIL_CATS.map(c=>(
+                  <button onClick={()=>setMailFilter("priorites")} title="Priorités ARCHANGE" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="priorites"?"rgba(232,184,109,0.18)":"transparent",cursor:"pointer",fontSize:13,color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.7)",fontWeight:700,position:"relative"}}>
+                    ◆
+                    {prioritesArchange.length>0&&<span style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:"50%",background:"#E24B4A"}}/>}
+                  </button>
+                  {MAIL_CATS.filter(c=>c.id!=="priorites").map(c=>(
                     <button key={c.id} onClick={()=>setMailFilter(c.id)} title={c.label} style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>
                       {c.icon}
                     </button>
@@ -1767,18 +1836,118 @@ FORMAT
                       <span style={{fontSize:12}}>📬</span>
                       <span style={{flex:1}}>Tous les mails</span>
                   </button>
-                  {MAIL_CATS.map(c=>(
+                  <button onClick={()=>setMailFilter("priorites")} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="priorites"?"rgba(209,196,178,0.12)":"transparent",color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2,borderLeft:mailFilter==="priorites"?"2px solid #C9A96E":"2px solid transparent"}}>
+                      <span style={{fontSize:11,fontWeight:700}}>◆</span>
+                      <span style={{flex:1,fontWeight:mailFilter==="priorites"?600:400}}>Priorités</span>
+                      {prioritesArchange.length>0&&<span style={{fontSize:10,background:"#E24B4A",color:"#fff",padding:"1px 6px",borderRadius:100,fontWeight:600}}>{prioritesArchange.length}</span>}
+                  </button>
+                  {MAIL_CATS.filter(c=>c.id!=="priorites").map(c=>(
                     <button key={c.id} onClick={()=>setMailFilter(c.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(209,196,178,0.1)":"transparent",color:mailFilter===c.id?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                       <span style={{fontSize:12}}>{c.icon}</span>
                       <span style={{flex:1}}>{c.label}</span>
-                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.5)"}}>{emails.filter(m=>c.id==="all"?true:c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id)).length||""}</span>
+                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.5)"}}>{emails.filter(m=>c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id)).length||""}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Liste emails */}
+            {/* ══ VUE PRIORITÉS ARCHANGE ══ */}
+            {mailFilter==="priorites" ? (
+              <div style={{flex:1,overflowY:"auto",background:"#F5F3EF",padding:"20px 24px"}}>
+                <div style={{maxWidth:600,margin:"0 auto"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+                    <div>
+                      <div style={{fontSize:18,fontWeight:300,color:"#1C1814",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.01em"}}>Priorités ARCHANGE</div>
+                      <div style={{fontSize:12,color:"#8A8178",marginTop:2}}>{prioritesArchange.length} demande{prioritesArchange.length!==1?"s":""} en attente</div>
+                    </div>
+                  </div>
+
+                  {prioritesArchange.length===0?(
+                    <div style={{textAlign:"center",padding:"60px 24px",color:"#8A8178"}}>
+                      <div style={{fontSize:36,marginBottom:12}}>◆</div>
+                      <div style={{fontSize:14,color:"#1C1814",marginBottom:6}}>Aucune demande en attente</div>
+                      <div style={{fontSize:12}}>Les demandes de réservation détectées par l'IA apparaîtront ici</div>
+                    </div>
+                  ):(()=>{
+                    let lastType: string|null = null;
+                    const sectionLabels: Record<string,string> = {
+                      rouge: "Urgences",
+                      or: "Leads confirmés",
+                      neutre: "Nouvelles demandes",
+                    };
+                    return prioritesArchange.map((item, idx) => {
+                      const showSection = item.type !== lastType;
+                      lastType = item.type;
+                      const { m, ext, resa, type, dateStr } = item;
+                      const isRouge = type === "rouge";
+                      const isOr = type === "or";
+
+                      const headerBg = isRouge ? "linear-gradient(135deg,#FCEBEB,#F7C1C1)" : isOr ? "linear-gradient(135deg,#FAEEDA,#FAC775)" : "#F5F3EF";
+                      const borderCol = isRouge ? "#E24B4A" : isOr ? "#BA7517" : "#DDD8D0";
+                      const badgeBg = isRouge ? "#E24B4A" : isOr ? "#BA7517" : "#888780";
+                      const nameCol = isRouge ? "#791F1F" : isOr ? "#633806" : "#1C1814";
+                      const contactCol = isRouge ? "#C94040" : isOr ? "#854F0B" : "#8A8178";
+                      const avBg = isRouge ? "#F7C1C1" : isOr ? "#FAC775" : "#E5E2DD";
+                      const avCol = isRouge ? "#791F1F" : isOr ? "#412402" : "#5C564F";
+
+                      const nom = ext.nom || m.from || "—";
+                      const initiales = nom.split(" ").map(w=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase() || "?";
+                      const entreprise = ext.entreprise || resa?.entreprise;
+                      const budget = ext.budget || resa?.budget;
+                      const heureDebut = ext.heureDebut || resa?.heureDebut;
+                      const heureFin = ext.heureFin || resa?.heureFin;
+                      const type_evt = ext.typeEvenement || resa?.typeEvenement;
+                      const nbPers = ext.nombrePersonnes || resa?.nombrePersonnes;
+                      const espace = resa?.espaceId ? ESPACES.find(e=>e.id===resa.espaceId)?.nom : null;
+
+                      // Badge urgence
+                      const today = new Date(); today.setHours(0,0,0,0);
+                      let badgeLabel = isRouge ? (dateStr && new Date(dateStr+"T12:00:00") < new Date(today.getTime()+2*86400000) ? "⚡ Demain" : "⚡ Urgent") : isOr ? `💰 ${budget}` : "Nouveau";
+                      if(isRouge && (m.flags||[]).includes("flag")) badgeLabel = "⚡ Relance";
+
+                      const cells: [string,string][] = [
+                        ["Type", type_evt||"—"],
+                        ["Date", dateStr ? fmtDateFr(dateStr) : "—"],
+                        ["Personnes", nbPers ? `${nbPers} pers.` : "—"],
+                        ["Budget", budget||"—"],
+                        ...(heureDebut ? [["Horaires", heureDebut+(heureFin?` → ${heureFin}`:"")]] as [string,string][] : [["Horaires","—"]] as [string,string][]),
+                        ...(espace ? [["Espace", espace]] as [string,string][] : [["Espace","—"]] as [string,string][]),
+                      ];
+
+                      return (
+                        <div key={m.id}>
+                          {showSection&&<div style={{fontSize:10,fontWeight:500,color:"#8A8178",letterSpacing:"0.1em",textTransform:"uppercase",margin:idx===0?"0 0 10px":"20px 0 10px"}}>{sectionLabels[type]}</div>}
+                          <div onClick={()=>{ handleSel(m); setMailFilter("all"); }} style={{background:"#FFFFFF",borderRadius:12,border:`1.5px solid ${borderCol}`,overflow:"hidden",marginBottom:8,cursor:"pointer",transition:"box-shadow .15s"}}
+                            onMouseEnter={e=>(e.currentTarget.style.boxShadow=`0 2px 12px rgba(0,0,0,.08)`)}
+                            onMouseLeave={e=>(e.currentTarget.style.boxShadow="none")}>
+                            {/* Header carte */}
+                            <div style={{padding:"10px 14px",background:headerBg,display:"flex",alignItems:"center",gap:10}}>
+                              <div style={{width:32,height:32,borderRadius:"50%",background:avBg,color:avCol,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:500,flexShrink:0}}>{initiales}</div>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13,fontWeight:500,color:nameCol,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nom}{entreprise?` — ${entreprise}`:""}</div>
+                                <div style={{fontSize:11,color:contactCol,marginTop:1}}>{m.fromEmail}</div>
+                              </div>
+                              <span style={{background:badgeBg,color:"#fff",fontSize:11,fontWeight:500,padding:"3px 10px",borderRadius:20,flexShrink:0}}>{badgeLabel}</span>
+                            </div>
+                            {/* Grille infos */}
+                            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}>
+                              {cells.map(([lbl,val],i)=>(
+                                <div key={lbl} style={{padding:"8px 14px",borderBottom:i<3?"0.5px solid #EAE6E1":"none",borderRight:(i+1)%3!==0?"0.5px solid #EAE6E1":"none"}}>
+                                  <div style={{fontSize:10,color:"#8A8178",marginBottom:2}}>{lbl}</div>
+                                  <div style={{fontSize:12,fontWeight:val==="—"?400:500,color:val==="—"?"#C0BAB2":"#1C1814",fontStyle:val==="—"?"italic":"normal"}}>{val}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            ) : (
+            /* Liste emails standard */
             <div style={{width:260,borderRight:"1px solid #EAE6E1",background:"#FFFFFF",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
               <div style={{padding:"10px 12px",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:7,background:"#F5F3EF",borderRadius:8,padding:"6px 10px",border:"1px solid #EAE6E1"}}>
@@ -1830,6 +1999,7 @@ FORMAT
                 ))}
               </div>
             </div>
+            )} {/* fin ternaire priorites */}
 
             {/* Zone lecture — scrollable indépendamment */}
             <div style={{flex:1,overflowY:"auto",background:"#EEEAE4"}}>
