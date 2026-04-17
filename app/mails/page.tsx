@@ -284,7 +284,15 @@ async function callClaude(msg: string, system: string, docs: any[] | null): Prom
 // ─── Nettoyage HTML des corps d'emails ───────────────────────────────────────
 function cleanEmailBody(raw: string): string {
   if (!raw) return "";
-  // Décoder les entités HTML courantes
+  // Si c'est du HTML riche (commence par une balise), on le retourne tel quel
+  // pour qu'il soit rendu dans l'iframe — on nettoie juste les scripts dangereux
+  if (raw.trim().startsWith("<")) {
+    return raw
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/\son\w+="[^"]*"/gi, "")  // supprimer les event handlers inline
+      .replace(/javascript:/gi, "");
+  }
+  // Sinon : texte brut — décoder les entités et nettoyer
   const entities: Record<string,string> = {
     "&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&#39;":"'",
     "&nbsp;":" ","&apos;":"'","&hellip;":"…","&mdash;":"—","&ndash;":"–",
@@ -293,20 +301,15 @@ function cleanEmailBody(raw: string): string {
     "&iuml;":"ï","&ccedil;":"ç","&oslash;":"ø","&copy;":"©","&reg;":"®",
   };
   let text = raw;
-  // Supprimer le contenu des blocs <style> et <script> (CSS/JS brut)
   text = text.replace(/<style[\s\S]*?<\/style>/gi, "");
   text = text.replace(/<script[\s\S]*?<\/script>/gi, "");
-  // Remplacer les entités nommées
   Object.entries(entities).forEach(([entity, char]) => {
     text = text.replace(new RegExp(entity, "gi"), char);
   });
-  // Remplacer les entités numériques (&#123; ou &#x7B;)
   text = text.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
   text = text.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
   text = text.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<\/div>/gi, "\n").replace(/<\/li>/gi, "\n").replace(/<\/tr>/gi, "\n");
-  // Supprimer toutes les balises HTML restantes
   text = text.replace(/<[^>]+>/g, "");
-  // Nettoyer les espaces en début/fin de chaque ligne
   text = text.split("\n").map(l => l.replace(/^[ \t]+|[ \t]+$/g, "")).join("\n");
   // Nettoyer les espaces et lignes vides excessives
   text = text.replace(/[ \t]{2,}/g, " ");
@@ -2112,7 +2115,16 @@ FORMAT
                     </div>
                     <div style={{padding:"16px 20px"}}>
                       <div style={{fontSize:16,fontWeight:600,color:"#1C1814",marginBottom:14}}>{sel.subject}</div>
-                      <div style={{fontSize:14,color:"#5C564F",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{sel.body||sel.snippet}</div>
+                      {/* Corps email — HTML ou texte brut */}
+                      {(sel.body||sel.snippet||"").trim().startsWith("<")
+                        ? <iframe
+                            srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'DM Sans',sans-serif;font-size:14px;color:#3D3530;line-height:1.7;padding:0;margin:0;}img{max-width:100%!important;height:auto!important;}a{color:#C9A96E;}*{box-sizing:border-box;}</style></head><body>${sel.body||sel.snippet}</body></html>`}
+                            sandbox="allow-same-origin"
+                            style={{width:"100%",border:"none",minHeight:300,display:"block"}}
+                            onLoad={e=>{const f=e.currentTarget;try{f.style.height=f.contentDocument?.body?.scrollHeight+"px";}catch{}}}
+                          />
+                        : <div style={{fontSize:14,color:"#5C564F",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{sel.body||sel.snippet}</div>
+                      }
                       {/* Pièces jointes */}
                       {(sel.attachments||[]).length > 0 && (
                         <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid #EAE6E1"}}>
