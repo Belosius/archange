@@ -753,12 +753,27 @@ export default function App() {
   const saveEspacesCtx = (v: string) => { setEspacesCtx(v); saveSourcesIA(menusCtx, conditionsCtx, v, tonCtx, customCtx); };
   const saveTonCtx = (v: string) => { setTonCtx(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, v, customCtx); };
   const saveLinks = async (l: any) => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
+  // Sauvegarde immédiate des métadonnées email — sans debounce
+  // Utilisé pour lu/non lu, flags, aTraiter — doit être instantané
+  const saveEmailMetaImmediat = async (meta: Record<string,any>) => {
+    const json = JSON.stringify(meta);
+    // localStorage en premier — synchrone, immédiat
+    try { localStorage.setItem("arc_email_meta", json); } catch {}
+    // Supabase sans debounce — fire and forget
+    try {
+      fetch("/api/user-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email_meta: json }),
+      }).then(r => { if (!r.ok) console.error("email_meta save error", r.status); });
+    } catch {}
+  };
+
   const saveEmails = (e: any[]) => {
     setEmails(e);
     const meta: Record<string,{flags:string[],aTraiter:boolean,unread:boolean}> = {};
     e.forEach(m => { meta[m.id] = { flags: m.flags||[], aTraiter: !!m.aTraiter, unread: !!m.unread }; });
-    saveToSupabase({ email_meta: JSON.stringify(meta) });
-    try { localStorage.setItem("arc_email_meta", JSON.stringify(meta)); } catch {}
+    saveEmailMetaImmediat(meta);
   };
 
   // Fonction partagée de mapping email API → état React
@@ -835,7 +850,8 @@ export default function App() {
         const mapped = data.map(m => {
           const em = mapEmail(m);
           const meta = emailMeta[em.id];
-          return meta ? { ...em, flags: meta.flags ?? em.flags, aTraiter: meta.aTraiter ?? em.aTraiter, unread: meta.unread ?? em.unread } : em;
+          if (meta) return { ...em, flags: meta.flags ?? em.flags, aTraiter: !!meta.aTraiter, unread: meta.unread !== undefined ? meta.unread : em.unread };
+          return em;
         });
         setEmails(mapped);
         toast(mapped.length + " emails chargés");
@@ -926,17 +942,28 @@ export default function App() {
 
       if (emailsData.status === "fulfilled") {
         const data = emailsData.value;
-        // Fusionner les métadonnées persistées (flags, aTraiter, unread) avec les emails de l'API
+        // Fusionner les métadonnées persistées — Supabase prioritaire, localStorage en fallback
         let emailMeta: Record<string,any> = {};
+        // 1. localStorage en premier (disponible immédiatement)
+        try { const m = localStorage.getItem("arc_email_meta"); if(m) emailMeta = JSON.parse(m); } catch {}
+        // 2. Supabase écrase localStorage si disponible (plus fiable, multi-appareils)
         if (userData.status === "fulfilled") {
-          try { if (userData.value.email_meta) emailMeta = JSON.parse(userData.value.email_meta); } catch {}
+          try { if (userData.value.email_meta) {
+            const supabaseMeta = JSON.parse(userData.value.email_meta);
+            // Fusionner : pour chaque email, Supabase gagne sauf si la clé manque
+            Object.entries(supabaseMeta).forEach(([id, v]) => { emailMeta[id] = v; });
+          } } catch {}
         }
         const mapped = Array.isArray(data) && data.length > 0 ? data.map(m => {
-          const mapped = mapEmail(m);
-          const meta = emailMeta[mapped.id];
-          return meta ? { ...mapped, flags: meta.flags ?? mapped.flags, aTraiter: meta.aTraiter ?? mapped.aTraiter, unread: meta.unread ?? mapped.unread } : mapped;
+          const em = mapEmail(m);
+          const meta = emailMeta[em.id];
+          // La meta stockée écrase TOUJOURS les valeurs de l'API Gmail
+          if (meta) return { ...em, flags: meta.flags ?? em.flags, aTraiter: !!meta.aTraiter, unread: meta.unread !== undefined ? meta.unread : em.unread };
+          return em;
         }) : [];
         setEmails(mapped);
+        // Mettre à jour localStorage avec la meta Supabase (sync multi-appareils)
+        try { localStorage.setItem("arc_email_meta", JSON.stringify(emailMeta)); } catch {}
       } else {
         console.error("Chargement emails échoué :", emailsData.reason);
         setEmails([]);
@@ -1594,25 +1621,25 @@ FORMAT
       )}
 
       {/* Nav principale — collapsible */}
-      <aside style={{width:navCollapsed?60:200,background:"#1C1814",display:"flex",flexDirection:"column",flexShrink:0,transition:"width .3s cubic-bezier(.4,0,.2,1)",overflow:"hidden",borderRight:"1px solid rgba(209,196,178,0.08)"}}>
-        <div style={{padding:navCollapsed?"16px 0 12px":"24px 18px 16px",display:"flex",alignItems:"center",justifyContent:navCollapsed?"center":"space-between",flexShrink:0,borderBottom:"1px solid rgba(209,196,178,0.06)"}}>
-          {!navCollapsed&&<div><div style={{fontSize:12,fontWeight:700,color:"#D1C4B2",letterSpacing:"0.22em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif"}}>ARCHANGE</div><div style={{fontSize:10,color:"rgba(209,196,178,0.45)",marginTop:4,letterSpacing:"0.12em",textTransform:"uppercase"}}>RÊVA · AGENT IA</div></div>}
-          <button onClick={()=>setNavCollapsed(v=>!v)} title={navCollapsed?"Agrandir":"Réduire"} style={{width:24,height:24,borderRadius:6,border:"none",background:"rgba(209,196,178,0.08)",color:"rgba(209,196,178,0.5)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      <aside style={{width:navCollapsed?60:200,background:"#1C1814",display:"flex",flexDirection:"column",flexShrink:0,transition:"width .3s cubic-bezier(.4,0,.2,1)",overflow:"hidden",borderRight:"1px solid rgba(255,255,255,0.06)"}}>
+        <div style={{padding:navCollapsed?"16px 0 12px":"24px 18px 16px",display:"flex",alignItems:"center",justifyContent:navCollapsed?"center":"space-between",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+          {!navCollapsed&&<div><div style={{fontSize:13,fontWeight:700,color:"#FFFFFF",letterSpacing:"0.2em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif"}}>ARCHANGE</div><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:4,letterSpacing:"0.1em",textTransform:"uppercase"}}>RÊVA · AGENT IA</div></div>}
+          <button onClick={()=>setNavCollapsed(v=>!v)} title={navCollapsed?"Agrandir":"Réduire"} style={{width:24,height:24,borderRadius:6,border:"none",background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.6)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             {navCollapsed?"›":"‹"}
           </button>
         </div>
         <div style={{flex:1,padding:navCollapsed?"8px 6px":"10px 8px",display:"flex",flexDirection:"column",gap:2,overflowY:"auto"}}>
           {NAV.map(n=>(
-            <button key={n.id} onClick={()=>{setView(n.id);setSubCollapsed(false);}} title={navCollapsed?n.label:undefined} className="nav-btn" style={{display:"flex",alignItems:"center",gap:navCollapsed?0:10,width:"100%",padding:navCollapsed?"11px 0":"10px 14px",borderRadius:8,border:"none",background:view===n.id?"rgba(209,196,178,0.12)":"transparent",color:view===n.id?"#E8DFD0":"rgba(209,196,178,0.75)",fontSize:12,textAlign:"left",cursor:"pointer",justifyContent:navCollapsed?"center":"flex-start",position:"relative",transition:"all .15s",letterSpacing:"0.04em",textTransform:"uppercase",fontWeight:view===n.id?600:500}}>
-              <span style={{fontSize:14,opacity:view===n.id?1:.7}}>{n.icon}</span>
-              {!navCollapsed&&<><span style={{flex:1}}>{n.label}</span>{n.badge>0&&<span style={{fontSize:10,background:view===n.id?"rgba(201,169,110,0.25)":"rgba(209,196,178,0.1)",color:view===n.id?"#C9A96E":"rgba(209,196,178,0.55)",padding:"2px 7px",borderRadius:100,fontWeight:700}}>{n.badge}</span>}</>}
+            <button key={n.id} onClick={()=>{setView(n.id);setSubCollapsed(false);}} title={navCollapsed?n.label:undefined} className="nav-btn" style={{display:"flex",alignItems:"center",gap:navCollapsed?0:10,width:"100%",padding:navCollapsed?"11px 0":"10px 14px",borderRadius:8,border:"none",background:view===n.id?"rgba(255,255,255,0.12)":"transparent",color:view===n.id?"#FFFFFF":"rgba(255,255,255,0.7)",fontSize:12,textAlign:"left",cursor:"pointer",justifyContent:navCollapsed?"center":"flex-start",position:"relative",transition:"all .15s",letterSpacing:"0.04em",textTransform:"uppercase",fontWeight:view===n.id?600:400}}>
+              <span style={{fontSize:14,opacity:view===n.id?1:.75}}>{n.icon}</span>
+              {!navCollapsed&&<><span style={{flex:1}}>{n.label}</span>{n.badge>0&&<span style={{fontSize:10,background:view===n.id?"rgba(201,169,110,0.3)":"rgba(255,255,255,0.1)",color:view===n.id?"#C9A96E":"rgba(255,255,255,0.7)",padding:"2px 7px",borderRadius:100,fontWeight:700}}>{n.badge}</span>}</>}
               {navCollapsed&&n.badge>0&&<span style={{position:"absolute",top:6,right:6,width:6,height:6,borderRadius:"50%",background:"#C9A96E"}}/>}
             </button>
           ))}
         </div>
-        {!navCollapsed&&<div style={{padding:"14px 18px",borderTop:"1px solid rgba(209,196,178,0.08)",flexShrink:0}}>
-          <div style={{fontSize:11,color:"rgba(209,196,178,0.45)",lineHeight:1.7,letterSpacing:"0.02em"}}>133 Av. de France<br/>75013 Paris</div>
-          <button onClick={()=>signOut({callbackUrl:"/"})} style={{marginTop:10,width:"100%",padding:"7px 0",borderRadius:7,border:"1px solid rgba(209,196,178,0.15)",background:"transparent",color:"rgba(209,196,178,0.55)",fontSize:11,letterSpacing:"0.06em",cursor:"pointer",textTransform:"uppercase",fontWeight:500}}>⎋ Déconnexion</button>
+        {!navCollapsed&&<div style={{padding:"14px 18px",borderTop:"1px solid rgba(255,255,255,0.08)",flexShrink:0}}>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",lineHeight:1.7,letterSpacing:"0.01em"}}>133 Av. de France<br/>75013 Paris</div>
+          <button onClick={()=>signOut({callbackUrl:"/"})} style={{marginTop:10,width:"100%",padding:"7px 0",borderRadius:7,border:"1px solid rgba(255,255,255,0.2)",background:"transparent",color:"rgba(255,255,255,0.7)",fontSize:11,letterSpacing:"0.06em",cursor:"pointer",textTransform:"uppercase",fontWeight:500}}>⎋ Déconnexion</button>
         </div>}
       </aside>
 
@@ -2329,7 +2356,7 @@ FORMAT
 
             {/* Liste emails standard */}
             {mailFilter!=="priorites" && (
-            <div style={{width:260,borderRight:"1px solid #EAE6E1",background:"#FFFFFF",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
+            <div style={{width:320,borderRight:"1px solid #EAE6E1",background:"#FFFFFF",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
               <div style={{padding:"10px 12px",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:7,background:"#F5F3EF",borderRadius:8,padding:"6px 10px",border:"1px solid #EAE6E1"}}>
                   <span style={{fontSize:12,color:"#8A8178"}}>🔍</span>
@@ -2359,12 +2386,12 @@ FORMAT
                   const isActive = sel?.id===em.id;
                   return (
                   <div key={em.id} className="mail-row"
-                    style={{position:"relative",padding:"10px 12px",borderBottom:"1px solid #EAE6E1",cursor:"pointer",
+                    style={{position:"relative",padding:"10px 12px 0",borderBottom:"1px solid #EAE6E1",cursor:"pointer",
                       background:isActive?"#F0EDE8":"transparent",
                       borderLeft:isActive?"3px solid #C9A96E":em.unread?"3px solid #7BA8C4":"3px solid transparent",
                       transition:"background .1s"}}>
                     {/* Zone cliquable principale */}
-                    <div onClick={()=>handleSel(em)} style={{display:"flex",gap:9,minWidth:0}}>
+                    <div onClick={()=>handleSel(em)} style={{display:"flex",gap:9,minWidth:0,paddingBottom:8}}>
                       <div style={{position:"relative",flexShrink:0,marginTop:1}}>
                         <Avatar name={em.from} size={30}/>
                         {em.unread&&<div style={{position:"absolute",top:-1,right:-1,width:7,height:7,borderRadius:"50%",background:"#6D9BE8",border:"2px solid #FFFFFF"}}/>}
@@ -2372,7 +2399,7 @@ FORMAT
                       <div style={{flex:1,minWidth:0}}>
                         {/* Ligne 1 — expéditeur + date */}
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
-                          <span style={{fontSize:12,fontWeight:em.unread?700:600,color:em.unread?"#3B6FCC":"#1C1814",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}>{em.from||"(inconnu)"}</span>
+                          <span style={{fontSize:12,fontWeight:em.unread?700:600,color:em.unread?"#3B6FCC":"#1C1814",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:190}}>{em.from||"(inconnu)"}</span>
                           <span style={{fontSize:10,color:"#A09890",flexShrink:0,marginLeft:4}}>{em.date}</span>
                         </div>
                         {/* Ligne 2 — objet */}
@@ -2387,14 +2414,14 @@ FORMAT
                         </div>
                       </div>
                     </div>
-                    {/* Actions au survol */}
-                    <div className="mail-actions" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",display:"flex",gap:2,opacity:0,transition:"opacity .15s",background:"#FFFFFF",borderRadius:7,padding:"3px 4px",border:"1px solid #EAE6E1",boxShadow:"0 1px 6px rgba(0,0,0,.08)"}}>
-                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(em.flags||[]).includes("star")?1:0.35,padding:"2px 3px"}}>⭐</button>
-                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"flag");}} title="Flaggé" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(em.flags||[]).includes("flag")?1:0.35,padding:"2px 3px"}}>🚩</button>
-                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title="À traiter" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:em.aTraiter?1:0.35,padding:"2px 3px"}}>📋</button>
-                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title={em.unread?"Lu":"Non lu"} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.5,padding:"2px 3px"}}>●</button>
-                      <div style={{width:"0.5px",background:"#EAE6E1",margin:"2px 1px"}}/>
-                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#DC2626",padding:"2px 3px",opacity:0.7}}>✕</button>
+                    {/* Barre d'actions — apparaît au survol SOUS le contenu, pas par-dessus */}
+                    <div className="mail-actions" style={{display:"flex",gap:1,opacity:0,transition:"opacity .15s",borderTop:"1px solid #F0EDE8",margin:"0 -12px",padding:"3px 8px",background:isActive?"#EAE6DF":"#F9F8F6",justifyContent:"flex-end",alignItems:"center"}}>
+                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:(em.flags||[]).includes("star")?1:0.3,padding:"3px 5px",borderRadius:5}}>⭐</button>
+                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"flag");}} title="Flaggé" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:(em.flags||[]).includes("flag")?1:0.3,padding:"3px 5px",borderRadius:5}}>🚩</button>
+                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title="À traiter" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:em.aTraiter?1:0.3,padding:"3px 5px",borderRadius:5}}>📋</button>
+                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title={em.unread?"Marquer lu":"Marquer non lu"} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.4,padding:"3px 5px",borderRadius:5}}>●</button>
+                      <div style={{flex:1}}/>
+                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#DC2626",padding:"3px 6px",borderRadius:5,opacity:0.75,fontWeight:600}}>✕</button>
                     </div>
                   </div>
                 );})}
