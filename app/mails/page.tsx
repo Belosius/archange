@@ -987,17 +987,24 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // P4 — Retry automatique quand la connexion revient
+  // Retry automatique — au retour connexion ET toutes les 30s si queue non vide
   useEffect(() => {
-    const flushQueue = () => {
+    const flushQueue = async () => {
       setOfflineQueue(q => {
         if (Object.keys(q).length === 0) return q;
+        // Retenter chaque entrée — saveToSupabase supprime de la queue si succès
         Object.entries(q).forEach(([key, value]) => saveToSupabase({ [key]: value }));
-        return {};
+        return q; // Ne pas vider ici — saveToSupabase le fera si succès
       });
     };
     window.addEventListener("online", flushQueue);
-    return () => window.removeEventListener("online", flushQueue);
+    const interval = setInterval(() => {
+      setOfflineQueue(q => {
+        if (Object.keys(q).length > 0) flushQueue();
+        return q;
+      });
+    }, 30000);
+    return () => { window.removeEventListener("online", flushQueue); clearInterval(interval); };
   }, []);
 
   // P2 — Sauvegarder l'état UI dans localStorage à chaque changement
@@ -1651,7 +1658,7 @@ FORMAT
             {/* Sidebar filtres statuts — collapsible */}
             <div style={{width:subCollapsed?44:210,background:"#221E19",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid rgba(209,196,178,0.06)",transition:"width .2s ease",overflow:"hidden"}}>
               <div style={{padding:subCollapsed?"10px 6px":"16px 12px 10px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0}}>
-                {!subCollapsed&&<div style={{fontSize:9,fontWeight:700,color:"rgba(209,196,178,0.45)",letterSpacing:"0.16em",textTransform:"uppercase"}}>Filtrer</div>}
+                {!subCollapsed&&<div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)",letterSpacing:"0.14em",textTransform:"uppercase"}}>Filtrer</div>}
                 <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"rgba(209,196,178,0.07)",color:"rgba(209,196,178,0.35)",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   {subCollapsed?"›":"‹"}
                 </button>
@@ -1669,9 +1676,9 @@ FORMAT
               ):(
                 <>
                   <div style={{padding:"0 12px 10px",flex:1,overflowY:"auto"}}>
-                    <button onClick={()=>setGeneralFilter("all")} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 10px",borderRadius:8,border:"none",background:generalFilter==="all"?"rgba(209,196,178,0.1)":"transparent",color:generalFilter==="all"?"#D1C4B2":"rgba(209,196,178,0.4)",fontSize:11,textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                    <button onClick={()=>setGeneralFilter("all")} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"9px 10px",borderRadius:8,border:"none",background:generalFilter==="all"?"rgba(255,255,255,0.12)":"transparent",color:generalFilter==="all"?"#FFFFFF":"rgba(255,255,255,0.65)",fontSize:13,textAlign:"left",cursor:"pointer",marginBottom:2,fontWeight:generalFilter==="all"?600:400}}>
                       <span>🗂 Tous</span>
-                      <span style={{fontSize:10,opacity:.6}}>{resas.length}</span>
+                      <span style={{fontSize:11,color:generalFilter==="all"?"rgba(255,255,255,0.7)":"rgba(255,255,255,0.35)"}}>{resas.length}</span>
                     </button>
 
                     {/* Statuts draggables */}
@@ -1690,36 +1697,36 @@ FORMAT
                             arr.splice(idx,0,moved);
                             saveStatuts(arr); setDragStatutIdx(null);
                           }}
-                          style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"7px 10px",borderRadius:8,background:generalFilter===s.id?"rgba(232,184,109,0.12)":"transparent",marginBottom:2,cursor:"grab",userSelect:"none",opacity:dragStatutIdx===idx?0.4:1}}
+                          style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"7px 10px",borderRadius:8,background:generalFilter===s.id?"rgba(255,255,255,0.1)":"transparent",marginBottom:2,cursor:"grab",userSelect:"none",opacity:dragStatutIdx===idx?0.4:1}}
                         >
-                          <button onClick={()=>setGeneralFilter(s.id)} style={{display:"flex",alignItems:"center",gap:7,background:"none",border:"none",color:generalFilter===s.id?"#D1C4B2":"rgba(209,196,178,0.4)",fontSize:11,textAlign:"left",cursor:"pointer",flex:1,padding:0,letterSpacing:"0.03em"}}>
-                            <span style={{fontSize:10,opacity:.3,marginRight:2}}>⠿</span>
-                            <div style={{width:8,height:8,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+                          <button onClick={()=>setGeneralFilter(s.id)} style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",color:generalFilter===s.id?"#FFFFFF":"rgba(255,255,255,0.65)",fontSize:13,textAlign:"left",cursor:"pointer",flex:1,padding:0,fontWeight:generalFilter===s.id?600:400}}>
+                            <span style={{fontSize:10,opacity:.25,marginRight:1}}>⠿</span>
+                            <div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0}}/>
                             <span>{s.label}</span>
                           </button>
-                          <div style={{display:"flex",alignItems:"center",gap:4}}>
-                            {count>0&&<span style={{fontSize:10,opacity:.6,color:generalFilter===s.id?"#E8B86D":"rgba(209,196,178,0.4)"}}>{count}</span>}
-                            <button onClick={e=>{e.stopPropagation();const ok=window.confirm('Supprimer "'+s.label+'" ? Les événements avec ce statut passeront à "Nouveau".');if(!ok) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);if(generalFilter===s.id)setGeneralFilter("all");toast("Statut supprimé");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(209,196,178,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(239,68,68,0.7)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(209,196,178,0.2)")}>✕</button>
+                          <div style={{display:"flex",alignItems:"center",gap:5}}>
+                            {count>0&&<span style={{fontSize:11,color:generalFilter===s.id?"rgba(255,255,255,0.8)":"rgba(255,255,255,0.4)"}}>{count}</span>}
+                            <button onClick={e=>{e.stopPropagation();const ok=window.confirm('Supprimer "'+s.label+'" ? Les événements avec ce statut passeront à "Nouveau".');if(!ok) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);if(generalFilter===s.id)setGeneralFilter("all");toast("Statut supprimé");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(255,255,255,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(239,68,68,0.8)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(255,255,255,0.2)")}>✕</button>
                           </div>
                         </div>
                       );
                     })}
 
                     {/* Séparateur + À relancer */}
-                    <div style={{height:1,background:"rgba(209,196,178,0.1)",margin:"12px 0"}}/>
-                    <button onClick={()=>setGeneralFilter("arelancer")} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 10px",borderRadius:8,border:"none",background:generalFilter==="arelancer"?"rgba(209,196,178,0.1)":"transparent",color:generalFilter==="arelancer"?"#D1C4B2":"rgba(209,196,178,0.4)",fontSize:11,textAlign:"left",cursor:"pointer"}}>
+                    <div style={{height:1,background:"rgba(255,255,255,0.08)",margin:"12px 0"}}/>
+                    <button onClick={()=>setGeneralFilter("arelancer")} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"9px 10px",borderRadius:8,border:"none",background:generalFilter==="arelancer"?"rgba(255,255,255,0.1)":"transparent",color:generalFilter==="arelancer"?"#FFFFFF":"rgba(255,255,255,0.65)",fontSize:13,textAlign:"left",cursor:"pointer",fontWeight:generalFilter==="arelancer"?600:400}}>
                       <span>⏰ À relancer</span>
-                      {relances.length>0&&<span style={{fontSize:10,opacity:.6}}>{relances.length}</span>}
+                      {relances.length>0&&<span style={{fontSize:11,color:generalFilter==="arelancer"?"rgba(255,255,255,0.8)":"rgba(255,255,255,0.4)"}}>{relances.length}</span>}
                     </button>
                   </div>
 
                   <div style={{padding:"10px 12px",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
                     {showCreateStatut?(
                       <div>
-                        <div style={{fontSize:11,color:"rgba(209,196,178,0.38)",marginBottom:8}}>Nouveau statut</div>
-                        <input value={newStatutLabel} onChange={e=>setNewStatutLabel(e.target.value)} placeholder="Nom du statut…" style={{width:"100%",padding:"6px 9px",borderRadius:7,border:"1px solid rgba(209,196,178,0.15)",background:"rgba(209,196,178,0.05)",color:"#E8DFD0",fontSize:12,marginBottom:8,outline:"none"}}/>
+                        <div style={{fontSize:11,color:"rgba(255,255,255,0.45)",marginBottom:8}}>Nouveau statut</div>
+                        <input value={newStatutLabel} onChange={e=>setNewStatutLabel(e.target.value)} placeholder="Nom du statut…" style={{width:"100%",padding:"6px 9px",borderRadius:7,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",color:"#FFFFFF",fontSize:12,marginBottom:8,outline:"none"}}/>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                          <span style={{fontSize:11,color:"rgba(209,196,178,0.38)"}}>Couleur</span>
+                          <span style={{fontSize:11,color:"rgba(255,255,255,0.45)"}}>Couleur</span>
                           <input type="color" value={newStatutColor} onChange={e=>setNewStatutColor(e.target.value)} style={{width:32,height:24,borderRadius:5,border:"none",cursor:"pointer",background:"transparent"}}/>
                           <div style={{width:16,height:16,borderRadius:"50%",background:newStatutColor}}/>
                         </div>
@@ -1734,11 +1741,11 @@ FORMAT
                             setNewStatutLabel("");setNewStatutColor("#6366f1");setShowCreateStatut(false);
                             toast("Statut créé !");
                           }} style={{flex:1,padding:"6px",borderRadius:7,border:"none",background:"#E8B86D",color:"#0F0F0F",fontSize:11,fontWeight:600,cursor:"pointer"}}>Créer</button>
-                          <button onClick={()=>{setShowCreateStatut(false);setNewStatutLabel("");}} style={{padding:"6px 8px",borderRadius:7,border:"1px solid rgba(255,255,255,0.12)",background:"transparent",color:"rgba(209,196,178,0.4)",fontSize:11,cursor:"pointer"}}>✕</button>
+                          <button onClick={()=>{setShowCreateStatut(false);setNewStatutLabel("");}} style={{padding:"6px 8px",borderRadius:7,border:"1px solid rgba(255,255,255,0.12)",background:"transparent",color:"rgba(255,255,255,0.5)",fontSize:11,cursor:"pointer"}}>✕</button>
                         </div>
                       </div>
                     ):(
-                      <button onClick={()=>setShowCreateStatut(true)} style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"1px dashed rgba(209,196,178,0.18)",background:"transparent",color:"rgba(209,196,178,0.35)",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                      <button onClick={()=>setShowCreateStatut(true)} style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"1px dashed rgba(255,255,255,0.2)",background:"transparent",color:"rgba(255,255,255,0.45)",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                         <span>+</span> Créer un statut
                       </button>
                     )}
