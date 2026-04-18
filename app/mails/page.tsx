@@ -232,6 +232,8 @@ RÈGLES D'EXTRACTION :
 
 - budget : extrais le budget si mentionné (ex: "1900€", "45€/pers"), sinon null
 
+- resume : 1-2 phrases maximum résumant la demande de façon factuelle, ex: "Demande de privatisation du Belvédère pour 45 personnes le 15 juin, soirée d'entreprise avec DJ." Ne mettre que si isReservation est true, sinon null.
+
 - notes : résume en 1-2 phrases les détails importants non couverts par les autres champs. Si l'email est dans une autre langue que le français, indique-le ici.
 
 - statutSuggere : suggère un statut parmi [nouveau, en_cours, en_attente, confirme] selon le contenu du mail
@@ -253,6 +255,7 @@ JSON à retourner :
   "heureFin": null,
   "budget": null,
   "notes": null,
+  "resume": null,
   "statutSuggere": "nouveau"
 }`;
 };
@@ -281,44 +284,61 @@ async function callClaude(msg: string, system: string, docs: any[] | null): Prom
   }
 }
 
-// ─── Nettoyage HTML des corps d'emails ───────────────────────────────────────
-function cleanEmailBody(raw: string): string {
+// ─── Extraction texte propre depuis HTML email ────────────────────────────────
+// Toujours retourne du texte lisible — utilisé pour snippet, IA, et prévisualisation
+function stripHtml(raw: string): string {
   if (!raw) return "";
-  // Si c'est du HTML riche (commence par une balise), on le retourne tel quel
-  // pour qu'il soit rendu dans l'iframe — on nettoie juste les scripts dangereux
-  if (raw.trim().startsWith("<")) {
-    return raw
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/\son\w+="[^"]*"/gi, "")  // supprimer les event handlers inline
-      .replace(/javascript:/gi, "");
-  }
-  // Sinon : texte brut — décoder les entités et nettoyer
-  const entities: Record<string,string> = {
-    "&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&#39;":"'",
-    "&nbsp;":" ","&apos;":"'","&hellip;":"…","&mdash;":"—","&ndash;":"–",
-    "&laquo;":"«","&raquo;":"»","&eacute;":"é","&egrave;":"è","&ecirc;":"ê",
-    "&agrave;":"à","&acirc;":"â","&ocirc;":"ô","&ugrave;":"ù","&ucirc;":"û",
-    "&iuml;":"ï","&ccedil;":"ç","&oslash;":"ø","&copy;":"©","&reg;":"®",
-  };
   let text = raw;
+  // Supprimer <head>...</head> et son contenu (CSS, meta, etc.)
+  text = text.replace(/<head[\s\S]*?<\/head>/gi, "");
+  // Supprimer <style>...</style> et leur contenu (CSS brut)
   text = text.replace(/<style[\s\S]*?<\/style>/gi, "");
+  // Supprimer <script>...</script>
   text = text.replace(/<script[\s\S]*?<\/script>/gi, "");
-  Object.entries(entities).forEach(([entity, char]) => {
-    text = text.replace(new RegExp(entity, "gi"), char);
+  // Supprimer les commentaires HTML <!-- ... -->
+  text = text.replace(/<!--[\s\S]*?-->/g, "");
+  // Ajouter des sauts de ligne aux éléments de bloc avant de les supprimer
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+  text = text.replace(/<\/?(p|div|tr|li|h[1-6]|blockquote|section|article|header|footer)[^>]*>/gi, "\n");
+  text = text.replace(/<\/td>/gi, " | ").replace(/<\/th>/gi, " | ");
+  // Supprimer toutes les balises HTML restantes
+  text = text.replace(/<[^>]+>/g, "");
+  // Décoder les entités HTML
+  const entities: Record<string,string> = {
+    "&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&#39;":"'","&apos;":"'",
+    "&nbsp;":" ","&hellip;":"…","&mdash;":"—","&ndash;":"–","&laquo;":"«","&raquo;":"»",
+    "&eacute;":"é","&egrave;":"è","&ecirc;":"ê","&euml;":"ë",
+    "&agrave;":"à","&acirc;":"â","&auml;":"ä",
+    "&ocirc;":"ô","&ouml;":"ö","&oslash;":"ø",
+    "&ugrave;":"ù","&ucirc;":"û","&uuml;":"ü",
+    "&iuml;":"ï","&ccedil;":"ç","&copy;":"©","&reg;":"®","&trade;":"™",
+  };
+  Object.entries(entities).forEach(([e, c]) => {
+    text = text.replace(new RegExp(e, "gi"), c);
   });
   text = text.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
   text = text.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
-  text = text.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<\/div>/gi, "\n").replace(/<\/li>/gi, "\n").replace(/<\/tr>/gi, "\n");
-  text = text.replace(/<[^>]+>/g, "");
-  text = text.split("\n").map(l => l.replace(/^[ \t]+|[ \t]+$/g, "")).join("\n");
-  // Nettoyer les espaces et lignes vides excessives
-  text = text.replace(/[ \t]{2,}/g, " ");
+  // Nettoyer les espaces multiples et lignes vides excessives
+  text = text.split("\n").map(l => l.replace(/[ \t]{2,}/g, " ").trim()).join("\n");
   text = text.replace(/\n{3,}/g, "\n\n");
   text = text.trim();
-  // Tronquer à 20 000 chars pour éviter des rendus trop lourds
-  if (text.length > 20000) text = text.slice(0, 20000) + "\n\n[…message tronqué pour l'affichage]";
+  if (text.length > 20000) text = text.slice(0, 20000) + "\n\n[…tronqué]";
   return text;
 }
+
+// ─── Sanitize HTML pour affichage sécurisé en iframe ─────────────────────────
+function sanitizeHtmlForDisplay(raw: string): string {
+  if (!raw) return "";
+  return raw
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, "")
+    .replace(/javascript:/gi, "void:")
+    .replace(/<meta[^>]*http-equiv[^>]*>/gi, "");
+}
+
+// Alias pour compatibilité — retourne toujours du texte propre
+function cleanEmailBody(raw: string): string { return stripHtml(raw); }
+
 
 const Spin = ({s=16}: {s?: number}) => (
   <div style={{width:s,height:s,borderRadius:"50%",border:`${Math.max(1.5,s*.1)}px solid rgba(201,169,110,0.2)`,borderTopColor:"#C9A96E",animation:"spin .7s linear infinite",flexShrink:0}} />
@@ -419,7 +439,6 @@ const DatePicker = ({value, onChange, light=false}: {value:string, onChange:(v:s
 };
 
 const MAIL_CATS = [
-  {id:"priorites", icon:"◆", label:"Priorités ARCHANGE"},
   {id:"nonlus",   icon:"🔵", label:"Non lus"},
   {id:"atraiter", icon:"📋", label:"À traiter"},
   {id:"star",     icon:"⭐", label:"Favoris"},
@@ -472,6 +491,17 @@ export default function App() {
   const [loadingMail, setLoadingMail] = useState(false);
   const [analysing, setAnalysing] = useState(false);
   const [analysingProgress, setAnalysingProgress] = useState("");
+  const [saveIndicator, setSaveIndicator] = useState(false);
+  const [offlineQueue, setOfflineQueue] = useState<Record<string,string>>({}); // P4: file hors-ligne
+  const [alerteUrgente, setAlerteUrgente] = useState<any[]>([]);
+  const saveTimer = useRef<any>(null);
+  // ─── États Radar ARCHANGE ───────────────────────────────────────────────────
+  const [radarHoverId, setRadarHoverId] = useState<string|null>(null);
+  const [radarResaModal, setRadarResaModal] = useState<any>(null);
+  const [radarReplyModal, setRadarReplyModal] = useState<any>(null);
+  const [radarReplyLoading, setRadarReplyLoading] = useState(false);
+  const [radarReplyText, setRadarReplyText] = useState("");
+  const [radarTraites, setRadarTraites] = useState<Set<string>>(new Set());
   const [calDate, setCalDate] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [selResa, setSelResa] = useState(null);
   const [editResa, setEditResa] = useState(null);
@@ -556,6 +586,7 @@ export default function App() {
   const [editResaPanel, setEditResaPanel] = useState<any>(null);
   // Planning view mode
   const [calView, setCalView] = useState<"mois"|"semaine"|"jour">("mois");
+  const [planFilter, setPlanFilter] = useState("all"); // filtre Planning indépendant
   const [calWeekStart, setCalWeekStart] = useState(()=>{ const d=new Date(); d.setDate(d.getDate()-((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d; });
   // Sources IA sections open/collapsed state
   const [srcSections, setSrcSections] = useState({liens:false, menus:true, conditions:false, espaces:false, ton:false});
@@ -588,8 +619,8 @@ export default function App() {
       const ext = cache?.extracted;
       if (!ext?.isReservation) return [];
 
-      // Ignorer si brouillon créé
-      if (drafted.has(m.id)) return [];
+      // Ignorer si marqué traité manuellement
+      if (radarTraites.has(m.id)) return [];
 
       // Trouver la réservation liée
       const resaId = emailResaLinks[m.id];
@@ -641,7 +672,7 @@ export default function App() {
       if (a.dateStr && b.dateStr) return a.dateStr.localeCompare(b.dateStr);
       return 0;
     });
-  }, [emails, repliesCache, drafted, emailResaLinks, resas]);
+  }, [emails, repliesCache, radarTraites, emailResaLinks, resas]);
   const getLinkedEmails = React.useCallback((resa: any) => {
     if (!resa) return [];
     return emails.filter(m => {
@@ -663,16 +694,29 @@ export default function App() {
     Object.entries(data).forEach(([key, value]) => {
       if (_saveTimers.current[key]) clearTimeout(_saveTimers.current[key]);
       _saveTimers.current[key] = setTimeout(async () => {
-        try {
-          const res = await fetch("/api/user-data", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ [key]: value }),
-          });
-          if (!res.ok) console.error("Supabase save error:", key, res.status);
-        } catch (e) {
-          console.error("Supabase save failed:", key, e);
-        }
+        const doSave = async () => {
+          try {
+            const res = await fetch("/api/user-data", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ [key]: value }),
+            });
+            if (res.ok) {
+              // Retirer de la queue offline si présent
+              setOfflineQueue(q => { const n = {...q}; delete n[key]; return n; });
+              setSaveIndicator(true);
+              if (saveTimer.current) clearTimeout(saveTimer.current);
+              saveTimer.current = setTimeout(() => setSaveIndicator(false), 2000);
+            } else {
+              console.error("Supabase save error:", key, res.status);
+              setOfflineQueue(q => ({ ...q, [key]: value }));
+            }
+          } catch {
+            // Hors ligne — mettre en file d'attente
+            setOfflineQueue(q => ({ ...q, [key]: value }));
+          }
+        };
+        doSave();
       }, 1000);
     });
   };
@@ -693,7 +737,11 @@ export default function App() {
   const saveExtractions = (cache: Record<string,any>) => {
     saveToSupabase({ extractions: JSON.stringify(cache) });
   };
-  // ─── Sauvegarde groupée des Sources IA dans la clé 'context' ──────────────
+  // P3 — Sauvegarder radarTraites en Supabase
+  const saveRadarTraites = (set: Set<string>) => {
+    setRadarTraites(set);
+    saveToSupabase({ radar_traites: JSON.stringify([...set]) });
+  };
   // On sérialise toutes les sections dans un JSON pour éviter les colonnes inconnues
   const saveSourcesIA = (menus: string, conditions: string, espaces: string, ton: string, custom: string) => {
     const payload = JSON.stringify({ menus, conditions, espaces, ton, custom });
@@ -713,19 +761,25 @@ export default function App() {
   };
 
   // Fonction partagée de mapping email API → état React
-  const mapEmail = (m: any) => ({
-    id:          m.id,
-    from:        m.from_name  || "",
-    fromEmail:   m.from_email || "",
-    subject:     m.subject    || "(sans objet)",
-    date:        m.date       || "",
-    snippet:     cleanEmailBody(m.snippet || ""),
-    body:        cleanEmailBody(m.body || m.snippet || ""),
-    flags:       Array.isArray(m.flags) ? m.flags : [],
-    aTraiter:    m.a_traiter  || false,
-    unread:      m.is_unread  || false,
-    attachments: Array.isArray(m.attachments) ? m.attachments : [],
-  });
+  const mapEmail = (m: any) => {
+    const rawBody = m.body || m.snippet || "";
+    const rawSnippet = m.snippet || "";
+    const isHtml = rawBody.trim().startsWith("<");
+    return {
+      id:          m.id,
+      from:        m.from_name  || "",
+      fromEmail:   m.from_email || "",
+      subject:     m.subject    || "(sans objet)",
+      date:        m.date       || "",
+      snippet:     stripHtml(rawSnippet),            // toujours texte propre
+      body:        stripHtml(rawBody),               // texte propre pour IA
+      bodyHtml:    isHtml ? sanitizeHtmlForDisplay(rawBody) : null, // HTML pour iframe
+      flags:       Array.isArray(m.flags) ? m.flags : [],
+      aTraiter:    m.a_traiter  || false,
+      unread:      m.is_unread  || false,
+      attachments: Array.isArray(m.attachments) ? m.attachments : [],
+    };
+  };
 
   // Analyse IA en arrière-plan — uniquement les emails sans extraction
   const analyserEmailsEnArrierePlan = async (emailsList: any[]) => {
@@ -839,6 +893,19 @@ export default function App() {
           const meta = JSON.parse(d.email_meta);
           try { localStorage.setItem("arc_email_meta", JSON.stringify(meta)); } catch {}
         } } catch {}
+        try { if (d.radar_traites) { const t = JSON.parse(d.radar_traites); setRadarTraites(new Set(t)); } } catch {}
+        // P1 — Charger les réponses IA persistées → restaure les replies après F5
+        try { if (d.replies_cache) {
+          const replies = JSON.parse(d.replies_cache);
+          setRepliesCache(prev => {
+            const merged: Record<string,any> = { ...prev };
+            Object.entries(replies).forEach(([id, rc]: [string, any]) => {
+              if (!merged[id]) merged[id] = { reply: rc.reply||"", editReply: rc.editReply||rc.reply||"", extracted: null };
+              else merged[id] = { ...merged[id], reply: merged[id].reply || rc.reply||"", editReply: merged[id].editReply || rc.editReply||rc.reply||"" };
+            });
+            return merged;
+          });
+        } } catch {}
         // Charger les extractions IA persistées → alimente directement repliesCache
         try { if (d.extractions) {
           const extr = JSON.parse(d.extractions);
@@ -878,9 +945,62 @@ export default function App() {
     };
 
     setLoadingMail(true);
+    // P2 — Restaurer l'état UI depuis localStorage avant le chargement
+    try {
+      const ui = JSON.parse(localStorage.getItem("arc_ui_state") || "{}");
+      if (ui.view && ["general","mails","planning","stats","sources"].includes(ui.view)) setView(ui.view);
+      if (ui.mailFilter) setMailFilter(ui.mailFilter);
+      if (ui.generalFilter) setGeneralFilter(ui.generalFilter);
+      if (typeof ui.navCollapsed === "boolean") setNavCollapsed(ui.navCollapsed);
+      if (ui.calView && ["mois","semaine","jour"].includes(ui.calView)) setCalView(ui.calView);
+      if (ui.planFilter) setPlanFilter(ui.planFilter);
+    } catch {}
     init();
     return () => { cancelled = true; };
   }, []);
+
+  // P4 — Retry automatique quand la connexion revient
+  useEffect(() => {
+    const flushQueue = () => {
+      setOfflineQueue(q => {
+        if (Object.keys(q).length === 0) return q;
+        Object.entries(q).forEach(([key, value]) => saveToSupabase({ [key]: value }));
+        return {};
+      });
+    };
+    window.addEventListener("online", flushQueue);
+    return () => window.removeEventListener("online", flushQueue);
+  }, []);
+
+  // P2 — Sauvegarder l'état UI dans localStorage à chaque changement
+  useEffect(() => {
+    try { localStorage.setItem("arc_ui_state", JSON.stringify({ view, mailFilter, generalFilter, navCollapsed, calView, planFilter })); } catch {}
+  }, [view, mailFilter, generalFilter, navCollapsed, calView, planFilter]);
+
+  // P5 — Avertir avant fermeture si réponse non sauvegardée
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (reply && !drafted.has(sel?.id)) {
+        e.preventDefault();
+        e.returnValue = "Une réponse a été générée mais n'a pas encore été créée comme brouillon. Voulez-vous quitter ?";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [reply, drafted, sel]);
+  useEffect(() => {
+    if (resas.length === 0) return;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const in7 = new Date(today); in7.setDate(today.getDate() + 7);
+    const urgentes = resas.filter(r => {
+      if (!r.dateDebut) return false;
+      const d = new Date(r.dateDebut + "T12:00:00");
+      if (d < today || d > in7) return false;
+      // Alerter si pas confirmé
+      return r.statut !== "confirme" && r.statut !== "annule";
+    });
+    setAlerteUrgente(urgentes);
+  }, [resas]);
 
   const toggleFlag = (id: string, flag: string) => {
     const upd = emails.map(m => {
@@ -989,12 +1109,21 @@ export default function App() {
         } catch { /* extraction silencieuse */ }
       }
 
-      // Mettre en cache la réponse pour cet email
+      // Mettre en cache la réponse pour cet email + persister en Supabase
       if (newReply) {
-        setRepliesCache(prev => ({
-          ...prev,
-          [sel.id]: { reply: newReply, editReply: newReply, extracted: newExtracted }
-        }));
+        setRepliesCache(prev => {
+          const updated = {
+            ...prev,
+            [sel.id]: { reply: newReply, editReply: newReply, extracted: newExtracted }
+          };
+          // Persister les replies en Supabase (uniquement reply+editReply, extracted est déjà sauvegardé)
+          const repliesToSave: Record<string,{reply:string,editReply:string}> = {};
+          Object.entries(updated).forEach(([id, v]: [string, any]) => {
+            if (v.reply) repliesToSave[id] = { reply: v.reply, editReply: v.editReply || v.reply };
+          });
+          saveToSupabase({ replies_cache: JSON.stringify(repliesToSave) });
+          return updated;
+        });
       }
 
       // ── Association IA email ↔ événement ────────────────────────────────────
@@ -1094,12 +1223,18 @@ Retourne UNIQUEMENT ce JSON valide :
     setGenReply(false);
   };
 
+  // P7 — Autosave du formulaire de réservation en cours
+  const updatePlanForm = (updates: any) => {
+    const next = { ...planForm, ...updates };
+    setPlanForm(next);
+    try { localStorage.setItem("arc_draft_planform", JSON.stringify(next)); } catch {}
+  };
+
   const openPlanForm = () => {
     const pers = parseInt(String(extracted?.nombrePersonnes || "0"), 10);
     const espaceAuto = extracted?.espaceDetecte || (
       pers > 100 ? "rdc" : pers > 75 ? "rdc" : pers > 30 ? "patio" : "belvedere"
     );
-    // Si fourchette détectée, on l'indique dans les notes
     const min = extracted?.nombrePersonnesMin;
     const max = extracted?.nombrePersonnes;
     const fourchette = (min && max && min !== max) ? `Fourchette : ${min}–${max} personnes. ` : "";
@@ -1118,8 +1253,17 @@ Retourne UNIQUEMENT ce JSON valide :
       budget:         extracted?.budget         || "",
       statut:         extracted?.statutSuggere  || "nouveau",
       noteDirecteur:  "",
+      _emailId:       sel?.id,
     };
+    // P7 — Proposer de restaurer un brouillon si disponible pour ce même email
+    try {
+      const draft = JSON.parse(localStorage.getItem("arc_draft_planform") || "null");
+      if (draft && draft._emailId === sel?.id && draft.nom && window.confirm(`Un brouillon existe pour "${draft.nom}". Restaurer ?`)) {
+        setPlanForm(draft); setPlanErrors({}); setShowPlanForm(true); return;
+      }
+    } catch {}
     setPlanForm(f); setPlanErrors({}); setShowPlanForm(true);
+    try { localStorage.setItem("arc_draft_planform", JSON.stringify(f)); } catch {}
   };
 
   const submitPlanForm = () => {
@@ -1133,6 +1277,7 @@ Retourne UNIQUEMENT ce JSON valide :
     const pers = parseInt(String(planForm.nombrePersonnes), 10);
     const r = { ...planForm, id: "r" + Date.now(), nombrePersonnes: isNaN(pers) ? planForm.nombrePersonnes : pers };
     saveResas([...resas, r]);
+    try { localStorage.removeItem("arc_draft_planform"); } catch {} // P7 — effacer le draft
     // Lier l'email source à la réservation créée et persister en Supabase
     if (sel?.id) saveEmailResaLinks({ ...emailResaLinks, [sel.id]: r.id });
     toast("Réservation ajoutée au planning !");
@@ -1324,6 +1469,25 @@ FORMAT
     setGenNoteIA(null);
   };
 
+  const genRadarReply = async (m: any) => {
+    setRadarReplyLoading(true);
+    setRadarReplyText("");
+    try {
+      const bodyTronque = (m.body || m.snippet || "").slice(0, 3000);
+      const prompt = `Email reçu:\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n\n${bodyTronque}\n\nRédige une réponse professionnelle pour la brasserie RÊVA.`;
+      const sys = SYSTEM_PROMPT
+        + (menusCtx      ? "\n\n=== MENUS & TARIFS ===\n"          + menusCtx.slice(0,3000)      : "")
+        + (conditionsCtx ? "\n\n=== CONDITIONS & POLITIQUE ===\n"  + conditionsCtx.slice(0,2000) : "")
+        + (espacesCtx    ? "\n\n=== ESPACES & CAPACITÉS ===\n"     + espacesCtx.slice(0,2000)    : "")
+        + (tonCtx        ? "\n\n=== RÈGLES & TON IA ===\n"         + tonCtx.slice(0,1500)        : "");
+      const rep = await callClaude(prompt, sys, null);
+      setRadarReplyText(rep || "");
+    } catch(e: any) {
+      toast("Erreur génération : " + (e.message||"IA indisponible"), "err");
+    }
+    setRadarReplyLoading(false);
+  };
+
   const openSendMail = (resa) => {
     setShowSendMail(resa);
     setSendMailSubject(`Votre événement chez RÊVA — ${resa.typeEvenement||""}`);
@@ -1390,6 +1554,22 @@ FORMAT
       )}
 
       {notif && <div style={{position:"fixed",bottom:32,left:"50%",transform:"translateX(-50%)",zIndex:9999,padding:"12px 24px",borderRadius:12,background:notif.type==="err"?"#2D0A0A":"#0A1F0E",color:notif.type==="err"?"#FCA5A5":"#6EE7B7",fontSize:13,fontWeight:500,whiteSpace:"nowrap",boxShadow:"0 8px 32px rgba(0,0,0,.25)",letterSpacing:"0.01em",border:notif.type==="err"?"1px solid rgba(239,68,68,.2)":"1px solid rgba(52,211,153,.2)"}}>{notif.msg}</div>}
+
+      {/* ── Indicateur de sauvegarde ── */}
+      {saveIndicator&&<div style={{position:"fixed",top:12,right:16,zIndex:9998,padding:"5px 12px",borderRadius:20,background:"#0A1F0E",color:"#6EE7B7",fontSize:11,fontWeight:600,letterSpacing:"0.04em",border:"1px solid rgba(52,211,153,.2)",pointerEvents:"none"}}>✓ Sauvegardé</div>}
+      {Object.keys(offlineQueue).length>0&&<div style={{position:"fixed",top:12,right:16,zIndex:9998,padding:"5px 12px",borderRadius:20,background:"#431407",color:"#FED7AA",fontSize:11,fontWeight:600,letterSpacing:"0.04em",border:"1px solid rgba(251,146,60,.2)",cursor:"default"}} title="Les modifications seront sauvegardées dès le retour de connexion">⚠ Non sauvegardé</div>}
+
+      {/* ── Alerte événements urgents — banner ── */}
+      {alerteUrgente.length>0&&!initializing&&(
+        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9997,background:"#7C2D12",borderBottom:"1px solid #9A3412",padding:"8px 20px",display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:14}}>⚠️</span>
+          <span style={{fontSize:12,color:"#FED7AA",fontWeight:500,flex:1}}>
+            {alerteUrgente.length} événement{alerteUrgente.length>1?"s":""} dans les 7 prochains jours sans confirmation — {alerteUrgente.map(r=>r.nom).join(", ")}
+          </span>
+          <button onClick={()=>{setView("general");setAlerteUrgente([]);}} style={{fontSize:11,color:"#FED7AA",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:6,padding:"3px 10px",cursor:"pointer",flexShrink:0}}>Voir →</button>
+          <button onClick={()=>setAlerteUrgente([])} style={{background:"none",border:"none",color:"rgba(254,215,170,0.5)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1,flexShrink:0}}>×</button>
+        </div>
+      )}
 
       {/* Nav principale — collapsible */}
       <aside style={{width:navCollapsed?60:200,background:"#1C1814",display:"flex",flexDirection:"column",flexShrink:0,transition:"width .3s cubic-bezier(.4,0,.2,1)",overflow:"hidden",borderRight:"1px solid rgba(209,196,178,0.08)"}}>
@@ -1534,6 +1714,36 @@ FORMAT
                 <input value={searchEvt} onChange={e=>setSearchEvt(e.target.value)} placeholder="Rechercher par nom, entreprise, type, date…" style={{...inp,paddingLeft:32,paddingRight:searchEvt?28:12}} />
                 {searchEvt&&<button onClick={()=>setSearchEvt("")} style={{position:"absolute",right:36,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#A09890",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>×</button>}
               </div>
+
+              {/* ── Barre de filtre pills par statut ── */}
+              <div style={{padding:"0 24px 12px",flexShrink:0,display:"flex",gap:6,flexWrap:"wrap"}}>
+                {/* Tous */}
+                <button onClick={()=>setGeneralFilter("all")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${generalFilter==="all"?"#C9A96E":"#DDD8D0"}`,background:generalFilter==="all"?"#C9A96E":"transparent",color:generalFilter==="all"?"#1C1814":"#5C564F",fontSize:11,fontWeight:generalFilter==="all"?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  Tous ({resas.length})
+                </button>
+                {/* Un pill par statut */}
+                {statuts.map(s=>{
+                  const count=resas.filter(r=>(r.statut||"nouveau")===s.id).length;
+                  const active=generalFilter===s.id;
+                  return (
+                    <button key={s.id} onClick={()=>setGeneralFilter(s.id)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?s.color:s.color+"55"}`,background:active?s.bg:"transparent",color:active?s.color:s.color,fontSize:11,fontWeight:active?600:400,cursor:"pointer",whiteSpace:"nowrap",opacity:count===0?0.4:1}}>
+                      {s.label} ({count})
+                    </button>
+                  );
+                })}
+                {/* Sans statut */}
+                {(()=>{const c=resas.filter(r=>!r.statut||!statuts.find(s=>s.id===r.statut)).length;const active=generalFilter==="__none__";return c>0&&(
+                  <button onClick={()=>setGeneralFilter("__none__")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?"#8A8178":"#DDD8D0"}`,background:active?"#F1EFE8":"transparent",color:active?"#3D3530":"#8A8178",fontSize:11,fontWeight:active?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
+                    Sans statut ({c})
+                  </button>
+                );})()}
+                {/* À relancer */}
+                {(()=>{const active=generalFilter==="arelancer";return(
+                  <button onClick={()=>setGeneralFilter("arelancer")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?"#F59E0B":"#DDD8D0"}`,background:active?"#FFFBEB":"transparent",color:active?"#92400E":"#8A8178",fontSize:11,fontWeight:active?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
+                    ⏰ Relances ({relances.length})
+                  </button>
+                );})()}
+              </div>
               <div style={{flex:1,overflowY:"auto",padding:"0 24px 20px"}}>
 
               {/* Vue À relancer */}
@@ -1576,7 +1786,28 @@ FORMAT
               )}
 
               {/* Groupes par statut */}
-              {generalFilter!=="arelancer"&&(generalFilter==="all"?statuts:[statuts.find(s=>s.id===generalFilter)].filter(Boolean)).map(statut=>{
+              {generalFilter!=="arelancer"&&(()=>{
+                const q=searchEvt.toLowerCase();
+                if(generalFilter==="__none__") {
+                  const group=resas.filter(r=>(!r.statut||!statuts.find(s=>s.id===r.statut))&&(!q||r.nom?.toLowerCase().includes(q)||r.entreprise?.toLowerCase().includes(q)||r.typeEvenement?.toLowerCase().includes(q)||r.email?.toLowerCase().includes(q)||r.dateDebut?.includes(q)));
+                  return group.length===0
+                    ? <div style={{textAlign:"center",padding:"60px 0",color:"#8A8178",fontSize:13}}>Aucun événement sans statut</div>
+                    : <div style={{display:"flex",flexDirection:"column",gap:8}}>{group.map(r=>{
+                        const st=statuts[0]||{bg:"#F3F4F6",color:"#6B7280",label:"—"};
+                        return <div key={r.id} onClick={()=>setSelResaGeneral(r)} style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",padding:"13px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,borderLeft:"3px solid #DDD8D0",boxShadow:selResaGeneral?.id===r.id?"0 2px 10px rgba(28,24,20,.07)":"0 1px 3px rgba(28,24,20,.04)"}}>
+                          <Avatar name={r.nom||"?"} size={36}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:600,color:"#1C1814",marginBottom:3}}>{r.nom||"—"}</div>
+                            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                              {r.typeEvenement&&<span style={{fontSize:11,color:"#8A8178"}}>{r.typeEvenement}</span>}
+                              {r.dateDebut&&<span style={{fontSize:11,color:"#8A8178"}}>📅 {fmtDateFr(r.dateDebut)}</span>}
+                              {r.nombrePersonnes&&<span style={{fontSize:11,color:"#8A8178"}}>👥 {r.nombrePersonnes}</span>}
+                            </div>
+                          </div>
+                        </div>;
+                      })}</div>;
+                }
+                return (generalFilter==="all"?statuts:[statuts.find(s=>s.id===generalFilter)].filter(Boolean)).map(statut=>{
                 const q=searchEvt.toLowerCase();
                 const group=resas.filter(r=>(r.statut||"nouveau")===statut.id&&(!q||r.nom?.toLowerCase().includes(q)||r.entreprise?.toLowerCase().includes(q)||r.typeEvenement?.toLowerCase().includes(q)||r.email?.toLowerCase().includes(q)||r.dateDebut?.includes(q)));
                 if(group.length===0) return null;
@@ -1624,7 +1855,8 @@ FORMAT
                     </div>
                   </div>
                 );
-              })}
+              });
+              })()}
               {resas.length===0?(
                 <div style={{textAlign:"center",padding:"80px 24px",color:"#8A8178"}}>
                   <div style={{fontSize:40,marginBottom:12}}>📭</div>
@@ -1877,46 +2109,24 @@ FORMAT
               {subCollapsed?(
                 <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center",height:"100%"}}>
                   <button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13}}>↺</button>
+                  {/* Radar ARCHANGE — en premier */}
+                  <button onClick={()=>setMailFilter("priorites")} title="Radar ARCHANGE" style={{width:32,height:32,borderRadius:8,border:`1px solid ${mailFilter==="priorites"?"rgba(201,169,110,0.5)":"rgba(201,169,110,0.2)"}`,background:mailFilter==="priorites"?"rgba(201,169,110,0.15)":"rgba(201,169,110,0.06)",cursor:"pointer",fontSize:12,color:"#C9A96E",fontWeight:700,position:"relative"}}>
+                    ◆
+                    {prioritesArchange.length>0&&<span style={{position:"absolute",top:1,right:1,width:8,height:8,borderRadius:"50%",background:"#E24B4A"}}/>}
+                  </button>
                   <button onClick={()=>setMailFilter("all")} title="Tous les mails" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>📬</button>
-                  {MAIL_CATS.filter(c=>c.id!=="priorites").map(c=>(
+                  {MAIL_CATS.map(c=>(
                     <button key={c.id} onClick={()=>setMailFilter(c.id)} title={c.label} style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(232,184,109,0.1)":"transparent",cursor:"pointer",fontSize:14}}>
                       {c.icon}
                     </button>
                   ))}
-                  {/* Priorités séparée en bas */}
-                  <div style={{marginTop:"auto",paddingTop:6,borderTop:"1px solid rgba(209,196,178,0.1)",width:"100%",display:"flex",justifyContent:"center"}}>
-                    <button onClick={()=>setMailFilter("priorites")} title="Priorités ARCHANGE" style={{width:32,height:32,borderRadius:8,border:`1px solid ${mailFilter==="priorites"?"rgba(201,169,110,0.5)":"rgba(201,169,110,0.2)"}`,background:mailFilter==="priorites"?"rgba(201,169,110,0.15)":"rgba(201,169,110,0.06)",cursor:"pointer",fontSize:12,color:"#C9A96E",fontWeight:700,position:"relative"}}>
-                      ◆
-                      {prioritesArchange.length>0&&<span style={{position:"absolute",top:1,right:1,width:8,height:8,borderRadius:"50%",background:"#E24B4A"}}/>}
-                    </button>
-                  </div>
                 </div>
               ):(
                 <div style={{padding:"4px 6px",flex:1,display:"flex",flexDirection:"column"}}>
-                  {/* Catégories standard */}
-                  <div style={{flex:1}}>
-                  <button onClick={()=>setMailFilter("all")} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="all"?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
-                      <span style={{fontSize:12}}>📬</span>
-                      <span style={{flex:1}}>Tous les mails</span>
-                  </button>
-                  <button onClick={()=>setMailFilter("priorites")} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="priorites"?"rgba(209,196,178,0.12)":"transparent",color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2,borderLeft:mailFilter==="priorites"?"2px solid #C9A96E":"2px solid transparent"}}>
-                      <span style={{fontSize:11,fontWeight:700}}>◆</span>
-                      <span style={{flex:1,fontWeight:mailFilter==="priorites"?600:400}}>Priorités</span>
-                      {prioritesArchange.length>0&&<span style={{fontSize:10,background:"#E24B4A",color:"#fff",padding:"1px 6px",borderRadius:100,fontWeight:600}}>{prioritesArchange.length}</span>}
-                  </button>
-                  {MAIL_CATS.filter(c=>c.id!=="priorites").map(c=>(
-                    <button key={c.id} onClick={()=>setMailFilter(c.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(209,196,178,0.1)":"transparent",color:mailFilter===c.id?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
-                      <span style={{fontSize:12}}>{c.icon}</span>
-                      <span style={{flex:1}}>{c.label}</span>
-                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.5)"}}>{emails.filter(m=>c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id)).length||""}</span>
-                    </button>
-                  ))}
-                  </div>
-
-                  {/* Priorités ARCHANGE — section détachée en bas */}
-                  <div style={{marginTop:"auto",paddingTop:10,borderTop:"1px solid rgba(209,196,178,0.1)"}}>
+                  {/* Radar ARCHANGE — en premier */}
+                  <div style={{paddingBottom:8,marginBottom:6,borderBottom:"1px solid rgba(209,196,178,0.1)"}}>
                     {analysing&&(
-                      <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",marginBottom:4}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 9px",marginBottom:4}}>
                         <Spin s={10}/>
                         <span style={{fontSize:10,color:"rgba(209,196,178,0.5)"}}>Analyse {analysingProgress}…</span>
                       </div>
@@ -1924,23 +2134,35 @@ FORMAT
                     <button onClick={()=>setMailFilter("priorites")} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 11px",borderRadius:9,border:`1px solid ${mailFilter==="priorites"?"rgba(201,169,110,0.5)":"rgba(201,169,110,0.18)"}`,background:mailFilter==="priorites"?"rgba(201,169,110,0.12)":"rgba(201,169,110,0.06)",color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.7)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",transition:"all .15s"}}>
                       <span style={{fontSize:13,color:"#C9A96E"}}>◆</span>
                       <div style={{flex:1}}>
-                        <div style={{fontWeight:600,fontSize:11,color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.88)"}}>Priorités ARCHANGE</div>
+                        <div style={{fontWeight:600,fontSize:11,color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.88)"}}>Radar ARCHANGE</div>
                         <div style={{fontSize:10,color:"rgba(209,196,178,0.45)",marginTop:1}}>{analysing?`Analyse en cours…`:`${prioritesArchange.length} demande${prioritesArchange.length!==1?"s":""}`}</div>
                       </div>
                       {prioritesArchange.length>0&&<span style={{fontSize:11,background:"#E24B4A",color:"#fff",padding:"2px 7px",borderRadius:100,fontWeight:700,flexShrink:0}}>{prioritesArchange.length}</span>}
                     </button>
                   </div>
+                  {/* Catégories standard */}
+                  <button onClick={()=>setMailFilter("all")} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="all"?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                      <span style={{fontSize:12}}>📬</span>
+                      <span style={{flex:1}}>Tous les mails</span>
+                  </button>
+                  {MAIL_CATS.map(c=>(
+                    <button key={c.id} onClick={()=>setMailFilter(c.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(209,196,178,0.1)":"transparent",color:mailFilter===c.id?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                      <span style={{fontSize:12}}>{c.icon}</span>
+                      <span style={{flex:1}}>{c.label}</span>
+                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.5)"}}>{emails.filter(m=>c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id)).length||""}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* ══ VUE PRIORITÉS ARCHANGE ══ */}
+            {/* ══ VUE RADAR ARCHANGE ══ */}
             {mailFilter==="priorites" && (
               <div style={{flex:1,overflowY:"auto",background:"#F5F3EF",padding:"20px 24px"}}>
                 <div style={{maxWidth:600,margin:"0 auto"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
                     <div>
-                      <div style={{fontSize:18,fontWeight:300,color:"#1C1814",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.01em"}}>Priorités ARCHANGE</div>
+                      <div style={{fontSize:18,fontWeight:300,color:"#1C1814",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.01em"}}>Radar ARCHANGE</div>
                       <div style={{fontSize:12,color:"#8A8178",marginTop:2}}>{prioritesArchange.length} demande{prioritesArchange.length!==1?"s":""} en attente</div>
                     </div>
                   </div>
@@ -1964,6 +2186,7 @@ FORMAT
                       const { m, ext, resa, type, dateStr } = item;
                       const isRouge = type === "rouge";
                       const isOr = type === "or";
+                      const isHovered = radarHoverId === m.id;
 
                       const headerBg = isRouge ? "linear-gradient(135deg,#FCEBEB,#F7C1C1)" : isOr ? "linear-gradient(135deg,#FAEEDA,#FAC775)" : "#F5F3EF";
                       const borderCol = isRouge ? "#E24B4A" : isOr ? "#BA7517" : "#DDD8D0";
@@ -1974,14 +2197,22 @@ FORMAT
                       const avCol = isRouge ? "#791F1F" : isOr ? "#412402" : "#5C564F";
 
                       const nom = ext.nom || m.from || "—";
-                      const initiales = nom.split(" ").map(w=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase() || "?";
+                      const initiales = nom.split(" ").map((w:string)=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase() || "?";
                       const entreprise = ext.entreprise || resa?.entreprise;
                       const budget = ext.budget || resa?.budget;
                       const heureDebut = ext.heureDebut || resa?.heureDebut;
                       const heureFin = ext.heureFin || resa?.heureFin;
                       const type_evt = ext.typeEvenement || resa?.typeEvenement;
                       const nbPers = ext.nombrePersonnes || resa?.nombrePersonnes;
-                      const espace = resa?.espaceId ? ESPACES.find(e=>e.id===resa.espaceId)?.nom : null;
+                      const espaceNom = resa?.espaceId ? ESPACES.find(e=>e.id===resa.espaceId)?.nom : ext.espaceDetecte ? ESPACES.find(e=>e.id===ext.espaceDetecte)?.nom || ext.espaceDetecte : null;
+                      const resume = ext.resume || ext.notes || null;
+
+                      // Statut badge
+                      const hasDraft = drafted.has(m.id);
+                      const hasResa = !!emailResaLinks[m.id];
+                      const statutLabel = hasResa ? "Réservation créée" : hasDraft ? "Réponse rédigée" : "Nouveau";
+                      const statutBg = hasResa ? "#D1FAE5" : hasDraft ? "#DBEAFE" : "#F1EFE8";
+                      const statutCol = hasResa ? "#065F46" : hasDraft ? "#1D4ED8" : "#5F5E5A";
 
                       // Badge urgence
                       const today = new Date(); today.setHours(0,0,0,0);
@@ -1994,24 +2225,30 @@ FORMAT
                         ["Personnes", nbPers ? `${nbPers} pers.` : "—"],
                         ["Budget", budget||"—"],
                         ...(heureDebut ? [["Horaires", heureDebut+(heureFin?` → ${heureFin}`:"")]] as [string,string][] : [["Horaires","—"]] as [string,string][]),
-                        ...(espace ? [["Espace", espace]] as [string,string][] : [["Espace","—"]] as [string,string][]),
+                        ...(espaceNom ? [["Espace", espaceNom]] as [string,string][] : [["Espace","—"]] as [string,string][]),
                       ];
 
                       return (
                         <div key={m.id}>
                           {showSection&&<div style={{fontSize:10,fontWeight:500,color:"#8A8178",letterSpacing:"0.1em",textTransform:"uppercase",margin:idx===0?"0 0 10px":"20px 0 10px"}}>{sectionLabels[type]}</div>}
-                          <div onClick={()=>{ handleSel(m); setMailFilter("all"); }} style={{background:"#FFFFFF",borderRadius:12,border:`1.5px solid ${borderCol}`,overflow:"hidden",marginBottom:8,cursor:"pointer",transition:"box-shadow .15s"}}
-                            onMouseEnter={e=>(e.currentTarget.style.boxShadow=`0 2px 12px rgba(0,0,0,.08)`)}
-                            onMouseLeave={e=>(e.currentTarget.style.boxShadow="none")}>
-                            {/* Header carte */}
+                          <div
+                            style={{background:"#FFFFFF",borderRadius:12,border:`1.5px solid ${borderCol}`,overflow:"hidden",marginBottom:8,boxShadow:isHovered?"0 4px 16px rgba(0,0,0,.1)":"none",transition:"box-shadow .15s"}}
+                            onMouseEnter={()=>setRadarHoverId(m.id)}
+                            onMouseLeave={()=>setRadarHoverId(null)}>
+
+                            {/* Header */}
                             <div style={{padding:"10px 14px",background:headerBg,display:"flex",alignItems:"center",gap:10}}>
                               <div style={{width:32,height:32,borderRadius:"50%",background:avBg,color:avCol,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:500,flexShrink:0}}>{initiales}</div>
                               <div style={{flex:1,minWidth:0}}>
                                 <div style={{fontSize:13,fontWeight:500,color:nameCol,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nom}{entreprise?` — ${entreprise}`:""}</div>
                                 <div style={{fontSize:11,color:contactCol,marginTop:1}}>{m.fromEmail}</div>
                               </div>
-                              <span style={{background:badgeBg,color:"#fff",fontSize:11,fontWeight:500,padding:"3px 10px",borderRadius:20,flexShrink:0}}>{badgeLabel}</span>
+                              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
+                                <span style={{background:badgeBg,color:"#fff",fontSize:11,fontWeight:500,padding:"3px 10px",borderRadius:20}}>{badgeLabel}</span>
+                                <span style={{background:statutBg,color:statutCol,fontSize:10,fontWeight:500,padding:"2px 7px",borderRadius:20}}>{statutLabel}</span>
+                              </div>
                             </div>
+
                             {/* Grille infos */}
                             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}>
                               {cells.map(([lbl,val],i)=>(
@@ -2020,6 +2257,43 @@ FORMAT
                                   <div style={{fontSize:12,fontWeight:val==="—"?400:500,color:val==="—"?"#C0BAB2":"#1C1814",fontStyle:val==="—"?"italic":"normal"}}>{val}</div>
                                 </div>
                               ))}
+                            </div>
+
+                            {/* Résumé IA */}
+                            {resume && (
+                              <div style={{padding:"8px 14px",borderTop:"0.5px solid #EAE6E1",background:"#FDFCFA"}}>
+                                <div style={{fontSize:12,color:"#8A8178",fontStyle:"italic",lineHeight:1.6}}>{resume}</div>
+                              </div>
+                            )}
+
+                            {/* Actions — toujours visibles */}
+                            <div style={{padding:"8px 12px",borderTop:"0.5px solid #EAE6E1",display:"flex",alignItems:"center",gap:6,background:"#FAFAF9"}}>
+                              <button
+                                onClick={e=>{e.stopPropagation(); setRadarResaModal({
+                                  nom: ext.nom||m.from||"", email: ext.email||m.fromEmail||"",
+                                  telephone: ext.telephone||"", entreprise: ext.entreprise||"",
+                                  typeEvenement: ext.typeEvenement||"", nombrePersonnes: ext.nombrePersonnes||"",
+                                  espaceId: ext.espaceDetecte||resa?.espaceId||"rdc",
+                                  dateDebut: ext.dateDebut||resa?.dateDebut||"",
+                                  heureDebut: ext.heureDebut||resa?.heureDebut||"",
+                                  heureFin: ext.heureFin||resa?.heureFin||"",
+                                  budget: ext.budget||resa?.budget||"", notes: ext.notes||"",
+                                  statut: ext.statutSuggere||"nouveau", _emailId: m.id,
+                                });}}
+                                style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
+                                📅 Créer réservation
+                              </button>
+                              <button
+                                onClick={e=>{e.stopPropagation(); setRadarReplyModal({m,ext}); setRadarReplyText(""); genRadarReply(m);}}
+                                style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
+                                ✨ Générer réponse
+                              </button>
+                              <button
+                                onClick={e=>{e.stopPropagation(); saveRadarTraites(new Set([...radarTraites,m.id])); toast("Demande archivée du Radar");}}
+                                style={{marginLeft:"auto",padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"transparent",color:"#8A8178",fontSize:11,cursor:"pointer"}}
+                                title="Archiver cette carte">
+                                ✓ Traité
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -2115,13 +2389,13 @@ FORMAT
                     </div>
                     <div style={{padding:"16px 20px"}}>
                       <div style={{fontSize:16,fontWeight:600,color:"#1C1814",marginBottom:14}}>{sel.subject}</div>
-                      {/* Corps email — HTML ou texte brut */}
-                      {(sel.body||sel.snippet||"").trim().startsWith("<")
+                      {/* Corps email — HTML rendu en iframe ou texte propre */}
+                      {sel.bodyHtml
                         ? <iframe
-                            srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'DM Sans',sans-serif;font-size:14px;color:#3D3530;line-height:1.7;padding:0;margin:0;}img{max-width:100%!important;height:auto!important;}a{color:#C9A96E;}*{box-sizing:border-box;}</style></head><body>${sel.body||sel.snippet}</body></html>`}
-                            sandbox="allow-same-origin"
-                            style={{width:"100%",border:"none",minHeight:300,display:"block"}}
-                            onLoad={e=>{const f=e.currentTarget;try{f.style.height=f.contentDocument?.body?.scrollHeight+"px";}catch{}}}
+                            srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'DM Sans',system-ui,sans-serif;font-size:14px;color:#3D3530;line-height:1.7;padding:8px 0;margin:0;word-break:break-word;}img{max-width:100%!important;height:auto!important;}a{color:#C9A96E;}table{max-width:100%;border-collapse:collapse;}td,th{padding:4px 8px;}*{box-sizing:border-box;}</style></head><body>${sel.bodyHtml}</body></html>`}
+                            sandbox="allow-same-origin allow-popups"
+                            style={{width:"100%",border:"none",minHeight:200,display:"block"}}
+                            onLoad={e=>{const f=e.currentTarget;try{f.style.height=(f.contentDocument?.body?.scrollHeight||400)+"px";}catch{}}}
                           />
                         : <div style={{fontSize:14,color:"#5C564F",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{sel.body||sel.snippet}</div>
                       }
@@ -2286,8 +2560,16 @@ FORMAT
                           ? <textarea value={editReply} onChange={e=>setEditReply(e.target.value)} style={{width:"100%",padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,border:"none",outline:"none",resize:"vertical",background:"transparent",minHeight:200}}/>
                           : <div style={{padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{reply}</div>
                     }
-                    <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #EAE6E1",background:"#F5F3EF"}}>
+                    <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #EAE6E1",background:"#F5F3EF",flexWrap:"wrap"}}>
                       {reply && <><button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+(editing?editReply:reply)); setDrafted(p=>new Set([...p,sel.id])); toast("Brouillon créé dans Gmail ✓"); }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
+                      {sel?.fromEmail&&<button onClick={()=>{
+                        const replyText = editing ? editReply : reply;
+                        const subject = sel.subject?.startsWith("Re:") ? sel.subject : `Re: ${sel.subject||""}`;
+                        const body = encodeURIComponent(replyText);
+                        window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(sel.fromEmail)}&su=${encodeURIComponent(subject)}&body=${body}`, "_blank");
+                        setDrafted(p=>new Set([...p,sel.id]));
+                        toast("Gmail ouvert ✓");
+                      }} disabled={genReply} style={{...gold,background:"#1a73e8",color:"#fff",boxShadow:"0 2px 8px rgba(26,115,232,.3)"}}>✉ Ouvrir dans Gmail</button>}
                       <button onClick={()=>{ if(editing){setReply(editReply);setEditing(false);if(sel)setRepliesCache(prev=>({...prev,[sel.id]:{...prev[sel.id],reply:editReply,editReply}}));}else{setEditing(true);setEditReply(reply);} }} disabled={genReply} style={{...out}}>{editing?"Valider":"Modifier"}</button>
                       <button onClick={genererReponse} disabled={genReply} style={{...out,color:"#8A8178",display:"flex",alignItems:"center",gap:5}}>{genReply?<><Spin s={11}/> En cours…</>:"↻ Regénérer"}</button></>}
                     </div>
@@ -2306,7 +2588,13 @@ FORMAT
           // Week helpers
           const weekDays = Array.from({length:7},(_,i)=>{ const d=new Date(calWeekStart); d.setDate(d.getDate()+i); return d; });
           const fmtDate = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-          const resasForDate = (ds:string) => resas.filter(r=>r.dateDebut===ds);
+          // Filtre planning — appliqué à toutes les vues
+          const resasForDate = (ds:string) => resas.filter(r => {
+            if(r.dateDebut!==ds) return false;
+            if(planFilter==="all") return true;
+            if(planFilter==="__none__") return !r.statut||!statuts.find(s=>s.id===r.statut);
+            return (r.statut||"nouveau")===planFilter;
+          });
 
           // Day view
           const calDayStr = fmtDate(calDate);
@@ -2339,6 +2627,22 @@ FORMAT
                     </span>
                   </div>
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    {/* Filtre par statut */}
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <select
+                        value={planFilter}
+                        onChange={e=>setPlanFilter(e.target.value)}
+                        style={{padding:"5px 10px",borderRadius:8,border:`1.5px solid ${planFilter!=="all"?"#C9A96E":"#DDD8D0"}`,background:planFilter!=="all"?"#FEF9EE":"#FFFFFF",color:planFilter!=="all"?"#854F0B":"#3D3530",fontSize:12,cursor:"pointer",outline:"none",fontWeight:planFilter!=="all"?600:400}}>
+                        <option value="all">Tous les statuts</option>
+                        {statuts.map(s=>(
+                          <option key={s.id} value={s.id}>{s.label}</option>
+                        ))}
+                        <option value="__none__">Sans statut</option>
+                      </select>
+                      {planFilter!=="all"&&(
+                        <button onClick={()=>setPlanFilter("all")} title="Réinitialiser le filtre" style={{width:22,height:22,borderRadius:6,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                      )}
+                    </div>
                     {/* Vue toggle */}
                     <div style={{display:"flex",background:"#F5F3EF",borderRadius:8,padding:2,border:"1px solid #EAE6E1"}}>
                       {(["mois","semaine","jour"] as const).map(v=>(
@@ -2371,14 +2675,14 @@ FORMAT
                               <span style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:isToday?700:400,background:isToday?"#C9A96E":"transparent",color:isToday?"#FFFFFF":"#9E9890"}}>{day}</span>
                             </div>
                             {dr.slice(0,3).map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                              <div key={r.id} onClick={()=>setSelResa(r)} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
+                              <div key={r.id} onClick={()=>setEditResa({...r})} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
                                 <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                                   {r.heureDebut&&<span style={{opacity:.7,marginRight:3}}>{r.heureDebut}{r.heureFin&&`→${r.heureFin}`}</span>}{r.nom}
                                 </div>
                                 {(r.entreprise||espace)&&<div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",opacity:.7,fontSize:9}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
                               </div>
                             );})}
-                            {dr.length>3&&<div style={{fontSize:10,color:"#8A8178",paddingLeft:4}}>+{dr.length-3} autre{dr.length-3>1?"s":""}</div>}
+                            {dr.length>3&&<div style={{fontSize:10,color:"#8A8178",paddingLeft:4,cursor:"pointer"}} onClick={()=>setCalView("jour")}>+{dr.length-3} autre{dr.length-3>1?"s":""}</div>}
                           </div>
                         );
                       })}
@@ -2403,7 +2707,7 @@ FORMAT
                       {weekDays.map(d=>{ const ds=fmtDate(d); const dr=resasForDate(ds); const isTd=ds===todayStr; return (
                         <div key={ds} style={{borderLeft:"1px solid #EAE6E1",minHeight:300,padding:"6px 4px",background:isTd?"rgba(232,184,109,0.03)":"transparent"}}>
                           {dr.map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                            <div key={r.id} onClick={()=>setSelResa(r)} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
+                            <div key={r.id} onClick={()=>setEditResa({...r})} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
                               <div style={{fontWeight:600,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.nom}</div>
                               {r.heureDebut&&<div style={{fontSize:10,color:st.color,opacity:.8}}>{r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</div>}
                               {(r.entreprise||espace)&&<div style={{fontSize:9,color:st.color,opacity:.65,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
@@ -2669,7 +2973,70 @@ FORMAT
         )}
       </main>
 
-      {/* ══ MODAL NOUVEL ÉVÉNEMENT ══ */}
+      {/* ══ MODALE RADAR — CRÉER RÉSERVATION ══ */}
+      {radarResaModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99998,padding:24}}>
+          <div style={{background:"#FFFFFF",borderRadius:16,width:"min(540px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,.3)"}}>
+            <div style={{padding:"18px 22px",borderBottom:"1px solid #EAE6E1",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+              <div style={{fontSize:15,fontWeight:600,color:"#1C1814"}}>📅 Créer la réservation</div>
+              <button onClick={()=>setRadarResaModal(null)} style={{width:30,height:30,borderRadius:7,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{background:"#FEF9EE",borderRadius:9,padding:"9px 13px",fontSize:12,color:"#854F0B"}}>Données pré-remplies par ARCHANGE — vérifiez avant de valider.</div>
+              {[["nom","👤 Nom"],["email","📧 Email"],["telephone","📞 Téléphone"],["entreprise","🏢 Entreprise"],["nombrePersonnes","👥 Nb personnes"],["budget","💰 Budget"]].map(([k,l])=>(
+                <div key={k}><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>{l}</label><input value={radarResaModal[k]||""} onChange={e=>setRadarResaModal({...radarResaModal,[k]:e.target.value})} style={{...inp}}/></div>
+              ))}
+              <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>📅 Date</label><DatePicker value={radarResaModal.dateDebut||""} onChange={v=>setRadarResaModal({...radarResaModal,dateDebut:v})}/></div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>🕐 Heure début</label><TimePicker value={radarResaModal.heureDebut||""} onChange={v=>setRadarResaModal({...radarResaModal,heureDebut:v})} placeholder="Heure début"/></div>
+                <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>🕕 Heure fin</label><TimePicker value={radarResaModal.heureFin||""} onChange={v=>setRadarResaModal({...radarResaModal,heureFin:v})} placeholder="Heure fin"/></div>
+              </div>
+              <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>🎉 Type d'événement</label><input value={radarResaModal.typeEvenement||""} onChange={e=>setRadarResaModal({...radarResaModal,typeEvenement:e.target.value})} style={{...inp}}/></div>
+              <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>📍 Espace</label><select value={radarResaModal.espaceId||"rdc"} onChange={e=>setRadarResaModal({...radarResaModal,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
+              <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>📝 Notes</label><textarea value={radarResaModal.notes||""} onChange={e=>setRadarResaModal({...radarResaModal,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
+            </div>
+            <div style={{padding:"14px 20px",borderTop:"1px solid #EAE6E1",display:"flex",gap:8,flexShrink:0}}>
+              <button onClick={()=>{
+                if(!radarResaModal.nom?.trim()){toast("Le nom est requis","err");return;}
+                const newResa={...EMPTY_RESA,...radarResaModal,id:Date.now()};
+                const updated=[...resas,newResa]; saveResas(updated);
+                if(radarResaModal._emailId) saveEmailResaLinks({...emailResaLinks,[radarResaModal._emailId]:newResa.id});
+                setRadarTraites(prev=>new Set([...prev,radarResaModal._emailId]));
+                setRadarResaModal(null); toast("Réservation créée !");
+              }} style={{flex:1,...gold,padding:"10px"}}>Créer la réservation</button>
+              <button onClick={()=>setRadarResaModal(null)} style={{...out}}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODALE RADAR — GÉNÉRER RÉPONSE ══ */}
+      {radarReplyModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99998,padding:24}}>
+          <div style={{background:"#FFFFFF",borderRadius:16,width:"min(600px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,.3)"}}>
+            <div style={{padding:"18px 22px",borderBottom:"1px solid #EAE6E1",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:600,color:"#1C1814"}}>✨ Réponse ARCHANGE</div>
+                <div style={{fontSize:12,color:"#8A8178",marginTop:2}}>{radarReplyModal.m?.from}</div>
+              </div>
+              <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} style={{width:30,height:30,borderRadius:7,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:20}}>
+              {radarReplyLoading
+                ? <div style={{display:"flex",alignItems:"center",gap:10,color:"#8A8178",padding:"40px 0",justifyContent:"center"}}><Spin s={16}/> Génération en cours…</div>
+                : radarReplyText
+                  ? <textarea value={radarReplyText} onChange={e=>setRadarReplyText(e.target.value)} rows={14} style={{...inp,lineHeight:1.75,resize:"vertical",fontFamily:"inherit"}}/>
+                  : <div style={{color:"#A09890",textAlign:"center",padding:"40px 0",fontSize:13}}>La réponse apparaîtra ici…</div>
+              }
+            </div>
+            <div style={{padding:"14px 20px",borderTop:"1px solid #EAE6E1",display:"flex",gap:8,flexShrink:0}}>
+              <button onClick={()=>{navigator.clipboard.writeText(radarReplyText);toast("Copié !");}} disabled={!radarReplyText||radarReplyLoading} style={{flex:1,...out,padding:"10px",opacity:!radarReplyText||radarReplyLoading?0.5:1}}>Copier</button>
+              <button onClick={()=>{if(radarReplyModal?.m) {setDrafted(prev=>new Set([...prev,radarReplyModal.m.id]));} setRadarReplyModal(null);setRadarReplyText("");toast("Brouillon marqué !");}} disabled={!radarReplyText||radarReplyLoading} style={{flex:1,...gold,padding:"10px",opacity:!radarReplyText||radarReplyLoading?0.5:1}}>Marquer brouillon</button>
+              <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} style={{...out}}>Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showNewEvent&&(
         <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"#111111",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99999,padding:32}}>
           <div style={{background:"#FFFFFF",borderRadius:16,width:"min(560px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 100px rgba(0,0,0,.4)",border:"1px solid #D1D5DB"}}>
