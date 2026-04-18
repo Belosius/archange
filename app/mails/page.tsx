@@ -802,7 +802,6 @@ export default function App() {
     const aAnalyser = emailsList.filter(m => !repliesCache[m.id]?.extracted);
     if (aAnalyser.length === 0) return;
     setAnalysing(true);
-    let cache: Record<string,any> = {};
     for (let i = 0; i < aAnalyser.length; i++) {
       const m = aAnalyser[i];
       setAnalysingProgress(`${i + 1}/${aAnalyser.length}`);
@@ -812,24 +811,27 @@ export default function App() {
           buildExtractPrompt(), null
         );
         const extracted = JSON.parse(raw.replace(/```json|```/g, "").trim());
-        cache[m.id] = extracted;
-        // Mettre à jour le cache React au fur et à mesure
-        setRepliesCache(prev => ({
-          ...prev,
-          [m.id]: { ...(prev[m.id] || { reply: "", editReply: "" }), extracted },
-        }));
+        // Mettre à jour le cache React + persister en Supabase au fur et à mesure
+        setRepliesCache(prev => {
+          const updated = {
+            ...prev,
+            [m.id]: { ...(prev[m.id] || { reply: "", editReply: "" }), extracted },
+          };
+          // Construire le payload extractions limité à 200 emails max
+          const allExtractions: Record<string,any> = {};
+          Object.entries(updated).forEach(([id, v]: [string, any]) => {
+            if (v.extracted) allExtractions[id] = v.extracted;
+          });
+          // Limiter à 200 entrées pour éviter les payloads trop lourds
+          const keys = Object.keys(allExtractions);
+          if (keys.length > 200) {
+            keys.slice(0, keys.length - 200).forEach(k => delete allExtractions[k]);
+          }
+          saveExtractions(allExtractions);
+          return updated;
+        });
       } catch { /* email ignoré silencieusement */ }
     }
-    // Persister toutes les nouvelles extractions en Supabase
-    setRepliesCache(prev => {
-      const allExtractions: Record<string,any> = {};
-      Object.entries(prev).forEach(([id, v]: [string, any]) => {
-        if (v.extracted) allExtractions[id] = v.extracted;
-      });
-      Object.entries(cache).forEach(([id, ext]) => { allExtractions[id] = ext; });
-      saveExtractions(allExtractions);
-      return prev;
-    });
     setAnalysing(false);
     setAnalysingProgress("");
   };
