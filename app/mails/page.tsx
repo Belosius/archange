@@ -497,6 +497,7 @@ export default function App() {
   const [alerteUrgente, setAlerteUrgente] = useState<any[]>([]);
   const saveTimer = useRef<any>(null);
   // ─── États Radar ARCHANGE ───────────────────────────────────────────────────
+  const [radarSelEmail, setRadarSelEmail] = useState<any>(null); // email sélectionné dans Radar
   const [radarHoverId, setRadarHoverId] = useState<string|null>(null);
   const [radarResaModal, setRadarResaModal] = useState<any>(null);
   const [radarReplyModal, setRadarReplyModal] = useState<any>(null);
@@ -802,6 +803,7 @@ export default function App() {
     const aAnalyser = emailsList.filter(m => !repliesCache[m.id]?.extracted);
     if (aAnalyser.length === 0) return;
     setAnalysing(true);
+    const nouvellesExtractions: Record<string,any> = {};
     for (let i = 0; i < aAnalyser.length; i++) {
       const m = aAnalyser[i];
       setAnalysingProgress(`${i + 1}/${aAnalyser.length}`);
@@ -811,26 +813,27 @@ export default function App() {
           buildExtractPrompt(), null
         );
         const extracted = JSON.parse(raw.replace(/```json|```/g, "").trim());
-        // Mettre à jour le cache React + persister en Supabase au fur et à mesure
-        setRepliesCache(prev => {
-          const updated = {
-            ...prev,
-            [m.id]: { ...(prev[m.id] || { reply: "", editReply: "" }), extracted },
-          };
-          // Construire le payload extractions limité à 200 emails max
-          const allExtractions: Record<string,any> = {};
-          Object.entries(updated).forEach(([id, v]: [string, any]) => {
-            if (v.extracted) allExtractions[id] = v.extracted;
-          });
-          // Limiter à 200 entrées pour éviter les payloads trop lourds
-          const keys = Object.keys(allExtractions);
-          if (keys.length > 200) {
-            keys.slice(0, keys.length - 200).forEach(k => delete allExtractions[k]);
-          }
-          saveExtractions(allExtractions);
-          return updated;
-        });
+        nouvellesExtractions[m.id] = extracted;
+        // Mettre à jour le cache React au fur et à mesure (UI uniquement, pas de Supabase)
+        setRepliesCache(prev => ({
+          ...prev,
+          [m.id]: { ...(prev[m.id] || { reply: "", editReply: "" }), extracted },
+        }));
       } catch { /* email ignoré silencieusement */ }
+    }
+    // Sauvegarder en Supabase UNE SEULE FOIS à la fin — payload maîtrisé
+    if (Object.keys(nouvellesExtractions).length > 0) {
+      setRepliesCache(prev => {
+        const allExtractions: Record<string,any> = {};
+        Object.entries(prev).forEach(([id, v]: [string, any]) => {
+          if (v.extracted) allExtractions[id] = v.extracted;
+        });
+        // Limiter à 200 entrées
+        const keys = Object.keys(allExtractions);
+        if (keys.length > 200) keys.slice(0, keys.length - 200).forEach(k => delete allExtractions[k]);
+        saveExtractions(allExtractions);
+        return prev;
+      });
     }
     setAnalysing(false);
     setAnalysingProgress("");
@@ -2217,9 +2220,11 @@ FORMAT
 
             {/* ══ VUE RADAR ARCHANGE ══ */}
             {mailFilter==="priorites" && (
-              <div style={{flex:1,overflowY:"auto",background:"#F5F3EF",padding:"20px 24px"}}>
-                <div style={{maxWidth:600,margin:"0 auto"}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+              <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+
+                {/* ── Panel gauche — liste des cartes ── */}
+                <div style={{width:560,flexShrink:0,overflowY:"auto",background:"#F5F3EF",padding:"20px 20px",borderRight:"1px solid #EAE6E1"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                     <div>
                       <div style={{fontSize:18,fontWeight:300,color:"#1C1814",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.01em"}}>Radar ARCHANGE</div>
                       <div style={{fontSize:12,color:"#8A8178",marginTop:2}}>{prioritesArchange.length} demande{prioritesArchange.length!==1?"s":""} en attente</div>
@@ -2246,9 +2251,10 @@ FORMAT
                       const isRouge = type === "rouge";
                       const isOr = type === "or";
                       const isHovered = radarHoverId === m.id;
+                      const isSelected = radarSelEmail?.id === m.id;
 
                       const headerBg = isRouge ? "linear-gradient(135deg,#FCEBEB,#F7C1C1)" : isOr ? "linear-gradient(135deg,#FAEEDA,#FAC775)" : "#F5F3EF";
-                      const borderCol = isRouge ? "#E24B4A" : isOr ? "#BA7517" : "#DDD8D0";
+                      const borderCol = isSelected ? "#C9A96E" : isRouge ? "#E24B4A" : isOr ? "#BA7517" : "#DDD8D0";
                       const badgeBg = isRouge ? "#E24B4A" : isOr ? "#BA7517" : "#888780";
                       const nameCol = isRouge ? "#791F1F" : isOr ? "#633806" : "#1C1814";
                       const contactCol = isRouge ? "#C94040" : isOr ? "#854F0B" : "#8A8178";
@@ -2258,6 +2264,7 @@ FORMAT
                       const nom = ext.nom || m.from || "—";
                       const initiales = nom.split(" ").map((w:string)=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase() || "?";
                       const entreprise = ext.entreprise || resa?.entreprise;
+                      const telephone = ext.telephone || resa?.telephone || null;
                       const budget = ext.budget || resa?.budget;
                       const heureDebut = ext.heureDebut || resa?.heureDebut;
                       const heureFin = ext.heureFin || resa?.heureFin;
@@ -2266,14 +2273,12 @@ FORMAT
                       const espaceNom = resa?.espaceId ? ESPACES.find(e=>e.id===resa.espaceId)?.nom : ext.espaceDetecte ? ESPACES.find(e=>e.id===ext.espaceDetecte)?.nom || ext.espaceDetecte : null;
                       const resume = ext.resume || ext.notes || null;
 
-                      // Statut badge
                       const hasDraft = drafted.has(m.id);
                       const hasResa = !!emailResaLinks[m.id];
                       const statutLabel = hasResa ? "Réservation créée" : hasDraft ? "Réponse rédigée" : "Nouveau";
                       const statutBg = hasResa ? "#D1FAE5" : hasDraft ? "#DBEAFE" : "#F1EFE8";
                       const statutCol = hasResa ? "#065F46" : hasDraft ? "#1D4ED8" : "#5F5E5A";
 
-                      // Badge urgence
                       const today = new Date(); today.setHours(0,0,0,0);
                       let badgeLabel = isRouge ? (dateStr && new Date(dateStr+"T12:00:00") < new Date(today.getTime()+2*86400000) ? "⚡ Demain" : "⚡ Urgent") : isOr ? `💰 ${budget}` : "Nouveau";
                       if(isRouge && (m.flags||[]).includes("flag")) badgeLabel = "⚡ Relance";
@@ -2291,16 +2296,20 @@ FORMAT
                         <div key={m.id}>
                           {showSection&&<div style={{fontSize:10,fontWeight:500,color:"#8A8178",letterSpacing:"0.1em",textTransform:"uppercase",margin:idx===0?"0 0 10px":"20px 0 10px"}}>{sectionLabels[type]}</div>}
                           <div
-                            style={{background:"#FFFFFF",borderRadius:12,border:`1.5px solid ${borderCol}`,overflow:"hidden",marginBottom:8,boxShadow:isHovered?"0 4px 16px rgba(0,0,0,.1)":"none",transition:"box-shadow .15s"}}
+                            onClick={()=>setRadarSelEmail(isSelected ? null : m)}
+                            style={{background:"#FFFFFF",borderRadius:12,border:`1.5px solid ${borderCol}`,overflow:"hidden",marginBottom:8,boxShadow:isSelected?"0 0 0 3px rgba(201,169,110,0.2)":isHovered?"0 4px 16px rgba(0,0,0,.08)":"none",transition:"box-shadow .15s, border-color .15s",cursor:"pointer"}}
                             onMouseEnter={()=>setRadarHoverId(m.id)}
                             onMouseLeave={()=>setRadarHoverId(null)}>
 
-                            {/* Header */}
+                            {/* Header — nom, email, téléphone */}
                             <div style={{padding:"10px 14px",background:headerBg,display:"flex",alignItems:"center",gap:10}}>
-                              <div style={{width:32,height:32,borderRadius:"50%",background:avBg,color:avCol,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:500,flexShrink:0}}>{initiales}</div>
+                              <div style={{width:34,height:34,borderRadius:"50%",background:avBg,color:avCol,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,flexShrink:0}}>{initiales}</div>
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:13,fontWeight:500,color:nameCol,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nom}{entreprise?` — ${entreprise}`:""}</div>
-                                <div style={{fontSize:11,color:contactCol,marginTop:1}}>{m.fromEmail}</div>
+                                <div style={{fontSize:13,fontWeight:600,color:nameCol,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nom}{entreprise?` — ${entreprise}`:""}</div>
+                                <div style={{display:"flex",alignItems:"center",gap:8,marginTop:2,flexWrap:"wrap"}}>
+                                  <span style={{fontSize:11,color:contactCol}}>{m.fromEmail}</span>
+                                  {telephone&&<span style={{fontSize:11,color:contactCol,display:"flex",alignItems:"center",gap:3}}>· 📞 {telephone}</span>}
+                                </div>
                               </div>
                               <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
                                 <span style={{background:badgeBg,color:"#fff",fontSize:11,fontWeight:500,padding:"3px 10px",borderRadius:20}}>{badgeLabel}</span>
@@ -2318,39 +2327,20 @@ FORMAT
                               ))}
                             </div>
 
-                            {/* Résumé IA */}
                             {resume && (
                               <div style={{padding:"8px 14px",borderTop:"0.5px solid #EAE6E1",background:"#FDFCFA"}}>
                                 <div style={{fontSize:12,color:"#8A8178",fontStyle:"italic",lineHeight:1.6}}>{resume}</div>
                               </div>
                             )}
 
-                            {/* Actions — toujours visibles */}
                             <div style={{padding:"8px 12px",borderTop:"0.5px solid #EAE6E1",display:"flex",alignItems:"center",gap:6,background:"#FAFAF9"}}>
-                              <button
-                                onClick={e=>{e.stopPropagation(); setRadarResaModal({
-                                  nom: ext.nom||m.from||"", email: ext.email||m.fromEmail||"",
-                                  telephone: ext.telephone||"", entreprise: ext.entreprise||"",
-                                  typeEvenement: ext.typeEvenement||"", nombrePersonnes: ext.nombrePersonnes||"",
-                                  espaceId: ext.espaceDetecte||resa?.espaceId||"rdc",
-                                  dateDebut: ext.dateDebut||resa?.dateDebut||"",
-                                  heureDebut: ext.heureDebut||resa?.heureDebut||"",
-                                  heureFin: ext.heureFin||resa?.heureFin||"",
-                                  budget: ext.budget||resa?.budget||"", notes: ext.notes||"",
-                                  statut: ext.statutSuggere||"nouveau", _emailId: m.id,
-                                });}}
-                                style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
+                              <button onClick={e=>{e.stopPropagation(); setRadarResaModal({ nom: ext.nom||m.from||"", email: ext.email||m.fromEmail||"", telephone: ext.telephone||"", entreprise: ext.entreprise||"", typeEvenement: ext.typeEvenement||"", nombrePersonnes: ext.nombrePersonnes||"", espaceId: ext.espaceDetecte||resa?.espaceId||"rdc", dateDebut: ext.dateDebut||resa?.dateDebut||"", heureDebut: ext.heureDebut||resa?.heureDebut||"", heureFin: ext.heureFin||resa?.heureFin||"", budget: ext.budget||resa?.budget||"", notes: ext.notes||"", statut: ext.statutSuggere||"nouveau", _emailId: m.id, });}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
                                 📅 Créer réservation
                               </button>
-                              <button
-                                onClick={e=>{e.stopPropagation(); setRadarReplyModal({m,ext}); setRadarReplyText(""); genRadarReply(m);}}
-                                style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
+                              <button onClick={e=>{e.stopPropagation(); setRadarReplyModal({m,ext}); setRadarReplyText(""); genRadarReply(m);}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
                                 ✨ Générer réponse
                               </button>
-                              <button
-                                onClick={e=>{e.stopPropagation(); saveRadarTraites(new Set([...radarTraites,m.id])); toast("Demande archivée du Radar");}}
-                                style={{marginLeft:"auto",padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"transparent",color:"#8A8178",fontSize:11,cursor:"pointer"}}
-                                title="Archiver cette carte">
+                              <button onClick={e=>{e.stopPropagation(); saveRadarTraites(new Set([...radarTraites,m.id])); toast("Demande archivée du Radar");}} style={{marginLeft:"auto",padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"transparent",color:"#8A8178",fontSize:11,cursor:"pointer"}} title="Archiver cette carte">
                                 ✓ Traité
                               </button>
                             </div>
@@ -2360,6 +2350,39 @@ FORMAT
                     });
                   })()}
                 </div>
+
+                {/* ── Panel droit — mail sélectionné ── */}
+                <div style={{flex:1,overflowY:"auto",background:"#EEEAE4"}}>
+                  {!radarSelEmail ? (
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:10,color:"#8A8178"}}>
+                      <div style={{fontSize:36}}>◆</div>
+                      <div style={{fontSize:14}}>Cliquez sur une carte pour voir le mail</div>
+                    </div>
+                  ) : (
+                    <div style={{maxWidth:720,margin:"0 auto",padding:"24px 24px 60px"}}>
+                      <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",overflow:"hidden"}}>
+                        <div style={{padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:"1px solid #EAE6E1"}}>
+                          <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                            <Avatar name={radarSelEmail.from} size={42}/>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>{radarSelEmail.from}</div>
+                              <div style={{fontSize:12,color:"#8A8178"}}>{radarSelEmail.fromEmail} · {radarSelEmail.date}</div>
+                            </div>
+                          </div>
+                          <button onClick={()=>setRadarSelEmail(null)} style={{background:"none",border:"none",color:"#8A8178",cursor:"pointer",fontSize:20,lineHeight:1}}>×</button>
+                        </div>
+                        <div style={{padding:"16px 20px"}}>
+                          <div style={{fontSize:16,fontWeight:600,color:"#1C1814",marginBottom:14}}>{radarSelEmail.subject}</div>
+                          {radarSelEmail.bodyHtml
+                            ? <iframe srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'DM Sans',sans-serif;font-size:14px;color:#3D3530;line-height:1.7;padding:0;margin:0;}img{max-width:100%!important;height:auto!important;}a{color:#C9A96E;}*{box-sizing:border-box;}</style></head><body>${radarSelEmail.bodyHtml}</body></html>`} sandbox="allow-same-origin" style={{width:"100%",border:"none",minHeight:300,display:"block"}} onLoad={e=>{const f=e.currentTarget;try{f.style.height=f.contentDocument?.body?.scrollHeight+"px";}catch{}}}/>
+                            : <div style={{fontSize:14,color:"#5C564F",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{radarSelEmail.body||radarSelEmail.snippet}</div>
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
               </div>
             )}
 
