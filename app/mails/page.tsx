@@ -457,8 +457,9 @@ export default function App() {
   const [genReply, setGenReply] = useState(false);
   const [extracted, setExtracted] = useState<any>(null);
   // Cache des réponses par email ID — évite les regénérations inutiles
-  const [repliesCache, setRepliesCache] = useState<Record<string,{reply:string,editReply:string,extracted:any|null}>>({});
+  const [repliesCache, setRepliesCache] = useState<Record<string,{reply:string,editReply:string,extracted:any|null,dateGen?:string}>>({});
   const [drafted, setDrafted] = useState(new Set());
+  const [undoDelete, setUndoDelete] = useState<{email:any,timer:any}|null>(null);
   const [editing, setEditing] = useState(false);
   const [editReply, setEditReply] = useState("");
   const [notif, setNotif] = useState<{msg:string,type:string}|null>(null);
@@ -466,7 +467,7 @@ export default function App() {
   const toast = (msg: string, type = "ok") => {
     if (notifTimer.current) clearTimeout(notifTimer.current);
     setNotif({ msg, type });
-    notifTimer.current = setTimeout(() => setNotif(null), 3000);
+    notifTimer.current = setTimeout(() => setNotif(null), type === "undo" ? 4500 : 3000);
   };
   useEffect(() => () => { if (notifTimer.current) clearTimeout(notifTimer.current); }, []);
 
@@ -900,8 +901,8 @@ export default function App() {
           setRepliesCache(prev => {
             const merged: Record<string,any> = { ...prev };
             Object.entries(replies).forEach(([id, rc]: [string, any]) => {
-              if (!merged[id]) merged[id] = { reply: rc.reply||"", editReply: rc.editReply||rc.reply||"", extracted: null };
-              else merged[id] = { ...merged[id], reply: merged[id].reply || rc.reply||"", editReply: merged[id].editReply || rc.editReply||rc.reply||"" };
+              if (!merged[id]) merged[id] = { reply: rc.reply||"", editReply: rc.editReply||rc.reply||"", extracted: null, dateGen: rc.dateGen||"" };
+              else merged[id] = { ...merged[id], reply: merged[id].reply || rc.reply||"", editReply: merged[id].editReply || rc.editReply||rc.reply||"", dateGen: merged[id].dateGen || rc.dateGen||"" };
             });
             return merged;
           });
@@ -1002,6 +1003,18 @@ export default function App() {
     setAlerteUrgente(urgentes);
   }, [resas]);
 
+  const deleteEmailWithUndo = (em: any) => {
+    // Annuler un éventuel undo précédent
+    if (undoDelete?.timer) clearTimeout(undoDelete.timer);
+    // Retirer immédiatement de la liste
+    const upd = emails.filter(m => m.id !== em.id);
+    saveEmails(upd);
+    if (sel?.id === em.id) setSel(null);
+    // Préparer le undo pendant 4 secondes
+    const timer = setTimeout(() => { setUndoDelete(null); }, 4000);
+    setUndoDelete({ email: em, timer });
+    toast(`Email supprimé — Annuler ?`, "undo");
+  };
   const toggleFlag = (id: string, flag: string) => {
     const upd = emails.map(m => {
       if (m.id !== id) return m;
@@ -1112,14 +1125,15 @@ export default function App() {
       // Mettre en cache la réponse pour cet email + persister en Supabase
       if (newReply) {
         setRepliesCache(prev => {
+          const dateGen = new Date().toLocaleDateString("fr-FR");
           const updated = {
             ...prev,
-            [sel.id]: { reply: newReply, editReply: newReply, extracted: newExtracted }
+            [sel.id]: { reply: newReply, editReply: newReply, extracted: newExtracted, dateGen }
           };
           // Persister les replies en Supabase (uniquement reply+editReply, extracted est déjà sauvegardé)
-          const repliesToSave: Record<string,{reply:string,editReply:string}> = {};
+          const repliesToSave: Record<string,{reply:string,editReply:string,dateGen:string}> = {};
           Object.entries(updated).forEach(([id, v]: [string, any]) => {
-            if (v.reply) repliesToSave[id] = { reply: v.reply, editReply: v.editReply || v.reply };
+            if (v.reply) repliesToSave[id] = { reply: v.reply, editReply: v.editReply || v.reply, dateGen: v.dateGen || "" };
           });
           saveToSupabase({ replies_cache: JSON.stringify(repliesToSave) });
           return updated;
@@ -1553,7 +1567,15 @@ FORMAT
         </div>
       )}
 
-      {notif && <div style={{position:"fixed",bottom:32,left:"50%",transform:"translateX(-50%)",zIndex:9999,padding:"12px 24px",borderRadius:12,background:notif.type==="err"?"#2D0A0A":"#0A1F0E",color:notif.type==="err"?"#FCA5A5":"#6EE7B7",fontSize:13,fontWeight:500,whiteSpace:"nowrap",boxShadow:"0 8px 32px rgba(0,0,0,.25)",letterSpacing:"0.01em",border:notif.type==="err"?"1px solid rgba(239,68,68,.2)":"1px solid rgba(52,211,153,.2)"}}>{notif.msg}</div>}
+      {notif && <div style={{position:"fixed",bottom:32,left:"50%",transform:"translateX(-50%)",zIndex:9999,padding:"12px 24px",borderRadius:12,background:notif.type==="err"?"#2D0A0A":notif.type==="undo"?"#1C1814":"#0A1F0E",color:notif.type==="err"?"#FCA5A5":notif.type==="undo"?"#D1C4B2":"#6EE7B7",fontSize:13,fontWeight:500,whiteSpace:"nowrap",boxShadow:"0 8px 32px rgba(0,0,0,.25)",letterSpacing:"0.01em",border:notif.type==="err"?"1px solid rgba(239,68,68,.2)":notif.type==="undo"?"1px solid rgba(209,196,178,.2)":"1px solid rgba(52,211,153,.2)",display:"flex",alignItems:"center",gap:12}}>
+        <span>{notif.msg}</span>
+        {notif.type==="undo"&&undoDelete&&<button onClick={()=>{
+          if(undoDelete.timer) clearTimeout(undoDelete.timer);
+          saveEmails([undoDelete.email,...emails]);
+          setUndoDelete(null); setNotif(null);
+          toast("Email restauré ✓");
+        }} style={{fontSize:12,fontWeight:700,color:"#C9A96E",background:"none",border:"1px solid rgba(201,169,110,.4)",borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Annuler</button>}
+      </div>}
 
       {/* ── Indicateur de sauvegarde ── */}
       {saveIndicator&&<div style={{position:"fixed",top:12,right:16,zIndex:9998,padding:"5px 12px",borderRadius:20,background:"#0A1F0E",color:"#6EE7B7",fontSize:11,fontWeight:600,letterSpacing:"0.04em",border:"1px solid rgba(52,211,153,.2)",pointerEvents:"none"}}>✓ Sauvegardé</div>}
@@ -2324,37 +2346,57 @@ FORMAT
                     {mailFilter!=="all"&&<button onClick={()=>{setMailFilter("all");setSearch("");}} style={{fontSize:11,color:"#C9A96E",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Voir tous les mails</button>}
                   </div>
                 )}
-                {filtered.map(em=>(
-                  <div key={em.id} className="mail-row" style={{position:"relative",display:"flex",gap:9,padding:"11px 12px",borderBottom:"1px solid #EAE6E1",cursor:"pointer",background:sel?.id===em.id?"#F5F3EF":"transparent",borderLeft:sel?.id===em.id?"3px solid #C9A96E":em.unread?"3px solid #7BA8C4":"3px solid transparent"}}>
-                    <div onClick={()=>handleSel(em)} style={{display:"flex",gap:9,flex:1,minWidth:0}}>
-                      <div style={{position:"relative",flexShrink:0}}>
-                        <Avatar name={em.from} size={32}/>
-                        {em.unread&&<div style={{position:"absolute",top:0,right:0,width:8,height:8,borderRadius:"50%",background:"#6D9BE8",border:"2px solid #FFFFFF"}}/>}
+                {filtered.map(em=>{
+                  const tags: {label:string,color:string,bg:string}[] = [];
+                  if(em.unread) tags.push({label:"Non lu",color:"#1D4ED8",bg:"#EFF6FF"});
+                  if(em.aTraiter) tags.push({label:"À traiter",color:"#2563EB",bg:"#DBEAFE"});
+                  if(drafted.has(em.id)) tags.push({label:"Brouillon",color:"#065F46",bg:"#D1FAE5"});
+                  if((em.flags||[]).includes("star")) tags.push({label:"⭐",color:"#92400E",bg:"#FEF3C7"});
+                  if((em.flags||[]).includes("flag")) tags.push({label:"🚩",color:"#991B1B",bg:"#FEE2E2"});
+                  const visibleTags = tags.slice(0,2);
+                  const extraTags = tags.length - visibleTags.length;
+                  const isActive = sel?.id===em.id;
+                  return (
+                  <div key={em.id} className="mail-row"
+                    style={{position:"relative",padding:"10px 12px",borderBottom:"1px solid #EAE6E1",cursor:"pointer",
+                      background:isActive?"#F0EDE8":"transparent",
+                      borderLeft:isActive?"3px solid #C9A96E":em.unread?"3px solid #7BA8C4":"3px solid transparent",
+                      transition:"background .1s"}}>
+                    {/* Zone cliquable principale */}
+                    <div onClick={()=>handleSel(em)} style={{display:"flex",gap:9,minWidth:0}}>
+                      <div style={{position:"relative",flexShrink:0,marginTop:1}}>
+                        <Avatar name={em.from} size={30}/>
+                        {em.unread&&<div style={{position:"absolute",top:-1,right:-1,width:7,height:7,borderRadius:"50%",background:"#6D9BE8",border:"2px solid #FFFFFF"}}/>}
                       </div>
                       <div style={{flex:1,minWidth:0}}>
+                        {/* Ligne 1 — expéditeur + date */}
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
-                          <span style={{fontSize:12,fontWeight:em.unread?700:600,color:em.unread?"#6D9BE8":"#1C1814",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}}>{em.from}</span>
-                          <span style={{fontSize:10,color:"#8A8178",flexShrink:0,marginLeft:4}}>{em.date}</span>
+                          <span style={{fontSize:12,fontWeight:em.unread?700:600,color:em.unread?"#3B6FCC":"#1C1814",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}>{em.from||"(inconnu)"}</span>
+                          <span style={{fontSize:10,color:"#A09890",flexShrink:0,marginLeft:4}}>{em.date}</span>
                         </div>
-                        <div style={{fontSize:11,color:"#5C564F",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:2}}>{em.subject}</div>
-                        <div style={{fontSize:10,color:"#8A8178",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{em.snippet}</div>
-                        <div style={{display:"flex",gap:3,marginTop:4,flexWrap:"wrap"}}>
-                          {em.unread&&<span style={{fontSize:9,background:"#EFF6FF",color:"#1D4ED8",padding:"1px 5px",borderRadius:100,fontWeight:700}}>Non lu</span>}
-                          {(em.flags||[]).includes("star")&&<span style={{fontSize:10}}>⭐</span>}
-                          {(em.flags||[]).includes("flag")&&<span style={{fontSize:10}}>🚩</span>}
-                          {em.aTraiter&&<span style={{fontSize:9,background:"#EFF6FF",color:"#2563EB",padding:"1px 5px",borderRadius:100}}>À traiter</span>}
-                          {drafted.has(em.id)&&<span style={{fontSize:9,background:"#D1FAE5",color:"#065F46",padding:"1px 5px",borderRadius:100}}>Brouillon</span>}
+                        {/* Ligne 2 — objet */}
+                        <div style={{fontSize:12,fontWeight:em.unread?600:500,color:em.unread?"#1C1814":"#3D3530",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}}>{em.subject||"(sans objet)"}</div>
+                        {/* Ligne 3 — aperçu + tags */}
+                        <div style={{display:"flex",alignItems:"center",gap:4,minWidth:0}}>
+                          <span style={{fontSize:11,color:"#8A8178",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0}}>{em.snippet}</span>
+                          {visibleTags.map((t,i)=>(
+                            <span key={i} style={{fontSize:9,background:t.bg,color:t.color,padding:"1px 5px",borderRadius:100,flexShrink:0,fontWeight:600,whiteSpace:"nowrap"}}>{t.label}</span>
+                          ))}
+                          {extraTags>0&&<span style={{fontSize:9,background:"#F1EFE8",color:"#8A8178",padding:"1px 5px",borderRadius:100,flexShrink:0}}>+{extraTags}</span>}
                         </div>
                       </div>
                     </div>
-                    <div className="mail-actions" style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",display:"flex",gap:3,opacity:0,transition:"opacity .15s",background:"#FFFFFF",borderRadius:7,padding:"3px 5px",border:"1px solid #EAE6E1"}}>
-                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(em.flags||[]).includes("star")?1:0.35,padding:"1px 2px"}}>⭐</button>
-                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"flag");}} title="Flaggé" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(em.flags||[]).includes("flag")?1:0.35,padding:"1px 2px"}}>🚩</button>
-                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title="À traiter" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:em.aTraiter?1:0.35,padding:"1px 2px"}}>📋</button>
-                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title={em.unread?"Marquer comme lu":"Marquer comme non lu"} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:em.unread?1:0.35,padding:"1px 2px"}}>●</button>
+                    {/* Actions au survol */}
+                    <div className="mail-actions" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",display:"flex",gap:2,opacity:0,transition:"opacity .15s",background:"#FFFFFF",borderRadius:7,padding:"3px 4px",border:"1px solid #EAE6E1",boxShadow:"0 1px 6px rgba(0,0,0,.08)"}}>
+                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(em.flags||[]).includes("star")?1:0.35,padding:"2px 3px"}}>⭐</button>
+                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"flag");}} title="Flaggé" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(em.flags||[]).includes("flag")?1:0.35,padding:"2px 3px"}}>🚩</button>
+                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title="À traiter" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:em.aTraiter?1:0.35,padding:"2px 3px"}}>📋</button>
+                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title={em.unread?"Lu":"Non lu"} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.5,padding:"2px 3px"}}>●</button>
+                      <div style={{width:"0.5px",background:"#EAE6E1",margin:"2px 1px"}}/>
+                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#DC2626",padding:"2px 3px",opacity:0.7}}>✕</button>
                     </div>
                   </div>
-                ))}
+                );})}
               </div>
             </div>
             )}
@@ -2558,7 +2600,10 @@ FORMAT
                           </div>
                         : editing
                           ? <textarea value={editReply} onChange={e=>setEditReply(e.target.value)} style={{width:"100%",padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,border:"none",outline:"none",resize:"vertical",background:"transparent",minHeight:200}}/>
-                          : <div style={{padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{reply}</div>
+                          : <div>
+                              <div style={{padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{reply}</div>
+                              {repliesCache[sel?.id]?.dateGen&&<div style={{padding:"0 20px 12px",fontSize:11,color:"#A09890"}}>Générée le {repliesCache[sel.id].dateGen}</div>}
+                            </div>
                     }
                     <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #EAE6E1",background:"#F5F3EF",flexWrap:"wrap"}}>
                       {reply && <><button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+(editing?editReply:reply)); setDrafted(p=>new Set([...p,sel.id])); toast("Brouillon créé dans Gmail ✓"); }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
