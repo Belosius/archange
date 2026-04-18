@@ -1595,23 +1595,24 @@ FORMAT
 
       {/* Nav principale — collapsible */}
       <aside style={{width:navCollapsed?60:200,background:"#1C1814",display:"flex",flexDirection:"column",flexShrink:0,transition:"width .3s cubic-bezier(.4,0,.2,1)",overflow:"hidden",borderRight:"1px solid rgba(209,196,178,0.08)"}}>
-        <div style={{padding:navCollapsed?"16px 0 12px":"28px 20px 20px",display:"flex",alignItems:"center",justifyContent:navCollapsed?"center":"space-between",flexShrink:0,borderBottom:"1px solid rgba(209,196,178,0.06)"}}>
-          {!navCollapsed&&<div><div style={{fontSize:11,fontWeight:700,color:"#D1C4B2",letterSpacing:"0.28em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif"}}>ARCHANGE</div><div style={{fontSize:8,color:"rgba(209,196,178,0.28)",marginTop:5,letterSpacing:"0.18em",textTransform:"uppercase"}}>RÊVA · AGENT IA</div></div>}
-          <button onClick={()=>setNavCollapsed(v=>!v)} title={navCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"rgba(209,196,178,0.07)",color:"rgba(209,196,178,0.35)",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <div style={{padding:navCollapsed?"16px 0 12px":"24px 18px 16px",display:"flex",alignItems:"center",justifyContent:navCollapsed?"center":"space-between",flexShrink:0,borderBottom:"1px solid rgba(209,196,178,0.06)"}}>
+          {!navCollapsed&&<div><div style={{fontSize:12,fontWeight:700,color:"#D1C4B2",letterSpacing:"0.22em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif"}}>ARCHANGE</div><div style={{fontSize:10,color:"rgba(209,196,178,0.45)",marginTop:4,letterSpacing:"0.12em",textTransform:"uppercase"}}>RÊVA · AGENT IA</div></div>}
+          <button onClick={()=>setNavCollapsed(v=>!v)} title={navCollapsed?"Agrandir":"Réduire"} style={{width:24,height:24,borderRadius:6,border:"none",background:"rgba(209,196,178,0.08)",color:"rgba(209,196,178,0.5)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             {navCollapsed?"›":"‹"}
           </button>
         </div>
-        <div style={{flex:1,padding:navCollapsed?"8px 6px":"12px 10px",display:"flex",flexDirection:"column",gap:1,overflowY:"auto"}}>
+        <div style={{flex:1,padding:navCollapsed?"8px 6px":"10px 8px",display:"flex",flexDirection:"column",gap:2,overflowY:"auto"}}>
           {NAV.map(n=>(
-            <button key={n.id} onClick={()=>{setView(n.id);setSubCollapsed(false);}} title={navCollapsed?n.label:undefined} style={{display:"flex",alignItems:"center",gap:navCollapsed?0:10,width:"100%",padding:navCollapsed?"11px 0":"10px 12px",borderRadius:8,border:"none",background:view===n.id?"rgba(209,196,178,0.1)":"transparent",color:view===n.id?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,textAlign:"left",cursor:"pointer",justifyContent:navCollapsed?"center":"flex-start",position:"relative",transition:"all .15s",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:view===n.id?600:400}}>
-              <span style={{fontSize:15,opacity:.8,fontFamily:"serif"}}>{n.icon}</span>
-              {!navCollapsed&&<><span style={{flex:1}}>{n.label}</span>{n.badge>0&&<span style={{fontSize:9,background:view===n.id?"rgba(209,196,178,0.15)":"rgba(209,196,178,0.06)",color:view===n.id?"#D1C4B2":"rgba(209,196,178,0.3)",padding:"2px 7px",borderRadius:100,fontWeight:700,letterSpacing:"0.04em"}}>{n.badge}</span>}</>}              {navCollapsed&&n.badge>0&&<span style={{position:"absolute",top:6,right:6,width:6,height:6,borderRadius:"50%",background:"#C9A96E"}}/>}
+            <button key={n.id} onClick={()=>{setView(n.id);setSubCollapsed(false);}} title={navCollapsed?n.label:undefined} className="nav-btn" style={{display:"flex",alignItems:"center",gap:navCollapsed?0:10,width:"100%",padding:navCollapsed?"11px 0":"10px 14px",borderRadius:8,border:"none",background:view===n.id?"rgba(209,196,178,0.12)":"transparent",color:view===n.id?"#E8DFD0":"rgba(209,196,178,0.75)",fontSize:12,textAlign:"left",cursor:"pointer",justifyContent:navCollapsed?"center":"flex-start",position:"relative",transition:"all .15s",letterSpacing:"0.04em",textTransform:"uppercase",fontWeight:view===n.id?600:500}}>
+              <span style={{fontSize:14,opacity:view===n.id?1:.7}}>{n.icon}</span>
+              {!navCollapsed&&<><span style={{flex:1}}>{n.label}</span>{n.badge>0&&<span style={{fontSize:10,background:view===n.id?"rgba(201,169,110,0.25)":"rgba(209,196,178,0.1)",color:view===n.id?"#C9A96E":"rgba(209,196,178,0.55)",padding:"2px 7px",borderRadius:100,fontWeight:700}}>{n.badge}</span>}</>}
+              {navCollapsed&&n.badge>0&&<span style={{position:"absolute",top:6,right:6,width:6,height:6,borderRadius:"50%",background:"#C9A96E"}}/>}
             </button>
           ))}
         </div>
-        {!navCollapsed&&<div style={{padding:"16px 20px",borderTop:"1px solid rgba(209,196,178,0.06)",flexShrink:0}}>
-          <div style={{fontSize:9,color:"rgba(209,196,178,0.22)",lineHeight:1.9,letterSpacing:"0.08em"}}>133 Av. de France<br/>75013 Paris</div>
-          <button onClick={()=>signOut({callbackUrl:"/"})} style={{marginTop:8,width:"100%",padding:"6px 0",borderRadius:6,border:"1px solid rgba(209,196,178,0.12)",background:"transparent",color:"rgba(209,196,178,0.35)",fontSize:9,letterSpacing:"0.08em",cursor:"pointer",textTransform:"uppercase"}}>⎋ Déconnexion</button>
+        {!navCollapsed&&<div style={{padding:"14px 18px",borderTop:"1px solid rgba(209,196,178,0.08)",flexShrink:0}}>
+          <div style={{fontSize:11,color:"rgba(209,196,178,0.45)",lineHeight:1.7,letterSpacing:"0.02em"}}>133 Av. de France<br/>75013 Paris</div>
+          <button onClick={()=>signOut({callbackUrl:"/"})} style={{marginTop:10,width:"100%",padding:"7px 0",borderRadius:7,border:"1px solid rgba(209,196,178,0.15)",background:"transparent",color:"rgba(209,196,178,0.55)",fontSize:11,letterSpacing:"0.06em",cursor:"pointer",textTransform:"uppercase",fontWeight:500}}>⎋ Déconnexion</button>
         </div>}
       </aside>
 
