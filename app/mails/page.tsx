@@ -2223,7 +2223,7 @@ FORMAT
               <div style={{flex:1,display:"flex",overflow:"hidden"}}>
 
                 {/* ── Panel gauche — liste des cartes ── */}
-                <div style={{width:560,flexShrink:0,overflowY:"auto",background:"#F5F3EF",padding:"20px 20px",borderRight:"1px solid #EAE6E1"}}>
+                <div style={{flex:radarSelEmail?undefined:1,width:radarSelEmail?560:undefined,flexShrink:0,overflowY:"auto",background:"#F5F3EF",padding:"20px 20px",borderRight:radarSelEmail?"1px solid #EAE6E1":"none"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                     <div>
                       <div style={{fontSize:18,fontWeight:300,color:"#1C1814",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.01em"}}>Radar ARCHANGE</div>
@@ -2351,14 +2351,9 @@ FORMAT
                   })()}
                 </div>
 
-                {/* ── Panel droit — mail sélectionné ── */}
+                {/* ── Panel droit — mail sélectionné (uniquement si sélection) ── */}
+                {radarSelEmail && (
                 <div style={{flex:1,overflowY:"auto",background:"#EEEAE4"}}>
-                  {!radarSelEmail ? (
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:10,color:"#8A8178"}}>
-                      <div style={{fontSize:36}}>◆</div>
-                      <div style={{fontSize:14}}>Cliquez sur une carte pour voir le mail</div>
-                    </div>
-                  ) : (
                     <div style={{maxWidth:720,margin:"0 auto",padding:"24px 24px 60px"}}>
                       <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",overflow:"hidden"}}>
                         <div style={{padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:"1px solid #EAE6E1"}}>
@@ -2380,8 +2375,8 @@ FORMAT
                         </div>
                       </div>
                     </div>
-                  )}
                 </div>
+                )}
 
               </div>
             )}
