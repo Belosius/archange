@@ -330,14 +330,54 @@ function stripHtml(raw: string): string {
 function sanitizeHtmlForDisplay(raw: string): string {
   if (!raw) return "";
   return raw
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, "")
-    .replace(/javascript:/gi, "void:")
-    .replace(/<meta[^>]*http-equiv[^>]*>/gi, "");
+    .replace(/<script[\s\S]*?<\/script>/gi, "")           // scripts
+    .replace(/<head[\s\S]*?<\/head>/gi, "")               // head complet (évite les CSS globaux)
+    .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, "")        // event handlers inline
+    .replace(/\son\w+\s*=\s*[^\s>]*/gi, "")               // event handlers sans guillemets
+    .replace(/javascript\s*:/gi, "void:")                  // js: dans href
+    .replace(/<meta[^>]*http-equiv[^>]*>/gi, "")           // meta refresh
+    .replace(/<link[^>]*rel\s*=\s*["']?stylesheet["']?[^>]*>/gi, "") // feuilles CSS externes
+    .replace(/url\s*\(\s*["']?\s*data:/gi, "url(data:")   // garder les data: URLs inline
+    .replace(/<iframe[^>]*src[^>]*>/gi, "")               // iframes externes
+    .replace(/expression\s*\(/gi, "");                     // CSS expressions IE
 }
 
 // Alias pour compatibilité — retourne toujours du texte propre
 function cleanEmailBody(raw: string): string { return stripHtml(raw); }
+
+// ─── Rendu texte brut enrichi — URLs, emails, tél cliquables ────────────────
+function renderPlainText(text: string): React.ReactNode[] {
+  if (!text) return [];
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g;
+  const emailRegex = /([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g;
+  const telRegex = /(\+?[\d][\d\s\-\.]{7,}[\d])/g;
+  const lines = text.split("\n");
+  return lines.map((line, li) => {
+    // Remplacer URLs, emails, tels par des éléments React cliquables
+    const parts: React.ReactNode[] = [];
+    let remaining = line;
+    let key = 0;
+    const allMatches: {index:number, len:number, node:React.ReactNode}[] = [];
+    let m: RegExpExecArray|null;
+    const rx = /(https?:\/\/[^\s<>"{}|\\^`\[\]]+)|([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g;
+    while ((m = rx.exec(line)) !== null) {
+      if (m[1]) allMatches.push({index:m.index, len:m[1].length, node:<a key={key++} href={m[1]} target="_blank" rel="noopener noreferrer" style={{color:"#2563EB",textDecoration:"underline"}}>{m[1]}</a>});
+      else if (m[2]) allMatches.push({index:m.index, len:m[2].length, node:<a key={key++} href={`mailto:${m[2]}`} style={{color:"#2563EB",textDecoration:"underline"}}>{m[2]}</a>});
+    }
+    if (allMatches.length === 0) {
+      parts.push(<span key="t">{line}</span>);
+    } else {
+      let cursor = 0;
+      allMatches.forEach(({index,len,node}) => {
+        if (index > cursor) parts.push(<span key={key++}>{line.slice(cursor,index)}</span>);
+        parts.push(node);
+        cursor = index + len;
+      });
+      if (cursor < line.length) parts.push(<span key={key++}>{line.slice(cursor)}</span>);
+    }
+    return <React.Fragment key={li}>{parts}{li < lines.length-1 && "\n"}</React.Fragment>;
+  });
+}
 
 
 const Spin = ({s=16}: {s?: number}) => (
@@ -2494,62 +2534,120 @@ FORMAT
                   <div style={{fontSize:14}}>Sélectionnez un email</div>
                 </div>
               ) : (
-                <div style={{maxWidth:720,margin:"0 auto",padding:"24px 24px 60px"}}>
+                <div style={{maxWidth:720,margin:"0 auto",padding:"16px 20px 60px"}}>
 
-                  {/* Header mail */}
-                  <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",marginBottom:16,overflow:"hidden"}}>
-                    <div style={{padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:"1px solid #EAE6E1"}}>
-                      <div style={{display:"flex",gap:12,alignItems:"center"}}>
-                        <Avatar name={sel.from} size={42}/>
-                        <div>
-                          <div style={{fontSize:13,fontWeight:600,color:"#1C1814",letterSpacing:"-0.01em"}}>{sel.from}</div>
-                          <div style={{fontSize:12,color:"#8A8178"}}>{sel.fromEmail} · {sel.date}</div>
+                  {/* ── Barre d'actions compacte ── */}
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12,padding:"6px 12px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",boxShadow:"0 1px 3px rgba(28,24,20,.04)"}}>
+                    <button onClick={()=>toggleFlag(sel.id,"star")} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(sel.flags||[]).includes("star")?1:0.3,padding:"3px 6px",borderRadius:6}}>⭐</button>
+                    <button onClick={()=>toggleFlag(sel.id,"flag")} title="Flaggé" style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(sel.flags||[]).includes("flag")?1:0.3,padding:"3px 6px",borderRadius:6}}>🚩</button>
+                    <div style={{width:1,height:16,background:"#EAE6E1",margin:"0 2px"}}/>
+                    <button onClick={()=>toggleUnread(sel.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.unread?"#EFF6FF":"#F5F3EF",color:sel.unread?"#1D4ED8":"#5C564F",cursor:"pointer",fontWeight:sel.unread?600:400}}>
+                      {sel.unread?"● Non lu":"○ Marquer non lu"}
+                    </button>
+                    <button onClick={()=>toggleATraiter(sel.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.aTraiter?"#DBEAFE":"#F5F3EF",color:sel.aTraiter?"#2563EB":"#5C564F",cursor:"pointer",fontWeight:sel.aTraiter?600:400}}>
+                      📋 {sel.aTraiter?"À traiter":"Traiter"}
+                    </button>
+                    <div style={{flex:1}}/>
+                    <button onClick={()=>{ deleteEmailWithUndo(sel); }} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer"}}>🗑 Supprimer</button>
+                  </div>
+
+                  {/* ── En-tête email restructuré ── */}
+                  <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",marginBottom:12,overflow:"hidden"}}>
+                    <div style={{padding:"18px 20px 14px"}}>
+                      {/* Ligne expéditeur + avatar */}
+                      <div style={{display:"flex",gap:14,alignItems:"flex-start",marginBottom:12}}>
+                        <Avatar name={sel.from} size={46}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:15,fontWeight:700,color:"#1C1814",marginBottom:2}}>{sel.from||"(inconnu)"}</div>
+                          <div style={{fontSize:12,color:"#8A8178",marginBottom:1}}>{sel.fromEmail}</div>
+                          <div style={{fontSize:11,color:"#A09890"}}>
+                            À : moi · {sel.date}
+                          </div>
                         </div>
                       </div>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <button onClick={()=>toggleFlag(sel.id,"star")} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,opacity:(sel.flags||[]).includes("star")?1:0.25}}>⭐</button>
-                        <button onClick={()=>toggleFlag(sel.id,"flag")} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,opacity:(sel.flags||[]).includes("flag")?1:0.25}}>🚩</button>
-                        <button onClick={()=>toggleUnread(sel.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.unread?"#EFF6FF":"#F5F3EF",color:sel.unread?"#1D4ED8":"#8A8178",cursor:"pointer",fontWeight:sel.unread?600:400}}>● {sel.unread?"Non lu":"Marquer non lu"}</button>
-                        <button onClick={()=>toggleATraiter(sel.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.aTraiter?"#EFF6FF":"#F5F3EF",color:sel.aTraiter?"#2563EB":"#8A8178",cursor:"pointer",fontWeight:sel.aTraiter?600:400}}>📋 {sel.aTraiter?"À traiter":"Marquer à traiter"}</button>
-                        <button onClick={()=>{ if(!window.confirm("Supprimer cet email de l'app ? (Pas supprimé de Gmail)")) return; const upd=emails.filter(m=>m.id!==sel.id); saveEmails(upd); setSel(null); toast("Email supprimé de l'app"); }} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer",marginLeft:"auto"}}>🗑 Supprimer</button>
+                      {/* Objet */}
+                      <div style={{fontSize:17,fontWeight:700,color:"#1C1814",lineHeight:1.35,paddingTop:10,borderTop:"1px solid #F0EDE8"}}>
+                        {sel.subject||"(sans objet)"}
                       </div>
                     </div>
-                    <div style={{padding:"16px 20px"}}>
-                      <div style={{fontSize:16,fontWeight:600,color:"#1C1814",marginBottom:14}}>{sel.subject}</div>
-                      {/* Corps email — HTML rendu en iframe ou texte propre */}
-                      {sel.bodyHtml
-                        ? <iframe
-                            srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'DM Sans',system-ui,sans-serif;font-size:14px;color:#3D3530;line-height:1.7;padding:8px 0;margin:0;word-break:break-word;}img{max-width:100%!important;height:auto!important;}a{color:#C9A96E;}table{max-width:100%;border-collapse:collapse;}td,th{padding:4px 8px;}*{box-sizing:border-box;}</style></head><body>${sel.bodyHtml}</body></html>`}
-                            sandbox="allow-same-origin allow-popups"
-                            style={{width:"100%",border:"none",minHeight:200,display:"block"}}
-                            onLoad={e=>{const f=e.currentTarget;try{f.style.height=(f.contentDocument?.body?.scrollHeight||400)+"px";}catch{}}}
-                          />
-                        : <div style={{fontSize:14,color:"#5C564F",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{sel.body||sel.snippet}</div>
-                      }
-                      {/* Pièces jointes */}
-                      {(sel.attachments||[]).length > 0 && (
-                        <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid #EAE6E1"}}>
-                          <div style={{fontSize:11,fontWeight:600,color:"#8A8178",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>📎 Pièces jointes ({sel.attachments.length})</div>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                            {sel.attachments.map((att: any, i: number) => {
-                              const ext = (att.filename||att.name||"").split(".").pop()?.toLowerCase() || "";
-                              const icons: Record<string,string> = {pdf:"📄",doc:"📝",docx:"📝",xls:"📊",xlsx:"📊",ppt:"📋",pptx:"📋",jpg:"🖼",jpeg:"🖼",png:"🖼",gif:"🖼",webp:"🖼",zip:"🗜",csv:"📊",txt:"📃"};
-                              const icon = icons[ext] || "📎";
-                              const size = att.size ? (att.size > 1048576 ? (att.size/1048576).toFixed(1)+" Mo" : Math.round(att.size/1024)+" Ko") : "";
-                              return (
-                                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#F5F3EF",borderRadius:8,border:"1px solid #EAE6E1",fontSize:12,color:"#3D3530",maxWidth:220}}>
-                                  <span style={{fontSize:16,flexShrink:0}}>{icon}</span>
-                                  <div style={{overflow:"hidden"}}>
-                                    <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{att.filename||att.name||"Fichier"}</div>
-                                    {size&&<div style={{fontSize:10,color:"#8A8178"}}>{size}</div>}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                  </div>
+
+                  {/* ── Corps email ── */}
+                  <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",marginBottom:12,overflow:"hidden"}}>
+                    <div style={{padding:"20px"}}>
+                      {sel.bodyHtml ? (
+                        /* Rendu HTML natif via iframe sandboxée */
+                        <iframe
+                          key={sel.id}
+                          srcDoc={`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    color: #3D3530;
+    line-height: 1.7;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+  img { max-width: 100% !important; height: auto !important; display: block; }
+  a { color: #2563EB; }
+  table { max-width: 100% !important; border-collapse: collapse; }
+  td, th { word-break: break-word; }
+  /* Centrer les emails avec table wrapper */
+  table[width="100%"] { width: 100% !important; }
+  /* Masquer les pixels de tracking */
+  img[width="1"], img[height="1"], img[width="0"], img[height="0"] { display: none !important; }
+</style>
+</head>
+<body>${sel.bodyHtml}</body>
+</html>`}
+                          sandbox="allow-same-origin allow-popups"
+                          style={{width:"100%",border:"none",display:"block",minHeight:100}}
+                          onLoad={e=>{
+                            const f = e.currentTarget;
+                            try {
+                              const h = f.contentDocument?.documentElement?.scrollHeight || f.contentDocument?.body?.scrollHeight || 400;
+                              f.style.height = (h + 20) + "px";
+                            } catch {}
+                          }}
+                        />
+                      ) : (
+                        /* Rendu texte brut enrichi */
+                        <div style={{fontSize:15,color:"#3D3530",lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:"inherit"}}>
+                          {renderPlainText(sel.body||sel.snippet||"")}
                         </div>
                       )}
                     </div>
+
+                    {/* Pièces jointes */}
+                    {(sel.attachments||[]).length > 0 && (
+                      <div style={{padding:"14px 20px",borderTop:"1px solid #EAE6E1",background:"#FAFAF9"}}>
+                        <div style={{fontSize:11,fontWeight:600,color:"#8A8178",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>📎 Pièces jointes ({sel.attachments.length})</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                          {sel.attachments.map((att: any, i: number) => {
+                            const ext = (att.filename||att.name||"").split(".").pop()?.toLowerCase() || "";
+                            const icons: Record<string,string> = {pdf:"📄",doc:"📝",docx:"📝",xls:"📊",xlsx:"📊",ppt:"📋",pptx:"📋",jpg:"🖼",jpeg:"🖼",png:"🖼",gif:"🖼",webp:"🖼",zip:"🗜",csv:"📊",txt:"📃"};
+                            const icon = icons[ext] || "📎";
+                            const size = att.size ? (att.size > 1048576 ? (att.size/1048576).toFixed(1)+" Mo" : Math.round(att.size/1024)+" Ko") : "";
+                            return (
+                              <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#F5F3EF",borderRadius:8,border:"1px solid #EAE6E1",fontSize:12,color:"#3D3530",maxWidth:220}}>
+                                <span style={{fontSize:16,flexShrink:0}}>{icon}</span>
+                                <div style={{overflow:"hidden"}}>
+                                  <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{att.filename||att.name||"Fichier"}</div>
+                                  {size&&<div style={{fontSize:10,color:"#8A8178"}}>{size}</div>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Bannière détection réservation */}
