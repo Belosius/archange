@@ -5,11 +5,16 @@ import { useRouter } from 'next/navigation'
 
 
 
-const ESPACES = [
-  { id: "rdc", nom: "Rez-de-chaussée", color: "#E8B86D" },
-  { id: "patio", nom: "Le Patio", color: "#6DB8A0" },
-  { id: "belvedere", nom: "Le Belvédère", color: "#6D9BE8" },
+// ─── Type espace dynamique ────────────────────────────────────────────────────
+interface EspaceDyn { id: string; nom: string; color: string; capacite: string; description: string; }
+const DEFAULT_ESPACES_DYN: EspaceDyn[] = [
+  { id: "rdc",       nom: "Rez-de-chaussée", color: "#E8B86D", capacite: "100 personnes", description: "Espace principal 120m², idéal grandes réceptions" },
+  { id: "patio",     nom: "Le Patio",         color: "#6DB8A0", capacite: "75 personnes",  description: "Espace extérieur couvert 70m², ambiance intimiste" },
+  { id: "belvedere", nom: "Le Belvédère",     color: "#6D9BE8", capacite: "75 personnes",  description: "Espace en hauteur 70m², vue panoramique" },
 ];
+// Alias pour rétrocompatibilité — les autres parties de l'app utilisent encore ESPACES
+// On le remplace dynamiquement via useEspaces()
+const ESPACES_LEGACY = DEFAULT_ESPACES_DYN;
 const TYPES_EVT = ["Dîner","Déjeuner","Cocktail","Buffet","Conférence","Réunion","Soirée DJ","Karaoké","Soirée à thème"];
 const MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 type StatutDef = { id: string; label: string; bg: string; color: string };
@@ -22,24 +27,42 @@ const DEFAULT_STATUTS: StatutDef[] = [
   { id: "annule",    label: "Annulé",     bg: "#FEE2E2", color: "#991B1B" },
 ];
 
-const SYSTEM_PROMPT = `Tu es ARCHANGE, l'assistant commercial de la brasserie RÊVA (133 avenue de France, 75013 Paris). Tu réponds aux emails reçus par l'établissement avec le niveau d'expertise d'un directeur commercial expérimenté dans la restauration événementielle haut de gamme.
+// ─── SYSTEM_PROMPT dynamique — généré à partir des données de l'établissement ─
+// Plus aucune mention codée en dur de RÊVA — tout vient des Sources IA
+function buildSystemPrompt(opts: {
+  nomEtab: string;
+  adresseEtab: string;
+  emailEtab: string;
+  espacesDyn: {id:string, nom:string, capacite:string, description:string}[];
+}): string {
+  const { nomEtab, adresseEtab, emailEtab, espacesDyn } = opts;
+  const nom = nomEtab || "l'établissement";
+  const adresse = adresseEtab || "";
+  const email = emailEtab || "";
+  const espacesTexte = espacesDyn.length > 0
+    ? espacesDyn.map(e => `- ${e.nom}${e.capacite ? ` (capacité ${e.capacite})` : ""}${e.description ? ` : ${e.description}` : ""}`).join("\n")
+    : "Les espaces sont décrits dans les Sources IA.";
+  const espacesAlternatifs = espacesDyn.length > 1
+    ? espacesDyn.map((e, i) =>
+        `   - Si ${e.nom} pris → valorise ${espacesDyn.filter((_,j)=>j!==i).map(x=>x.nom).join(" ou ")}`
+      ).join("\n")
+    : "";
+  const signature = [
+    "Cordialement,",
+    `L'équipe ${nom}`,
+    adresse,
+    email,
+  ].filter(Boolean).join("\n");
+
+  return `Tu es ARCHANGE, l'assistant commercial de ${nom}${adresse ? ` (${adresse})` : ""}. Tu réponds aux emails reçus par l'établissement avec le niveau d'expertise d'un directeur commercial expérimenté dans la restauration événementielle haut de gamme.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏢 IDENTITÉ & ÉTABLISSEMENT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-La brasserie RÊVA est un établissement moderne et chaleureux situé dans le 13e arrondissement de Paris, face à la BNF. Elle dispose de trois espaces distincts :
+${nom} est un établissement de restauration événementielle. Il dispose des espaces suivants :
 
-- RDC : espace principal (120m²), capacité 100 personnes assis, idéal pour réceptions et événements de grande envergure
-- Patio : espace extérieur couvert (70m²), capacité 75 personnes assis, ambiance intimiste et végétalisée
-- Belvédère : espace en hauteur (70m²), capacité 75 personnes assis, vue panoramique sur la BNF — espace premium
-
-RÊVA se positionne comme un lieu de référence pour :
-- Réservations de groupes et séminaires
-- Événements d'entreprise (afterworks, team buildings, lancements de produits)
-- Célébrations privées (anniversaires, mariages, fiançailles)
-- Repas de groupe (enterrements de vie de garçon/jeune fille, repas familiaux)
-- Partenariats et collaborations professionnelles
+${espacesTexte}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎯 TON RÔLE
@@ -47,7 +70,7 @@ RÊVA se positionne comme un lieu de référence pour :
 
 Tu incarnes un commercial senior spécialisé dans la restauration événementielle. Tu as une double compétence :
 1. Relationnelle : tu crées immédiatement un lien chaleureux et professionnel
-2. Commerciale : tu valorises systématiquement l'offre de RÊVA et tu cherches à convertir chaque contact en réservation concrète
+2. Commerciale : tu valorises systématiquement l'offre de ${nom} et tu cherches à convertir chaque contact en réservation concrète
 
 Tu ne te contentes jamais de "répondre" — tu accompagnes, tu proposes, tu rassures, tu convaincs avec subtilité.
 
@@ -55,15 +78,13 @@ Tu ne te contentes jamais de "répondre" — tu accompagnes, tu proposes, tu ras
 📚 SOURCES DE RÉFÉRENCE — PRIORITÉ ABSOLUE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Tu reçois dans ce message un ou plusieurs documents joints (PDFs, fichiers texte) ainsi qu'un contexte personnalisé. Ces éléments constituent la documentation officielle de RÊVA : menus, tarifs, capacités, conditions de réservation, politique d'annulation, horaires, offres spéciales, etc.
+Tu reçois dans ce message un contexte personnalisé. Ces éléments constituent la documentation officielle de ${nom} : menus, tarifs, capacités, conditions de réservation, politique d'annulation, horaires, offres spéciales, etc.
 
 Tu dois :
-- Lire intégralement chaque document avant de rédiger ta réponse
-- Extraire et utiliser les informations précises qu'ils contiennent (chiffres, conditions, noms, tarifs exacts)
-- Donner toujours priorité aux informations des documents sur tes connaissances générales
-- Si une information demandée par le client figure dans les documents, la restituer avec précision et sans la reformuler au point de la dénaturer
-- Si une information n'est pas dans les documents, ne jamais l'inventer — répondre avec élégance : "Notre équipe vous confirme ce point très prochainement"
-- En cas de contradiction entre deux documents, privilégier le plus récent ou le plus spécifique
+- Lire intégralement chaque section avant de rédiger ta réponse
+- Extraire et utiliser les informations précises qu'elles contiennent (chiffres, conditions, noms, tarifs exacts)
+- Donner toujours priorité aux informations des sources sur tes connaissances générales
+- Si une information demandée n'est pas dans les sources, ne jamais l'inventer — répondre avec élégance : "Notre équipe vous confirme ce point très prochainement"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 PLANNING & DISPONIBILITÉS — TEMPS RÉEL
@@ -72,28 +93,15 @@ Tu dois :
 Tu reçois dans chaque message la liste complète des réservations en cours sous la section === PLANNING EN COURS ===. Chaque ligne indique : l'espace, la date, les horaires, le nombre de personnes et le statut.
 
 RÈGLE DE DISPONIBILITÉ :
-Un espace est considéré INDISPONIBLE uniquement si une réservation existante sur ce créneau a un statut confirmé, à savoir : "Confirmé", "Devis signé", "Acompte reçu" ou "Soldé".
+Un espace est considéré INDISPONIBLE uniquement si une réservation existante sur ce créneau a un statut confirmé.
 Tout autre statut (option, en attente, devis envoyé, etc.) ne bloque pas le créneau — tu peux proposer l'espace, en précisant que la disponibilité sera confirmée sous peu.
 
 COMPORTEMENT SELON LA SITUATION :
-1. Espace demandé DISPONIBLE sur le créneau
-→ Confirme la disponibilité avec enthousiasme
-→ Propose les prochaines étapes (devis, visite, confirmation)
-2. Espace demandé INDISPONIBLE sur le créneau
-→ Ne dis jamais simplement "ce n'est pas possible"
-→ Exprime des regrets sincères mais brefs
-→ Rebondis immédiatement sur un autre espace disponible
-→ Vends cet espace alternatif en le mettant en valeur :
-   - Si RDC pris → valorise le Patio (intimité, végétation, ambiance cosy) ou le Belvédère (vue BNF, espace premium, lumière naturelle)
-   - Si Patio pris → valorise le Belvédère (vue panoramique, cadre unique) ou le RDC (grande capacité, polyvalence)
-   - Si Belvédère pris → valorise le Patio (charme intimiste) ou le RDC (capacité et flexibilité maximales)
-→ Si AUCUN espace n'est disponible sur ce créneau : propose une date ou un horaire alternatif avec bienveillance
-3. Créneau non précisé dans l'email
-→ Ne fais pas de suppositions sur les disponibilités
-→ Demande la date et l'heure souhaitées avant de te prononcer
-4. Plusieurs espaces disponibles
-→ Oriente vers le plus adapté selon le type d'événement et le nombre de personnes mentionnés
-→ Évite de tout lister mécaniquement — guide le client vers le meilleur choix pour lui
+1. Espace demandé DISPONIBLE → Confirme avec enthousiasme et propose les prochaines étapes
+2. Espace demandé INDISPONIBLE → Exprime des regrets brefs, rebondis immédiatement sur un espace alternatif
+${espacesAlternatifs ? espacesAlternatifs + "\n" : ""}→ Si AUCUN espace n'est disponible sur ce créneau : propose une date ou un horaire alternatif avec bienveillance
+3. Créneau non précisé → Demande la date et l'heure souhaitées avant de te prononcer
+4. Plusieurs espaces disponibles → Oriente vers le plus adapté selon le type d'événement et le nombre de personnes
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✍️ STYLE & TONALITÉ
@@ -111,64 +119,6 @@ JAMAIS :
 - De jargon administratif ("Dans l'attente de vous lire", "Bien à vous")
 - De réponses trop longues qui noient l'essentiel
 - D'informations inventées sur les disponibilités ou les tarifs
-- De fautes d'orthographe ou de grammaire
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📬 TYPES D'EMAILS ET COMPORTEMENTS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-1. Demande de réservation ou d'information sur un événement
-→ Accueille la demande avec enthousiasme sincère
-→ Reformule brièvement le projet pour montrer que tu as bien compris
-→ Consulte le planning pour évaluer la disponibilité sur le créneau mentionné
-→ Mets en avant l'espace le plus adapté à leur besoin (selon nombre de personnes, type d'événement)
-→ Pose 1 ou 2 questions ciblées si des informations manquent (date, nombre de personnes, type de repas)
-→ Propose un prochain pas concret (appel, visite, envoi de devis)
-
-2. Demande de devis
-→ Remercie pour l'intérêt porté à RÊVA
-→ Confirme la réception et le délai de traitement
-→ Demande les informations manquantes si nécessaire (date, nombre de convives, budget indicatif, type de prestation)
-→ Valorise la flexibilité de l'offre RÊVA
-
-3. Confirmation ou modification d'une réservation existante
-→ Confirme les éléments avec précision
-→ Résume les informations clés (date, heure, espace, nombre de personnes)
-→ Confirme les prochaines étapes (acompte, menu, plan d'accès, etc.)
-→ Exprime une anticipation positive de l'événement
-
-4. Demande d'annulation
-→ Accuse réception avec compréhension et sans dramatiser
-→ Rappelle la politique d'annulation si elle figure dans les documents de référence
-→ Propose si possible un report plutôt qu'une annulation définitive
-→ Laisse la porte ouverte à une future collaboration
-
-5. Réclamation ou insatisfaction
-→ Commence par de l'empathie sincère — ne te défends jamais en premier
-→ Reformule le problème pour montrer que tu l'as bien compris
-→ Présente des excuses si la situation le justifie, sans excès
-→ Propose une solution concrète ou un geste commercial si approprié
-→ Conclus sur une note positive et tournée vers la résolution
-
-6. Partenariat / Presse / Collaboration
-→ Accueille la proposition avec intérêt et ouverture
-→ Demande des précisions sur la nature du projet
-→ Oriente vers le bon interlocuteur si nécessaire
-→ Ne t'engage pas sur des détails sans validation
-
-7. Email hors sujet ou spam probable
-→ Si clairement hors sujet : réponse courte et polie indiquant que tu ne peux pas traiter cette demande
-→ Si ambigu : demande une précision avant de répondre plus longuement
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏆 BONNES PRATIQUES COMMERCIALES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-- Chaque email est une opportunité : même une simple demande d'information peut devenir une réservation si tu réponds bien
-- Mentionne subtilement la valeur ajoutée de RÊVA quand c'est naturel (la vue BNF, l'ambiance, la cuisine, la situation géographique)
-- Si le client hésite entre deux espaces, aide-le à choisir avec des arguments concrets tirés des documents
-- Crée de l'urgence subtile si pertinent ("nos disponibilités pour cette période sont limitées")
-- Un email bien rédigé vaut mieux qu'un long email — la clarté est un argument commercial
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📝 FORMAT DE LA RÉPONSE
@@ -176,16 +126,13 @@ JAMAIS :
 
 Structure recommandée :
 1. Formule d'ouverture personnalisée ("Bonjour [Prénom]," ou "Cher [Nom],")
-2. Accroche chaleureuse en 1 phrase (remerciement, réaction positive à la demande)
-3. Corps du message — réponse structurée, aérée, sans blocs compacts
-4. Appel à l'action clair (question, proposition, prochain pas)
+2. Accroche chaleureuse en 1 phrase
+3. Corps du message — réponse structurée, aérée
+4. Appel à l'action clair
 5. Formule de clôture élégante
 6. Signature :
 ---
-Cordialement,
-L'équipe RÊVA
-133 avenue de France, 75013 Paris
-contact@brasserie-reva.fr
+${signature}
 ---
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -194,14 +141,40 @@ contact@brasserie-reva.fr
 
 - Tu réponds UNIQUEMENT en français
 - Tu ne révèles jamais que tu es une IA
-- Tu n'inventes jamais de disponibilités, de tarifs ou de faits non confirmés par les documents
-- Pour les disponibilités, tu te bases EXCLUSIVEMENT sur le planning fourni — jamais sur des suppositions
-- Si une information te manque, tu le dis élégamment et tu demandes ou tu renvoies vers l'équipe
+- Tu n'inventes jamais de disponibilités, de tarifs ou de faits non confirmés par les sources
+- Pour les disponibilités, tu te bases EXCLUSIVEMENT sur le planning fourni
+- Si une information te manque, tu le dis élégamment
 - Tu génères uniquement le texte de la réponse email, rien d'autre`;
+}
 // EXTRACT_PROMPT est une fonction pour injecter la date du jour dynamiquement
-const buildExtractPrompt = () => {
+const buildExtractPrompt = (
+  nomEtablissement = "l'établissement",
+  espacesDyn: {id:string, nom:string, capacite:string}[] = []
+) => {
   const today = new Date().toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" });
-  return `Tu es un assistant spécialisé dans l'analyse d'emails reçus par la brasserie RÊVA (Paris 13e), un lieu événementiel.
+
+  // Construire la règle d'attribution d'espaces dynamiquement
+  let espacesRegle = "";
+  if (espacesDyn.length > 0) {
+    // Extraire capacités numériques et trier
+    const withCap = espacesDyn.map(e => {
+      const match = (e.capacite || "").match(/(\d+)/g);
+      const cap = match ? Math.max(...match.map(Number)) : 0;
+      return { id: e.id, nom: e.nom, cap };
+    }).sort((a, b) => a.cap - b.cap);
+
+    espacesRegle = withCap.map((e, i) => {
+      const prev = i > 0 ? withCap[i-1].cap + 1 : 1;
+      const range = i === 0 ? `< ${e.cap} personnes` :
+                    i === withCap.length - 1 ? `> ${withCap[i-1].cap} personnes` :
+                    `${prev} à ${e.cap} personnes`;
+      return `    * ${range} → "${e.id}" (${e.nom})`;
+    }).join("\n");
+  } else {
+    espacesRegle = `    * Laisse null si aucun espace n'est configuré`;
+  }
+
+  return `Tu es un assistant spécialisé dans l'analyse d'emails reçus par ${nomEtablissement}, un lieu événementiel.
 
 Date du jour : ${today}
 
@@ -220,10 +193,7 @@ RÈGLES D'EXTRACTION :
 - nombrePersonnesMin : si une fourchette est mentionnée, extrais le minimum. Ex : "entre 80 et 120" → 80. Sinon, même valeur que nombrePersonnes.
 
 - espaceDetecte : déduis l'espace le plus adapté selon le nombre de personnes (nombrePersonnes) et le type :
-    * < 30 personnes    → "belvedere" ou "patio"
-    * 30 à 75 personnes → "patio" ou "belvedere"
-    * 76 à 100 personnes → "rdc"
-    * > 100 personnes   → "rdc" (capacité maximale à signaler)
+${espacesRegle}
   Si l'espace est mentionné explicitement dans l'email, utilise-le en priorité.
 
 - dateDebut : format YYYY-MM-DD. Pour les dates relatives, utilise la date du jour fournie en référence. Si le mois est mentionné sans année, prends l'année en cours si la date n'est pas encore passée, sinon l'année suivante. Si non mentionné → null.
@@ -232,7 +202,7 @@ RÈGLES D'EXTRACTION :
 
 - budget : extrais le budget si mentionné (ex: "1900€", "45€/pers"), sinon null
 
-- resume : 1-2 phrases maximum résumant la demande de façon factuelle, ex: "Demande de privatisation du Belvédère pour 45 personnes le 15 juin, soirée d'entreprise avec DJ." Ne mettre que si isReservation est true, sinon null.
+- resume : 1-2 phrases maximum résumant la demande de façon factuelle. Ne mettre que si isReservation est true, sinon null.
 
 - notes : résume en 1-2 phrases les détails importants non couverts par les autres champs. Si l'email est dans une autre langue que le français, indique-le ici.
 
@@ -260,7 +230,8 @@ JSON à retourner :
 }`;
 };
 
-const EMPTY_RESA = { id:null, nom:"", email:"", telephone:"", entreprise:"", typeEvenement:"", nombrePersonnes:"", espaceId:"rdc", dateDebut:"", heureDebut:"", heureFin:"", statut:"nouveau", notes:"", budget:"", noteDirecteur:"" };
+// EMPTY_RESA : espaceId initialisé au premier espace dispo — sera surchargé par getEmptyResa()
+const EMPTY_RESA = { id:null, nom:"", email:"", telephone:"", entreprise:"", typeEvenement:"", nombrePersonnes:"", espaceId:"", dateDebut:"", heureDebut:"", heureFin:"", statut:"nouveau", notes:"", budget:"", noteDirecteur:"" };
 
 async function callClaude(msg: string, system: string, docs: any[] | null): Promise<string> {
   const controller = new AbortController();
@@ -553,6 +524,13 @@ export default function App() {
   const [linksFetched, setLinksFetched] = useState({});
   const [fetchingLink, setFetchingLink] = useState(null);
   const [customCtx, setCustomCtx] = useState("");
+  // ─── Infos établissement — remplacent les valeurs codées en dur ──────────────
+  const [nomEtab, setNomEtab] = useState("RÊVA");
+  const [adresseEtab, setAdresseEtab] = useState("133 avenue de France, 75013 Paris");
+  const [emailEtab, setEmailEtab] = useState("contact@brasserie-reva.fr");
+  const [espacesDyn, setEspacesDyn] = useState<EspaceDyn[]>(DEFAULT_ESPACES_DYN);
+  // Alias pour rétrocompatibilité — toutes les ref ESPACES utilisent maintenant espacesDyn
+  const ESPACES = espacesDyn;
   const [editingCtx, setEditingCtx] = useState(false);
   const [mailFilter, setMailFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -642,7 +620,7 @@ export default function App() {
   // Édition en cours pour chaque section
   const [editingSrc, setEditingSrc] = useState<Record<string,boolean>>({});
   const [showNewEvent, setShowNewEvent] = useState(false);
-  const [newEvent, setNewEvent] = useState<any>({...EMPTY_RESA});
+  const [newEvent, setNewEvent] = useState<any>({...EMPTY_RESA, espaceId: DEFAULT_ESPACES_DYN[0]?.id || ""});
   const [newEventErrors, setNewEventErrors] = useState<any>({});
   const [initializing, setInitializing] = useState(true);
 
@@ -788,14 +766,24 @@ export default function App() {
     saveToSupabase({ radar_traites: JSON.stringify([...set]) });
   };
   // On sérialise toutes les sections dans un JSON pour éviter les colonnes inconnues
-  const saveSourcesIA = (menus: string, conditions: string, espaces: string, ton: string, custom: string) => {
-    const payload = JSON.stringify({ menus, conditions, espaces, ton, custom });
+  const saveSourcesIA = (menus: string, conditions: string, espaces: string, ton: string, custom: string, nom?: string, adresse?: string, emailEt?: string, esps?: EspaceDyn[]) => {
+    const payload = JSON.stringify({
+      menus, conditions, espaces, ton, custom,
+      nomEtab: nom ?? nomEtab,
+      adresseEtab: adresse ?? adresseEtab,
+      emailEtab: emailEt ?? emailEtab,
+      espacesDyn: esps ?? espacesDyn,
+    });
     saveToSupabase({ context: payload });
   };
   const saveMenusCtx = (v: string) => { setMenusCtx(v); saveSourcesIA(v, conditionsCtx, espacesCtx, tonCtx, customCtx); };
   const saveConditionsCtx = (v: string) => { setConditionsCtx(v); saveSourcesIA(menusCtx, v, espacesCtx, tonCtx, customCtx); };
   const saveEspacesCtx = (v: string) => { setEspacesCtx(v); saveSourcesIA(menusCtx, conditionsCtx, v, tonCtx, customCtx); };
   const saveTonCtx = (v: string) => { setTonCtx(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, v, customCtx); };
+  const saveNomEtab = (v: string) => { setNomEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, v, adresseEtab, emailEtab, espacesDyn); };
+  const saveAdresseEtab = (v: string) => { setAdresseEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, v, emailEtab, espacesDyn); };
+  const saveEmailEtab = (v: string) => { setEmailEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, adresseEtab, v, espacesDyn); };
+  const saveEspacesDyn = (esps: EspaceDyn[]) => { setEspacesDyn(esps); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, adresseEtab, emailEtab, esps); };
   const saveLinks = async (l: any) => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
   // Sauvegarde immédiate des métadonnées email — sans debounce
   // Utilisé pour lu/non lu, flags, aTraiter — doit être instantané
@@ -853,7 +841,7 @@ export default function App() {
       try {
         const raw = await callClaude(
           `Email:\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n\n${(m.body || m.snippet || "").slice(0, 1500)}`,
-          buildExtractPrompt(), null
+          buildExtractPrompt(nomEtab, espacesDyn), null
         );
         const extracted = JSON.parse(raw.replace(/```json|```/g, "").trim());
         nouvellesExtractions[m.id] = extracted;
@@ -943,6 +931,12 @@ export default function App() {
               if (parsed.espaces)   setEspacesCtx(parsed.espaces);
               if (parsed.ton)       setTonCtx(parsed.ton);
               if (parsed.custom)    setCustomCtx(parsed.custom);
+              // Infos établissement dynamiques
+              if (parsed.nomEtab)      setNomEtab(parsed.nomEtab);
+              if (parsed.adresseEtab)  setAdresseEtab(parsed.adresseEtab);
+              if (parsed.emailEtab)    setEmailEtab(parsed.emailEtab);
+              if (parsed.espacesDyn && Array.isArray(parsed.espacesDyn) && parsed.espacesDyn.length > 0)
+                setEspacesDyn(parsed.espacesDyn);
             }
           } catch {
             // Valeur legacy texte brut → mettre dans customCtx
@@ -1163,7 +1157,7 @@ export default function App() {
       // ── Construire le contexte complet — sections structurées ─────────────
       const linkCtx = Object.values(linksFetched).filter(Boolean)
         .map((l: any) => (l.summary || "").slice(0, 500)).join("\n\n");
-      const sys = SYSTEM_PROMPT
+      const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, espacesDyn})
         + (menusCtx      ? "\n\n=== MENUS & TARIFS ===\n"          + menusCtx.slice(0, 3000)      : "")
         + (conditionsCtx ? "\n\n=== CONDITIONS & POLITIQUE ===\n"  + conditionsCtx.slice(0, 2000) : "")
         + (espacesCtx    ? "\n\n=== ESPACES & CAPACITÉS ===\n"     + espacesCtx.slice(0, 2000)    : "")
@@ -1180,7 +1174,7 @@ export default function App() {
         callClaude(prompt, sys, null),
         callClaude(
           `Email:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${sel.body || sel.snippet || ""}`,
-          buildExtractPrompt(), null
+          buildExtractPrompt(nomEtab, espacesDyn), null
         ),
       ]);
 
@@ -1329,9 +1323,22 @@ Retourne UNIQUEMENT ce JSON valide :
 
   const openPlanForm = () => {
     const pers = parseInt(String(extracted?.nombrePersonnes || "0"), 10);
-    const espaceAuto = extracted?.espaceDetecte || (
-      pers > 100 ? "rdc" : pers > 75 ? "rdc" : pers > 30 ? "patio" : "belvedere"
-    );
+    // Attribution dynamique : trie les espaces par capacité numérique croissante
+    // et choisit le plus petit qui convient, ou le dernier (plus grand) par défaut
+    const getEspaceAuto = () => {
+      if (extracted?.espaceDetecte) return extracted.espaceDetecte;
+      if (espacesDyn.length === 0) return "";
+      if (pers === 0) return espacesDyn[0].id;
+      // Extraire la capacité max numérique de chaque espace
+      const withCap = espacesDyn.map(e => {
+        const match = (e.capacite || "").match(/(\d+)/g);
+        const cap = match ? Math.max(...match.map(Number)) : 0;
+        return { id: e.id, cap };
+      }).sort((a, b) => a.cap - b.cap);
+      const fit = withCap.find(e => e.cap >= pers);
+      return fit ? fit.id : withCap[withCap.length - 1].id;
+    };
+    const espaceAuto = getEspaceAuto();
     const min = extracted?.nombrePersonnesMin;
     const max = extracted?.nombrePersonnes;
     const fourchette = (min && max && min !== max) ? `Fourchette : ${min}–${max} personnes. ` : "";
@@ -1385,7 +1392,7 @@ Retourne UNIQUEMENT ce JSON valide :
     if (!url?.trim()) return;
     setFetchingLink(key);
     try {
-      const prompt = `Recherche et analyse ce site web pour la brasserie RÊVA : ${url}\nRésume en 200 mots max : ce que fait ce site, ses services, son ambiance, pour aider à répondre à des emails professionnels.`;
+      const prompt = `Recherche et analyse ce site web pour ${nomEtab} : ${url}\nRésume en 200 mots max : ce que fait ce site, ses services, son ambiance, pour aider à répondre à des emails professionnels.`;
       const sys = "Tu es un assistant qui analyse des sites web pour une brasserie parisienne. Réponds en français, de façon concise et utile.";
       const txt = await callClaude(prompt, sys, null);
       const upd = { ...linksFetched, [key]: { url, summary: txt || "Analyse effectuée.", fetchedAt: new Date().toLocaleDateString("fr-FR") } };
@@ -1427,9 +1434,9 @@ Retourne UNIQUEMENT ce JSON valide :
         ? (motifPersonnalise || "Relance générale")
         : (motifSelectionne || "Relance sans motif spécifique");
 
-      const sys = SYSTEM_PROMPT;
+      const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, espacesDyn});
 
-      const prompt = `Tu dois rédiger un email de relance pour la brasserie RÊVA.
+      const prompt = `Tu dois rédiger un email de relance pour ${nomEtab}.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DOSSIER ÉVÉNEMENT
@@ -1470,7 +1477,7 @@ INSTRUCTIONS DE RÉDACTION
 - Ton chaleureux, professionnel, jamais insistant
 - Personnalise selon le profil et l'historique du client
 - Appel à l'action clair en fin de mail
-- Signature : L'équipe RÊVA`;
+- Signature : L'équipe ${nomEtab}${adresseEtab ? "\n" + adresseEtab : ""}${emailEtab ? "\n" + emailEtab : ""}`;
 
       // Docs exclus volontairement — non nécessaires pour une relance et trop lourds (PDFs base64)
       const txt = await callClaude(prompt, sys, null);
@@ -1502,9 +1509,9 @@ Notes internes : ${resa.notes || "—"}
 ÉCHANGES EMAILS :
 ${hist}`;
 
-      const sys = `Tu es un coordinateur événementiel senior chez RÊVA, expert dans la lecture et l'analyse d'échanges clients. Tu as lu l'intégralité des emails de ce dossier.
+      const sys = `Tu es un coordinateur événementiel senior chez ${nomEtab}, expert dans la lecture et l'analyse d'échanges clients. Tu as lu l'intégralité des emails de ce dossier.
 
-Rédige une note de briefing destinée au directeur de RÊVA. Cette note a deux niveaux de lecture distincts.
+Rédige une note de briefing destinée au directeur de ${nomEtab}. Cette note a deux niveaux de lecture distincts.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NIVEAU 1 — FICHE ÉVÉNEMENT (faits bruts)
@@ -1534,7 +1541,7 @@ PROFIL CLIENT
 → Y a-t-il des signaux d'inquiétude, d'hésitation ou au contraire de grande confiance ?
 
 DEMANDES PARTICULIÈRES & HORS CADRE
-→ Quelles sont les demandes qui sortent du cadre standard de RÊVA ? (décoration, contraintes alimentaires, exigences techniques, flexibilité horaires, etc.)
+→ Quelles sont les demandes qui sortent du cadre standard de ${nomEtab} ? (décoration, contraintes alimentaires, exigences techniques, flexibilité horaires, etc.)
 → Y a-t-il des points non résolus ou en attente de confirmation dans les échanges ?
 → Des promesses ou engagements ont-ils été pris dans les emails ? Lesquels exactement ?
 
@@ -1571,8 +1578,8 @@ FORMAT
     setRadarReplyText("");
     try {
       const bodyTronque = (m.body || m.snippet || "").slice(0, 3000);
-      const prompt = `Email reçu:\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n\n${bodyTronque}\n\nRédige une réponse professionnelle pour la brasserie RÊVA.`;
-      const sys = SYSTEM_PROMPT
+      const prompt = `Email reçu:\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n\n${bodyTronque}\n\nRédige une réponse professionnelle pour ${nomEtab}.`;
+      const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, espacesDyn})
         + (menusCtx      ? "\n\n=== MENUS & TARIFS ===\n"          + menusCtx.slice(0,3000)      : "")
         + (conditionsCtx ? "\n\n=== CONDITIONS & POLITIQUE ===\n"  + conditionsCtx.slice(0,2000) : "")
         + (espacesCtx    ? "\n\n=== ESPACES & CAPACITÉS ===\n"     + espacesCtx.slice(0,2000)    : "")
@@ -1587,7 +1594,7 @@ FORMAT
 
   const openSendMail = (resa) => {
     setShowSendMail(resa);
-    setSendMailSubject(`Votre événement chez RÊVA — ${resa.typeEvenement||""}`);
+    setSendMailSubject(`Votre événement chez ${nomEtab} — ${resa.typeEvenement||""}`);
     setSendMailBody("");
   };
 
@@ -1644,7 +1651,7 @@ FORMAT
       {initializing && (
         <div style={{position:"fixed",inset:0,background:"#1C1814",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:9999}}>
           <div style={{fontSize:11,fontWeight:700,color:"#D1C4B2",letterSpacing:"0.28em",textTransform:"uppercase"}}>ARCHANGE</div>
-          <div style={{fontSize:8,color:"rgba(209,196,178,0.4)",letterSpacing:"0.18em",textTransform:"uppercase",marginTop:-8}}>RÊVA · AGENT IA</div>
+          <div style={{fontSize:8,color:"rgba(209,196,178,0.4)",letterSpacing:"0.18em",textTransform:"uppercase",marginTop:-8}}>{nomEtab} · AGENT IA</div>
           <Spin s={18}/>
           <div style={{fontSize:11,color:"rgba(209,196,178,0.35)",letterSpacing:"0.08em"}}>Chargement en cours…</div>
         </div>
@@ -1679,7 +1686,7 @@ FORMAT
       {/* Nav principale — collapsible */}
       <aside style={{width:navCollapsed?60:200,background:"#1C1814",display:"flex",flexDirection:"column",flexShrink:0,transition:"width .3s cubic-bezier(.4,0,.2,1)",overflow:"hidden",borderRight:"1px solid rgba(255,255,255,0.06)"}}>
         <div style={{padding:navCollapsed?"16px 0 12px":"24px 18px 16px",display:"flex",alignItems:"center",justifyContent:navCollapsed?"center":"space-between",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-          {!navCollapsed&&<div><div style={{fontSize:13,fontWeight:700,color:"#FFFFFF",letterSpacing:"0.2em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif"}}>ARCHANGE</div><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:4,letterSpacing:"0.1em",textTransform:"uppercase"}}>RÊVA · AGENT IA</div></div>}
+          {!navCollapsed&&<div><div style={{fontSize:13,fontWeight:700,color:"#FFFFFF",letterSpacing:"0.2em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif"}}>ARCHANGE</div><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:4,letterSpacing:"0.1em",textTransform:"uppercase"}}>{nomEtab} · AGENT IA</div></div>}
           <button onClick={()=>setNavCollapsed(v=>!v)} title={navCollapsed?"Agrandir":"Réduire"} style={{width:24,height:24,borderRadius:6,border:"none",background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.6)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             {navCollapsed?"›":"‹"}
           </button>
@@ -1694,7 +1701,7 @@ FORMAT
           ))}
         </div>
         {!navCollapsed&&<div style={{padding:"14px 18px",borderTop:"1px solid rgba(255,255,255,0.08)",flexShrink:0}}>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",lineHeight:1.7,letterSpacing:"0.01em"}}>133 Av. de France<br/>75013 Paris</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",lineHeight:1.7,letterSpacing:"0.01em"}}>{adresseEtab||"133 Av. de France, 75013 Paris"}</div>
           <button onClick={()=>signOut({callbackUrl:"/"})} style={{marginTop:10,width:"100%",padding:"7px 0",borderRadius:7,border:"1px solid rgba(255,255,255,0.2)",background:"transparent",color:"rgba(255,255,255,0.7)",fontSize:11,letterSpacing:"0.06em",cursor:"pointer",textTransform:"uppercase",fontWeight:500}}>⎋ Déconnexion</button>
         </div>}
       </aside>
@@ -1813,7 +1820,7 @@ FORMAT
                     `${resas.filter(r=>(r.statut||"nouveau")===generalFilter).length} demande${resas.filter(r=>(r.statut||"nouveau")===generalFilter).length!==1?"s":""} · ${statuts.find(s=>s.id===generalFilter)?.label||""}`}
                   </div>
                 </div>
-                <button onClick={()=>{ setNewEvent({...EMPTY_RESA}); setNewEventErrors({}); setShowNewEvent(true); }} style={{...gold}}>+ Nouvelle demande</button>
+                <button onClick={()=>{ setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setNewEventErrors({}); setShowNewEvent(true); }} style={{...gold}}>+ Nouvelle demande</button>
               </div>
               <div style={{padding:"12px 24px",flexShrink:0,position:"relative"}}>
                 <span style={{position:"absolute",left:36,top:"50%",transform:"translateY(-50%)",fontSize:12,color:"#A09890",pointerEvents:"none"}}>🔍</span>
@@ -2206,7 +2213,7 @@ FORMAT
                   <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📅 Date</label><DatePicker value={editResaPanel.dateDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,dateDebut:v})}/></div>
                   <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🕐 Heure début</label><TimePicker value={editResaPanel.heureDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,heureDebut:v})} placeholder="Heure début"/></div>
                   <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🕕 Heure fin</label><TimePicker value={editResaPanel.heureFin||""} onChange={v=>setEditResaPanel({...editResaPanel,heureFin:v})} placeholder="Heure fin"/></div>
-                  <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📍 Espace</label><select value={editResaPanel.espaceId||"rdc"} onChange={e=>setEditResaPanel({...editResaPanel,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
+                  <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📍 Espace</label><select value={editResaPanel.espaceId||espacesDyn[0]?.id||""} onChange={e=>setEditResaPanel({...editResaPanel,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
                   <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🎉 Type</label><input value={editResaPanel.typeEvenement||""} onChange={e=>setEditResaPanel({...editResaPanel,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inp}}/></div>
                   <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>💰 Budget client</label><input value={editResaPanel.budget||""} onChange={e=>setEditResaPanel({...editResaPanel,budget:e.target.value})} placeholder="Ex: 5 000€…" style={{...inp}}/></div>
                   <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🏷 Statut</label><select value={editResaPanel.statut||"nouveau"} onChange={e=>setEditResaPanel({...editResaPanel,statut:e.target.value})} style={{...inp}}>{statuts.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
@@ -2404,7 +2411,7 @@ FORMAT
                             )}
 
                             <div style={{padding:"8px 12px",borderTop:"0.5px solid #EAE6E1",display:"flex",alignItems:"center",gap:6,background:"#FAFAF9"}}>
-                              <button onClick={e=>{e.stopPropagation(); setRadarResaModal({ nom: ext.nom||m.from||"", email: ext.email||m.fromEmail||"", telephone: ext.telephone||"", entreprise: ext.entreprise||"", typeEvenement: ext.typeEvenement||"", nombrePersonnes: ext.nombrePersonnes||"", espaceId: ext.espaceDetecte||resa?.espaceId||"rdc", dateDebut: ext.dateDebut||resa?.dateDebut||"", heureDebut: ext.heureDebut||resa?.heureDebut||"", heureFin: ext.heureFin||resa?.heureFin||"", budget: ext.budget||resa?.budget||"", notes: ext.notes||"", statut: ext.statutSuggere||"nouveau", _emailId: m.id, });}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
+                              <button onClick={e=>{e.stopPropagation(); setRadarResaModal({ nom: ext.nom||m.from||"", email: ext.email||m.fromEmail||"", telephone: ext.telephone||"", entreprise: ext.entreprise||"", typeEvenement: ext.typeEvenement||"", nombrePersonnes: ext.nombrePersonnes||"", espaceId: ext.espaceDetecte||resa?.espaceId||espacesDyn[0]?.id||"", dateDebut: ext.dateDebut||resa?.dateDebut||"", heureDebut: ext.heureDebut||resa?.heureDebut||"", heureFin: ext.heureFin||resa?.heureFin||"", budget: ext.budget||resa?.budget||"", notes: ext.notes||"", statut: ext.statutSuggere||"nouveau", _emailId: m.id, });}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
                                 📅 Créer réservation
                               </button>
                               <button onClick={e=>{e.stopPropagation(); setRadarReplyModal({m,ext}); setRadarReplyText(""); genRadarReply(m);}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
@@ -2750,7 +2757,7 @@ FORMAT
                         </div>
                         <div>
                           <label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📍 Espace</label>
-                          <select value={planForm.espaceId||"rdc"} onChange={e=>setPlanForm({...planForm,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select>
+                          <select value={planForm.espaceId||espacesDyn[0]?.id||""} onChange={e=>setPlanForm({...planForm,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select>
                         </div>
                         <div style={{gridColumn:"1/-1"}}>
                           <label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📝 Notes</label>
@@ -2888,7 +2895,7 @@ FORMAT
                         <button key={v} onClick={()=>setCalView(v)} style={{padding:"5px 12px",borderRadius:6,border:"none",background:calView===v?"#FFFFFF":"transparent",color:calView===v?"#1C1814":"#8A8178",fontSize:12,fontWeight:calView===v?600:400,cursor:"pointer",textTransform:"capitalize"}}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
                       ))}
                     </div>
-                    <button onClick={()=>setEditResa({...EMPTY_RESA})} style={{...gold,fontSize:12,padding:"7px 14px"}}>+ Réservation</button>
+                    <button onClick={()=>setEditResa({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""})} style={{...gold,fontSize:12,padding:"7px 14px"}}>+ Réservation</button>
                   </div>
                 </div>
 
@@ -3143,6 +3150,81 @@ FORMAT
             {/* ── Zone scrollable ── */}
             <div style={{flex:1,overflowY:"scroll",padding:"16px 28px 28px",display:"flex",flexDirection:"column",gap:12,minHeight:0}}>
 
+            {/* ── Section Établissement ── */}
+            <div style={{background:"#FFFFFF",borderRadius:12,border:"2px solid #C9A96E"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FDF8EF",borderBottom:srcSections["etablissement"]?"1px solid #EAE6E1":"none",cursor:"pointer",borderRadius:srcSections["etablissement"]?"12px 12px 0 0":"12px"}} onClick={()=>setSrcSections(s=>({...s,etablissement:!s["etablissement"]}))}>
+                <div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:16}}>🏠</span>
+                    <span style={{fontSize:13,fontWeight:700,color:"#1C1814"}}>Identité de l'établissement</span>
+                    <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#FEF3C7",color:"#92400E",fontWeight:600}}>Multi-compte</span>
+                  </div>
+                  <div style={{fontSize:11,color:"#8A8178",marginTop:3,paddingLeft:24}}>Nom, adresse, email — personnalise toute l'IA et la sidebar</div>
+                </div>
+                <span style={{fontSize:12,color:"#8A8178"}}>{srcSections["etablissement"]?"▲":"▼"}</span>
+              </div>
+              {srcSections["etablissement"]&&(
+                <div style={{padding:20,display:"flex",flexDirection:"column",gap:14}}>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:600,color:"#5C564F",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>🏷 Nom de l'établissement</label>
+                    <input value={nomEtab} onChange={e=>setNomEtab(e.target.value)} onBlur={()=>saveNomEtab(nomEtab)} placeholder="Ex : Brasserie RÊVA, Le Comptoir du Port…" style={{...inp,fontSize:14,fontWeight:600}}/>
+                    <div style={{fontSize:11,color:"#A09890",marginTop:4}}>Utilisé dans tous les prompts IA et la signature email</div>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:600,color:"#5C564F",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📍 Adresse</label>
+                    <input value={adresseEtab} onChange={e=>setAdresseEtab(e.target.value)} onBlur={()=>saveAdresseEtab(adresseEtab)} placeholder="Ex : 133 avenue de France, 75013 Paris" style={{...inp}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:600,color:"#5C564F",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📧 Email de contact</label>
+                    <input value={emailEtab} onChange={e=>setEmailEtab(e.target.value)} onBlur={()=>saveEmailEtab(emailEtab)} placeholder="Ex : contact@brasserie-reva.fr" style={{...inp}}/>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── Section Espaces dynamiques ── */}
+            <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#F7F5F1",borderBottom:srcSections["espacesDyn"]?"1px solid #EAE6E1":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,espacesDyn:!s["espacesDyn"]}))}>
+                <div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:16}}>🏛️</span>
+                    <span style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>Espaces de l'établissement</span>
+                    <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#D1FAE5",color:"#065F46",fontWeight:600}}>{espacesDyn.length} espace{espacesDyn.length>1?"s":""}</span>
+                  </div>
+                  <div style={{fontSize:11,color:"#8A8178",marginTop:3,paddingLeft:24}}>Salles, capacités, descriptions — remplacent les espaces codés en dur</div>
+                </div>
+                <span style={{fontSize:12,color:"#8A8178"}}>{srcSections["espacesDyn"]?"▲":"▼"}</span>
+              </div>
+              {srcSections["espacesDyn"]&&(
+                <div style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
+                  {espacesDyn.map((esp, idx) => (
+                    <div key={esp.id} style={{padding:"14px 16px",background:"#F9F8F6",borderRadius:10,border:"1px solid #EAE6E1"}}>
+                      <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:10}}>
+                        {/* Couleur */}
+                        <input type="color" value={esp.color} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],color:e.target.value}; saveEspacesDyn(u);}} style={{width:32,height:32,borderRadius:6,border:"none",cursor:"pointer",flexShrink:0}}/>
+                        <div style={{flex:1,display:"flex",flexDirection:"column",gap:8}}>
+                          <input value={esp.nom} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],nom:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Nom de l'espace" style={{...inp,fontWeight:600}}/>
+                          <div style={{display:"flex",gap:8}}>
+                            <input value={esp.capacite} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],capacite:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Capacité (ex: 80 personnes)" style={{...inp,flex:1}}/>
+                          </div>
+                          <input value={esp.description} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],description:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Description courte (ex: Vue panoramique, 70m²…)" style={{...inp}}/>
+                        </div>
+                        {espacesDyn.length > 1 && (
+                          <button onClick={()=>saveEspacesDyn(espacesDyn.filter((_,i)=>i!==idx))} title="Supprimer cet espace" style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:16,padding:"4px",flexShrink:0}}>✕</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <button onClick={()=>saveEspacesDyn([...espacesDyn,{id:"esp_"+Date.now(),nom:"Nouvel espace",color:"#8B5CF6",capacite:"",description:""}])} style={{padding:"10px",borderRadius:8,border:"2px dashed #EAE6E1",background:"transparent",color:"#8A8178",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    + Ajouter un espace
+                  </button>
+                  <div style={{fontSize:11,color:"#A09890",padding:"8px 12px",background:"#F5F3EF",borderRadius:8}}>
+                    💡 Ces espaces remplacent les salles codées en dur (Rez-de-chaussée, Patio, Belvédère). L'IA les utilisera pour les attributions et les réponses.
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Composant réutilisable pour chaque section texte */}
             {([
               ["menus",      "🍽️", "Menus & Tarifs",        "Collez ici vos menus, formules, tarifs par personne, options boissons…",            menusCtx,      saveMenusCtx],
@@ -3239,7 +3321,7 @@ FORMAT
                 <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>🕕 Heure fin</label><TimePicker value={radarResaModal.heureFin||""} onChange={v=>setRadarResaModal({...radarResaModal,heureFin:v})} placeholder="Heure fin"/></div>
               </div>
               <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>🎉 Type d'événement</label><input value={radarResaModal.typeEvenement||""} onChange={e=>setRadarResaModal({...radarResaModal,typeEvenement:e.target.value})} style={{...inp}}/></div>
-              <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>📍 Espace</label><select value={radarResaModal.espaceId||"rdc"} onChange={e=>setRadarResaModal({...radarResaModal,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
+              <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>📍 Espace</label><select value={radarResaModal.espaceId||espacesDyn[0]?.id||""} onChange={e=>setRadarResaModal({...radarResaModal,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
               <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>📝 Notes</label><textarea value={radarResaModal.notes||""} onChange={e=>setRadarResaModal({...radarResaModal,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
             </div>
             <div style={{padding:"14px 20px",borderTop:"1px solid #EAE6E1",display:"flex",gap:8,flexShrink:0}}>
@@ -3323,7 +3405,7 @@ FORMAT
                 <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>👥 Nb personnes</label><input type="number" value={newEvent.nombrePersonnes||""} onChange={e=>setNewEvent({...newEvent,nombrePersonnes:e.target.value})} style={{...inpLight}}/></div>
                 <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>🎉 Type d'événement</label><input value={newEvent.typeEvenement||""} onChange={e=>setNewEvent({...newEvent,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inpLight}}/></div>
                 <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>💰 Budget client</label><input value={newEvent.budget||""} onChange={e=>setNewEvent({...newEvent,budget:e.target.value})} placeholder="Ex: 5 000€…" style={{...inpLight}}/></div>
-                <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>📍 Espace</label><select value={newEvent.espaceId||"rdc"} onChange={e=>setNewEvent({...newEvent,espaceId:e.target.value})} style={{...inpLight}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
+                <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>📍 Espace</label><select value={newEvent.espaceId||espacesDyn[0]?.id||""} onChange={e=>setNewEvent({...newEvent,espaceId:e.target.value})} style={{...inpLight}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
                 <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>📝 Notes</label><textarea value={newEvent.notes||""} onChange={e=>setNewEvent({...newEvent,notes:e.target.value})} rows={3} style={{...inpLight,resize:"none",lineHeight:1.6}}/></div>
               </div>
             </div>
@@ -3336,7 +3418,7 @@ FORMAT
                 if(!newEvent.heureFin) errs.heureFin="L'heure de fin est obligatoire";
                 if(Object.keys(errs).length>0){ setNewEventErrors(errs); return; }
                 const r={...newEvent,id:"r"+Date.now(),statut:"nouveau",nombrePersonnes:parseInt(newEvent.nombrePersonnes)||newEvent.nombrePersonnes};
-                saveResas([...resas,r]); setShowNewEvent(false); setNewEvent({...EMPTY_RESA}); setNewEventErrors({}); toast("Événement créé !");
+                saveResas([...resas,r]); setShowNewEvent(false); setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setNewEventErrors({}); toast("Événement créé !");
               }} style={{flex:1,...gold,padding:"11px",fontSize:13}}>✅ Créer l'événement</button>
               <button onClick={()=>setShowNewEvent(false)} style={{...out,padding:"11px 18px",fontSize:13}}>Annuler</button>
             </div>
