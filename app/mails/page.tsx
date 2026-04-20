@@ -6,11 +6,17 @@ import { useRouter } from 'next/navigation'
 
 
 // ─── Type espace dynamique ────────────────────────────────────────────────────
-interface EspaceDyn { id: string; nom: string; color: string; capacite: string; description: string; }
+interface EspaceDyn {
+  id: string; nom: string; color: string; description: string;
+  assisMin: string; assisMax: string;   // capacité assis (fourchette)
+  deboutMin: string; deboutMax: string; // capacité debout / cocktail (fourchette)
+  /** @deprecated legacy — migré vers assisMin/assisMax/deboutMin/deboutMax */
+  capacite?: string;
+}
 const DEFAULT_ESPACES_DYN: EspaceDyn[] = [
-  { id: "rdc",       nom: "Rez-de-chaussée", color: "#E8B86D", capacite: "100 personnes", description: "Espace principal 120m², idéal grandes réceptions" },
-  { id: "patio",     nom: "Le Patio",         color: "#6DB8A0", capacite: "75 personnes",  description: "Espace extérieur couvert 70m², ambiance intimiste" },
-  { id: "belvedere", nom: "Le Belvédère",     color: "#6D9BE8", capacite: "75 personnes",  description: "Espace en hauteur 70m², vue panoramique" },
+  { id: "rdc",       nom: "Rez-de-chaussée", color: "#E8B86D", assisMin: "80",  assisMax: "100", deboutMin: "100", deboutMax: "150", description: "Espace principal 120m², idéal grandes réceptions" },
+  { id: "patio",     nom: "Le Patio",         color: "#6DB8A0", assisMin: "40",  assisMax: "75",  deboutMin: "60",  deboutMax: "100", description: "Espace extérieur couvert 70m², ambiance intimiste" },
+  { id: "belvedere", nom: "Le Belvédère",     color: "#6D9BE8", assisMin: "40",  assisMax: "75",  deboutMin: "60",  deboutMax: "100", description: "Espace en hauteur 70m², vue panoramique" },
 ];
 // Alias pour rétrocompatibilité — les autres parties de l'app utilisent encore ESPACES
 // On le remplace dynamiquement via useEspaces()
@@ -33,14 +39,34 @@ function buildSystemPrompt(opts: {
   nomEtab: string;
   adresseEtab: string;
   emailEtab: string;
-  espacesDyn: {id:string, nom:string, capacite:string, description:string}[];
+  espacesDyn: EspaceDyn[];
 }): string {
   const { nomEtab, adresseEtab, emailEtab, espacesDyn } = opts;
   const nom = nomEtab || "l'établissement";
   const adresse = adresseEtab || "";
   const email = emailEtab || "";
+
+  // Formater la capacité d'un espace : "40–75 assis, 60–100 debout"
+  const fmtCapacite = (e: EspaceDyn) => {
+    const parts: string[] = [];
+    if (e.assisMin || e.assisMax) {
+      const min = e.assisMin, max = e.assisMax;
+      parts.push(min && max && min !== max ? `${min}–${max} assis` : `${max || min} assis`);
+    }
+    if (e.deboutMin || e.deboutMax) {
+      const min = e.deboutMin, max = e.deboutMax;
+      parts.push(min && max && min !== max ? `${min}–${max} debout/cocktail` : `${max || min} debout/cocktail`);
+    }
+    // fallback legacy
+    if (parts.length === 0 && e.capacite) parts.push(e.capacite);
+    return parts.join(", ");
+  };
+
   const espacesTexte = espacesDyn.length > 0
-    ? espacesDyn.map(e => `- ${e.nom}${e.capacite ? ` (capacité ${e.capacite})` : ""}${e.description ? ` : ${e.description}` : ""}`).join("\n")
+    ? espacesDyn.map(e => {
+        const cap = fmtCapacite(e);
+        return `- ${e.nom}${cap ? ` (${cap})` : ""}${e.description ? ` : ${e.description}` : ""}`;
+      }).join("\n")
     : "Les espaces sont décrits dans les Sources IA.";
   const espacesAlternatifs = espacesDyn.length > 1
     ? espacesDyn.map((e, i) =>
@@ -149,26 +175,31 @@ ${signature}
 // EXTRACT_PROMPT est une fonction pour injecter la date du jour dynamiquement
 const buildExtractPrompt = (
   nomEtablissement = "l'établissement",
-  espacesDyn: {id:string, nom:string, capacite:string}[] = []
+  espacesDyn: EspaceDyn[] = []
 ) => {
   const today = new Date().toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" });
 
   // Construire la règle d'attribution d'espaces dynamiquement
+  // — basée sur capacité assis (événements assis) et debout (cocktail/standing)
   let espacesRegle = "";
   if (espacesDyn.length > 0) {
-    // Extraire capacités numériques et trier
     const withCap = espacesDyn.map(e => {
-      const match = (e.capacite || "").match(/(\d+)/g);
-      const cap = match ? Math.max(...match.map(Number)) : 0;
-      return { id: e.id, nom: e.nom, cap };
+      // Priorité aux champs structurés, fallback sur legacy capacite
+      const assisMax = parseInt(e.assisMax || "0", 10);
+      const deboutMax = parseInt(e.deboutMax || "0", 10);
+      const legacyMatch = (e.capacite || "").match(/(\d+)/g);
+      const legacy = legacyMatch ? Math.max(...legacyMatch.map(Number)) : 0;
+      const cap = Math.max(assisMax, deboutMax, legacy);
+      return { id: e.id, nom: e.nom, assisMax, deboutMax, cap };
     }).sort((a, b) => a.cap - b.cap);
 
     espacesRegle = withCap.map((e, i) => {
       const prev = i > 0 ? withCap[i-1].cap + 1 : 1;
-      const range = i === 0 ? `< ${e.cap} personnes` :
+      const range = i === 0 ? `≤ ${e.cap} personnes` :
                     i === withCap.length - 1 ? `> ${withCap[i-1].cap} personnes` :
-                    `${prev} à ${e.cap} personnes`;
-      return `    * ${range} → "${e.id}" (${e.nom})`;
+                    `${prev}–${e.cap} personnes`;
+      const assis = e.assisMax ? ` (max ${e.assisMax} assis, max ${e.deboutMax||e.assisMax} debout)` : "";
+      return `    * ${range} → "${e.id}" (${e.nom})${assis}`;
     }).join("\n");
   } else {
     espacesRegle = `    * Laisse null si aucun espace n'est configuré`;
@@ -1323,16 +1354,22 @@ Retourne UNIQUEMENT ce JSON valide :
 
   const openPlanForm = () => {
     const pers = parseInt(String(extracted?.nombrePersonnes || "0"), 10);
-    // Attribution dynamique : trie les espaces par capacité numérique croissante
-    // et choisit le plus petit qui convient, ou le dernier (plus grand) par défaut
+    // Attribution dynamique selon type d'événement (assis vs debout) et nombre de personnes
     const getEspaceAuto = () => {
       if (extracted?.espaceDetecte) return extracted.espaceDetecte;
       if (espacesDyn.length === 0) return "";
       if (pers === 0) return espacesDyn[0].id;
-      // Extraire la capacité max numérique de chaque espace
+      // Détecter si l'événement est debout (cocktail, afterwork, standing…)
+      const typeEvt = (extracted?.typeEvenement || "").toLowerCase();
+      const isDebout = typeEvt.includes("cocktail") || typeEvt.includes("afterwork") || typeEvt.includes("standing") || typeEvt.includes("reception");
       const withCap = espacesDyn.map(e => {
-        const match = (e.capacite || "").match(/(\d+)/g);
-        const cap = match ? Math.max(...match.map(Number)) : 0;
+        const assisMax = parseInt(e.assisMax || "0", 10);
+        const deboutMax = parseInt(e.deboutMax || "0", 10);
+        const legacyMatch = (e.capacite || "").match(/(\d+)/g);
+        const legacy = legacyMatch ? Math.max(...legacyMatch.map(Number)) : 0;
+        const cap = isDebout
+          ? (deboutMax || assisMax || legacy)
+          : (assisMax || deboutMax || legacy);
         return { id: e.id, cap };
       }).sort((a, b) => a.cap - b.cap);
       const fit = withCap.find(e => e.cap >= pers);
@@ -3197,23 +3234,89 @@ FORMAT
                 <div style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
                   {espacesDyn.map((esp, idx) => (
                     <div key={esp.id} style={{padding:"14px 16px",background:"#F9F8F6",borderRadius:10,border:"1px solid #EAE6E1"}}>
-                      <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:10}}>
-                        {/* Couleur */}
+                      {/* Ligne 1 : couleur + nom + supprimer */}
+                      <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:10}}>
                         <input type="color" value={esp.color} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],color:e.target.value}; saveEspacesDyn(u);}} style={{width:32,height:32,borderRadius:6,border:"none",cursor:"pointer",flexShrink:0}}/>
-                        <div style={{flex:1,display:"flex",flexDirection:"column",gap:8}}>
-                          <input value={esp.nom} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],nom:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Nom de l'espace" style={{...inp,fontWeight:600}}/>
-                          <div style={{display:"flex",gap:8}}>
-                            <input value={esp.capacite} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],capacite:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Capacité (ex: 80 personnes)" style={{...inp,flex:1}}/>
-                          </div>
-                          <input value={esp.description} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],description:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Description courte (ex: Vue panoramique, 70m²…)" style={{...inp}}/>
-                        </div>
+                        <input value={esp.nom} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],nom:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Nom de l'espace" style={{...inp,fontWeight:700,flex:1,fontSize:13}}/>
                         {espacesDyn.length > 1 && (
-                          <button onClick={()=>saveEspacesDyn(espacesDyn.filter((_,i)=>i!==idx))} title="Supprimer cet espace" style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:16,padding:"4px",flexShrink:0}}>✕</button>
+                          <button onClick={()=>saveEspacesDyn(espacesDyn.filter((_,i)=>i!==idx))} title="Supprimer" style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:16,padding:"4px",flexShrink:0}}>✕</button>
                         )}
                       </div>
+
+                      {/* Ligne 2 : capacités assis / debout */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                        {/* Assis */}
+                        <div style={{background:"#FFFFFF",borderRadius:8,padding:"10px 12px",border:"1px solid #EAE6E1"}}>
+                          <div style={{fontSize:11,fontWeight:600,color:"#5C564F",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+                            🪑 Assis
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:10,color:"#A09890",marginBottom:3}}>Min</div>
+                              <input
+                                type="number" min="0"
+                                value={esp.assisMin}
+                                onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],assisMin:e.target.value}; setEspacesDyn(u);}}
+                                onBlur={()=>saveEspacesDyn(espacesDyn)}
+                                placeholder="—"
+                                style={{...inp,textAlign:"center",padding:"6px 8px"}}
+                              />
+                            </div>
+                            <span style={{color:"#C0BAB2",fontSize:13,marginTop:16}}>→</span>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:10,color:"#A09890",marginBottom:3}}>Max</div>
+                              <input
+                                type="number" min="0"
+                                value={esp.assisMax}
+                                onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],assisMax:e.target.value}; setEspacesDyn(u);}}
+                                onBlur={()=>saveEspacesDyn(espacesDyn)}
+                                placeholder="—"
+                                style={{...inp,textAlign:"center",padding:"6px 8px"}}
+                              />
+                            </div>
+                            <span style={{fontSize:10,color:"#A09890",marginTop:16,flexShrink:0}}>pers.</span>
+                          </div>
+                        </div>
+
+                        {/* Debout */}
+                        <div style={{background:"#FFFFFF",borderRadius:8,padding:"10px 12px",border:"1px solid #EAE6E1"}}>
+                          <div style={{fontSize:11,fontWeight:600,color:"#5C564F",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+                            🥂 Debout / Cocktail
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:10,color:"#A09890",marginBottom:3}}>Min</div>
+                              <input
+                                type="number" min="0"
+                                value={esp.deboutMin}
+                                onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],deboutMin:e.target.value}; setEspacesDyn(u);}}
+                                onBlur={()=>saveEspacesDyn(espacesDyn)}
+                                placeholder="—"
+                                style={{...inp,textAlign:"center",padding:"6px 8px"}}
+                              />
+                            </div>
+                            <span style={{color:"#C0BAB2",fontSize:13,marginTop:16}}>→</span>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:10,color:"#A09890",marginBottom:3}}>Max</div>
+                              <input
+                                type="number" min="0"
+                                value={esp.deboutMax}
+                                onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],deboutMax:e.target.value}; setEspacesDyn(u);}}
+                                onBlur={()=>saveEspacesDyn(espacesDyn)}
+                                placeholder="—"
+                                style={{...inp,textAlign:"center",padding:"6px 8px"}}
+                              />
+                            </div>
+                            <span style={{fontSize:10,color:"#A09890",marginTop:16,flexShrink:0}}>pers.</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Ligne 3 : description */}
+                      <input value={esp.description} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],description:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Description courte (vue, surface, ambiance, équipements…)" style={{...inp,width:"100%"}}/>
                     </div>
                   ))}
-                  <button onClick={()=>saveEspacesDyn([...espacesDyn,{id:"esp_"+Date.now(),nom:"Nouvel espace",color:"#8B5CF6",capacite:"",description:""}])} style={{padding:"10px",borderRadius:8,border:"2px dashed #EAE6E1",background:"transparent",color:"#8A8178",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  <button onClick={()=>saveEspacesDyn([...espacesDyn,{id:"esp_"+Date.now(),nom:"Nouvel espace",color:"#8B5CF6",assisMin:"",assisMax:"",deboutMin:"",deboutMax:"",description:""}])} style={{padding:"10px",borderRadius:8,border:"2px dashed #EAE6E1",background:"transparent",color:"#8A8178",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                     + Ajouter un espace
                   </button>
 
