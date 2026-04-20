@@ -2456,8 +2456,8 @@ FORMAT
             </div>
             )}
 
-            {/* Zone lecture — scrollable indépendamment */}
-            <div style={{flex:1,overflowY:"auto",background:"#EEEAE4"}}>
+            {/* Zone lecture — masquée en mode Radar */}
+            {mailFilter!=="priorites" && <div style={{flex:1,overflowY:"auto",background:"#EEEAE4"}}>
               {!sel ? (
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:10,color:"#8A8178"}}>
                   <div style={{fontSize:40}}>✉</div>
@@ -2676,7 +2676,7 @@ FORMAT
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
           </>
         )}
 
