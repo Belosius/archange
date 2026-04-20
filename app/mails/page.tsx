@@ -39,9 +39,10 @@ function buildSystemPrompt(opts: {
   nomEtab: string;
   adresseEtab: string;
   emailEtab: string;
+  telEtab: string;
   espacesDyn: EspaceDyn[];
 }): string {
-  const { nomEtab, adresseEtab, emailEtab, espacesDyn } = opts;
+  const { nomEtab, adresseEtab, emailEtab, telEtab, espacesDyn } = opts;
   const nom = nomEtab || "l'établissement";
   const adresse = adresseEtab || "";
   const email = emailEtab || "";
@@ -78,6 +79,7 @@ function buildSystemPrompt(opts: {
     `L'équipe ${nom}`,
     adresse,
     email,
+    telEtab,
   ].filter(Boolean).join("\n");
 
   return `Tu es ARCHANGE, l'assistant commercial de ${nom}${adresse ? ` (${adresse})` : ""}. Tu réponds aux emails reçus par l'établissement avec le niveau d'expertise d'un directeur commercial expérimenté dans la restauration événementielle haut de gamme.
@@ -559,6 +561,7 @@ export default function App() {
   const [nomEtab, setNomEtab] = useState("RÊVA");
   const [adresseEtab, setAdresseEtab] = useState("133 avenue de France, 75013 Paris");
   const [emailEtab, setEmailEtab] = useState("contact@brasserie-reva.fr");
+  const [telEtab, setTelEtab] = useState("");
   const [espacesDyn, setEspacesDyn] = useState<EspaceDyn[]>(DEFAULT_ESPACES_DYN);
   // Alias pour rétrocompatibilité — toutes les ref ESPACES utilisent maintenant espacesDyn
   const ESPACES = espacesDyn;
@@ -797,12 +800,13 @@ export default function App() {
     saveToSupabase({ radar_traites: JSON.stringify([...set]) });
   };
   // On sérialise toutes les sections dans un JSON pour éviter les colonnes inconnues
-  const saveSourcesIA = (menus: string, conditions: string, espaces: string, ton: string, custom: string, nom?: string, adresse?: string, emailEt?: string, esps?: EspaceDyn[]) => {
+  const saveSourcesIA = (menus: string, conditions: string, espaces: string, ton: string, custom: string, nom?: string, adresse?: string, emailEt?: string, tel?: string, esps?: EspaceDyn[]) => {
     const payload = JSON.stringify({
       menus, conditions, espaces, ton, custom,
       nomEtab: nom ?? nomEtab,
       adresseEtab: adresse ?? adresseEtab,
       emailEtab: emailEt ?? emailEtab,
+      telEtab: tel ?? telEtab,
       espacesDyn: esps ?? espacesDyn,
     });
     saveToSupabase({ context: payload });
@@ -811,10 +815,11 @@ export default function App() {
   const saveConditionsCtx = (v: string) => { setConditionsCtx(v); saveSourcesIA(menusCtx, v, espacesCtx, tonCtx, customCtx); };
   const saveEspacesCtx = (v: string) => { setEspacesCtx(v); saveSourcesIA(menusCtx, conditionsCtx, v, tonCtx, customCtx); };
   const saveTonCtx = (v: string) => { setTonCtx(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, v, customCtx); };
-  const saveNomEtab = (v: string) => { setNomEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, v, adresseEtab, emailEtab, espacesDyn); };
-  const saveAdresseEtab = (v: string) => { setAdresseEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, v, emailEtab, espacesDyn); };
-  const saveEmailEtab = (v: string) => { setEmailEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, adresseEtab, v, espacesDyn); };
-  const saveEspacesDyn = (esps: EspaceDyn[]) => { setEspacesDyn(esps); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, adresseEtab, emailEtab, esps); };
+  const saveNomEtab = (v: string) => { setNomEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, v, adresseEtab, emailEtab, telEtab, espacesDyn); };
+  const saveAdresseEtab = (v: string) => { setAdresseEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, v, emailEtab, telEtab, espacesDyn); };
+  const saveEmailEtab = (v: string) => { setEmailEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, adresseEtab, v, telEtab, espacesDyn); };
+  const saveTelEtab = (v: string) => { setTelEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, adresseEtab, emailEtab, v, espacesDyn); };
+  const saveEspacesDyn = (esps: EspaceDyn[]) => { setEspacesDyn(esps); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, adresseEtab, emailEtab, telEtab, esps); };
   const saveLinks = async (l: any) => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
   // Sauvegarde immédiate des métadonnées email — sans debounce
   // Utilisé pour lu/non lu, flags, aTraiter — doit être instantané
@@ -966,6 +971,7 @@ export default function App() {
               if (parsed.nomEtab)      setNomEtab(parsed.nomEtab);
               if (parsed.adresseEtab)  setAdresseEtab(parsed.adresseEtab);
               if (parsed.emailEtab)    setEmailEtab(parsed.emailEtab);
+              if (parsed.telEtab)      setTelEtab(parsed.telEtab);
               if (parsed.espacesDyn && Array.isArray(parsed.espacesDyn) && parsed.espacesDyn.length > 0)
                 setEspacesDyn(parsed.espacesDyn);
             }
@@ -1188,7 +1194,7 @@ export default function App() {
       // ── Construire le contexte complet — sections structurées ─────────────
       const linkCtx = Object.values(linksFetched).filter(Boolean)
         .map((l: any) => (l.summary || "").slice(0, 500)).join("\n\n");
-      const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, espacesDyn})
+      const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, telEtab, espacesDyn})
         + (menusCtx      ? "\n\n=== MENUS & TARIFS ===\n"          + menusCtx.slice(0, 3000)      : "")
         + (conditionsCtx ? "\n\n=== CONDITIONS & POLITIQUE ===\n"  + conditionsCtx.slice(0, 2000) : "")
         + (espacesCtx    ? "\n\n=== ESPACES & CAPACITÉS ===\n"     + espacesCtx.slice(0, 2000)    : "")
@@ -1471,7 +1477,7 @@ Retourne UNIQUEMENT ce JSON valide :
         ? (motifPersonnalise || "Relance générale")
         : (motifSelectionne || "Relance sans motif spécifique");
 
-      const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, espacesDyn});
+      const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, telEtab, espacesDyn});
 
       const prompt = `Tu dois rédiger un email de relance pour ${nomEtab}.
 
@@ -1514,7 +1520,7 @@ INSTRUCTIONS DE RÉDACTION
 - Ton chaleureux, professionnel, jamais insistant
 - Personnalise selon le profil et l'historique du client
 - Appel à l'action clair en fin de mail
-- Signature : L'équipe ${nomEtab}${adresseEtab ? "\n" + adresseEtab : ""}${emailEtab ? "\n" + emailEtab : ""}`;
+- Signature : L'équipe ${nomEtab}${adresseEtab ? "\n" + adresseEtab : ""}${emailEtab ? "\n" + emailEtab : ""}${telEtab ? "\n" + telEtab : ""}`;
 
       // Docs exclus volontairement — non nécessaires pour une relance et trop lourds (PDFs base64)
       const txt = await callClaude(prompt, sys, null);
@@ -1616,7 +1622,7 @@ FORMAT
     try {
       const bodyTronque = (m.body || m.snippet || "").slice(0, 3000);
       const prompt = `Email reçu:\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n\n${bodyTronque}\n\nRédige une réponse professionnelle pour ${nomEtab}.`;
-      const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, espacesDyn})
+      const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, telEtab, espacesDyn})
         + (menusCtx      ? "\n\n=== MENUS & TARIFS ===\n"          + menusCtx.slice(0,3000)      : "")
         + (conditionsCtx ? "\n\n=== CONDITIONS & POLITIQUE ===\n"  + conditionsCtx.slice(0,2000) : "")
         + (espacesCtx    ? "\n\n=== ESPACES & CAPACITÉS ===\n"     + espacesCtx.slice(0,2000)    : "")
@@ -3212,6 +3218,10 @@ FORMAT
                   <div>
                     <label style={{fontSize:11,fontWeight:600,color:"#5C564F",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📧 Email de contact</label>
                     <input value={emailEtab} onChange={e=>setEmailEtab(e.target.value)} onBlur={()=>saveEmailEtab(emailEtab)} placeholder="Ex : contact@brasserie-reva.fr" style={{...inp}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:600,color:"#5C564F",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📞 Téléphone</label>
+                    <input value={telEtab} onChange={e=>setTelEtab(e.target.value)} onBlur={()=>saveTelEtab(telEtab)} placeholder="Ex : +33 1 23 45 67 89" style={{...inp}}/>
                   </div>
                 </div>
               )}
