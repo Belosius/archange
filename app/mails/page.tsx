@@ -460,6 +460,8 @@ export default function App() {
   const [repliesCache, setRepliesCache] = useState<Record<string,{reply:string,editReply:string,extracted:any|null,dateGen?:string}>>({});
   const [drafted, setDrafted] = useState(new Set());
   const [undoDelete, setUndoDelete] = useState<{email:any,timer:any}|null>(null);
+  // Réponses envoyées — indexées par emailId, persistées en Supabase
+  const [sentReplies, setSentReplies] = useState<Record<string,{text:string,date:string,subject:string,toEmail:string}>>({});
   const [editing, setEditing] = useState(false);
   const [editReply, setEditReply] = useState("");
   const [notif, setNotif] = useState<{msg:string,type:string}|null>(null);
@@ -723,6 +725,7 @@ export default function App() {
     });
   };
 
+  const saveSentReplies = (r: Record<string,any>) => { setSentReplies(r); saveToSupabase({ sent_replies: JSON.stringify(r) }); };
   const saveNoteIA = (n: Record<string,{text:string,date:string}>) => { setNoteIA(n); saveToSupabase({note_ia:JSON.stringify(n)}); };
   const saveStatuts = (s: StatutDef[]) => { setStatuts(s); saveToSupabase({statuts:JSON.stringify(s)}); };
   const saveResas = (r: any[]) => { setResas(r); saveToSupabase({resas:JSON.stringify(r)}); };
@@ -916,6 +919,7 @@ export default function App() {
           try { localStorage.setItem("arc_email_meta", JSON.stringify(meta)); } catch {}
         } } catch {}
         try { if (d.radar_traites) { const t = JSON.parse(d.radar_traites); setRadarTraites(new Set(t)); } } catch {}
+        try { if (d.sent_replies) setSentReplies(JSON.parse(d.sent_replies)); } catch {}
         // P1 — Charger les réponses IA persistées → restaure les replies après F5
         try { if (d.replies_cache) {
           const replies = JSON.parse(d.replies_cache);
@@ -2087,23 +2091,49 @@ FORMAT
                     </div>
                   ):(
                     <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                      {getLinkedEmails(selResaGeneral).length===0?(
+                      {getLinkedEmails(selResaGeneral).length===0&&Object.keys(sentReplies).filter(id=>emailResaLinks[id]===selResaGeneral.id).length===0?(
                         <div style={{textAlign:"center",padding:"40px 16px",color:"#8A8178"}}>
                           <div style={{fontSize:32,marginBottom:10}}>✉</div>
                           <div style={{fontSize:13}}>Aucun mail associé</div>
                           <div style={{fontSize:11,marginTop:4}}>à l'adresse {selResaGeneral.email}</div>
                         </div>
                       ):(
-                        getLinkedEmails(selResaGeneral).map(m=>(
-                          <div key={m.id} style={{background:"#F5F3EF",borderRadius:10,padding:"13px 15px",border:"1px solid #EAE6E1"}}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                              <div style={{fontSize:13,fontWeight:600,color:"#1C1814",flex:1,paddingRight:8}}>{m.subject}</div>
-                              <span style={{fontSize:11,color:"#8A8178",flexShrink:0}}>{m.date}</span>
+                        (() => {
+                          // Construire le fil chronologique : emails entrants + réponses envoyées
+                          const linked = getLinkedEmails(selResaGeneral);
+                          const replies = Object.entries(sentReplies)
+                            .filter(([id]) => emailResaLinks[id] === selResaGeneral.id || linked.some(m=>m.id===id))
+                            .map(([id, r]) => ({ ...r, id, isSent: true }));
+                          return (
+                            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                              {linked.map(m=>(
+                                <div key={m.id}>
+                                  <div style={{background:"#F5F3EF",borderRadius:10,padding:"13px 15px",border:"1px solid #EAE6E1"}}>
+                                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                        <span style={{fontSize:11,background:"#EFF6FF",color:"#1D4ED8",padding:"2px 7px",borderRadius:100,fontWeight:600}}>📥 Reçu</span>
+                                        <span style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>{m.from}</span>
+                                      </div>
+                                      <span style={{fontSize:11,color:"#8A8178",flexShrink:0}}>{m.date}</span>
+                                    </div>
+                                    <div style={{fontSize:12,color:"#5C564F",lineHeight:1.5,marginBottom:10}}>{(m.snippet||"").slice(0,120)}{(m.snippet||"").length>120?"…":""}</div>
+                                    <button onClick={()=>{ setView("mails"); setMailFilter("all"); setSel(m); handleSel(m); setSelResaGeneral(null); setShowMailHistory(false); }} style={{width:"100%",padding:"7px",borderRadius:7,border:"1px solid #DDD8D0",background:"transparent",color:"#5C564F",fontSize:12,cursor:"pointer"}}>Ouvrir le mail →</button>
+                                  </div>
+                                  {/* Réponse envoyée pour cet email */}
+                                  {sentReplies[m.id]&&(
+                                    <div style={{marginLeft:20,marginTop:4,background:"#F0FDF4",borderRadius:10,padding:"11px 14px",border:"1px solid #BBF7D0"}}>
+                                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                                        <span style={{fontSize:11,background:"#D1FAE5",color:"#065F46",padding:"2px 7px",borderRadius:100,fontWeight:600}}>📤 Vous</span>
+                                        <span style={{fontSize:11,color:"#8A8178"}}>{sentReplies[m.id].date}</span>
+                                      </div>
+                                      <div style={{fontSize:12,color:"#374151",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{sentReplies[m.id].text.slice(0,200)}{sentReplies[m.id].text.length>200?"…":""}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
                             </div>
-                            <div style={{fontSize:12,color:"#5C564F",lineHeight:1.5,marginBottom:10}}>{(m.snippet||"").slice(0,120)}{(m.snippet||"").length>120?"…":""}</div>
-                            <button onClick={()=>{ setView("mails"); setMailFilter("all"); setSel(m); handleSel(m); setSelResaGeneral(null); setShowMailHistory(false); }} style={{width:"100%",padding:"7px",borderRadius:7,border:"1px solid #DDD8D0",background:"transparent",color:"#5C564F",fontSize:12,cursor:"pointer"}}>Ouvrir le mail →</button>
-                          </div>
-                        ))
+                          );
+                        })()
                       )}
                     </div>
                   )}
@@ -2661,13 +2691,24 @@ FORMAT
                             </div>
                     }
                     <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #EAE6E1",background:"#F5F3EF",flexWrap:"wrap"}}>
-                      {reply && <><button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+(editing?editReply:reply)); setDrafted(p=>new Set([...p,sel.id])); toast("Brouillon créé dans Gmail ✓"); }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
+                      {reply && <><button onClick={()=>{
+                        const replyText = editing ? editReply : reply;
+                        window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+replyText);
+                        setDrafted(p=>new Set([...p,sel.id]));
+                        // Sauvegarder la réponse dans l'historique
+                        const upd = { ...sentReplies, [sel.id]: { text: replyText, date: new Date().toLocaleDateString("fr-FR"), subject: sel.subject||"", toEmail: sel.fromEmail||"" }};
+                        saveSentReplies(upd);
+                        toast("Brouillon créé dans Gmail ✓");
+                      }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
                       {sel?.fromEmail&&<button onClick={()=>{
                         const replyText = editing ? editReply : reply;
                         const subject = sel.subject?.startsWith("Re:") ? sel.subject : `Re: ${sel.subject||""}`;
                         const body = encodeURIComponent(replyText);
                         window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(sel.fromEmail)}&su=${encodeURIComponent(subject)}&body=${body}`, "_blank");
                         setDrafted(p=>new Set([...p,sel.id]));
+                        // Sauvegarder la réponse dans l'historique
+                        const upd = { ...sentReplies, [sel.id]: { text: replyText, date: new Date().toLocaleDateString("fr-FR"), subject: subject, toEmail: sel.fromEmail||"" }};
+                        saveSentReplies(upd);
                         toast("Gmail ouvert ✓");
                       }} disabled={genReply} style={{...gold,background:"#1a73e8",color:"#fff",boxShadow:"0 2px 8px rgba(26,115,232,.3)"}}>✉ Ouvrir dans Gmail</button>}
                       <button onClick={()=>{ if(editing){setReply(editReply);setEditing(false);if(sel)setRepliesCache(prev=>({...prev,[sel.id]:{...prev[sel.id],reply:editReply,editReply}}));}else{setEditing(true);setEditReply(reply);} }} disabled={genReply} style={{...out}}>{editing?"Valider":"Modifier"}</button>
@@ -2877,14 +2918,22 @@ FORMAT
                         <div><div style={{fontSize:10,color:"#8A8178",marginBottom:1}}>{k}</div><div style={{fontSize:13,color:"#1C1814"}}>{v}</div></div>
                       </div>
                     ))}
-                    {/* Mails liés */}
-                    {getLinkedEmails(selResa).length>0&&(
+                    {/* Mails liés + réponses envoyées */}
+                    {(getLinkedEmails(selResa).length>0||Object.keys(sentReplies).some(id=>getLinkedEmails(selResa).find(m=>m.id===id)))&&(
                       <div style={{marginTop:12,padding:"12px 14px",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10}}>
                         <div style={{fontSize:11,color:"#92400E",fontWeight:600,marginBottom:8}}>✉ {getLinkedEmails(selResa).length} conversation(s)</div>
                         {getLinkedEmails(selResa).map(m=>(
-                          <div key={m.id} onClick={()=>{ setView("mails"); setMailFilter("all"); setSel(m); handleSel(m); }} style={{fontSize:12,color:"#92400E",padding:"5px 0",cursor:"pointer",borderBottom:"1px solid #FDE68A",display:"flex",justifyContent:"space-between"}}>
-                            <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{m.subject}</span>
-                            <span style={{flexShrink:0,marginLeft:8,opacity:.6}}>{m.date}</span>
+                          <div key={m.id}>
+                            <div onClick={()=>{ setView("mails"); setMailFilter("all"); setSel(m); handleSel(m); }} style={{fontSize:12,color:"#92400E",padding:"5px 0",cursor:"pointer",borderBottom:"1px solid #FDE68A",display:"flex",justifyContent:"space-between"}}>
+                              <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>📥 {m.subject}</span>
+                              <span style={{flexShrink:0,marginLeft:8,opacity:.6}}>{m.date}</span>
+                            </div>
+                            {sentReplies[m.id]&&(
+                              <div style={{fontSize:11,color:"#065F46",padding:"4px 0 4px 12px",borderBottom:"1px solid #FDE68A",display:"flex",justifyContent:"space-between",background:"#F0FDF4"}}>
+                                <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>📤 Vous — {sentReplies[m.id].text.slice(0,60)}{sentReplies[m.id].text.length>60?"…":""}</span>
+                                <span style={{flexShrink:0,marginLeft:8,opacity:.6}}>{sentReplies[m.id].date}</span>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
