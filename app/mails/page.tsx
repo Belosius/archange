@@ -1623,10 +1623,9 @@ FORMAT
     () => Object.values(linksFetched).filter(Boolean).length
       + (menusCtx ? 1 : 0)
       + (conditionsCtx ? 1 : 0)
-      + (espacesCtx ? 1 : 0)
       + (tonCtx ? 1 : 0)
       + (customCtx ? 1 : 0),
-    [linksFetched, menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx]
+    [linksFetched, menusCtx, conditionsCtx, tonCtx, customCtx]
   );
 
   const NAV=[
@@ -3135,7 +3134,6 @@ FORMAT
                 {[
                   ["Menus", menusCtx?"Actif":"—","🍽️"],
                   ["Conditions", conditionsCtx?"Actif":"—","📜"],
-                  ["Espaces", espacesCtx?"Actif":"—","🏛️"],
                   ["Ton & Règles", tonCtx?"Actif":"—","✏️"],
                   ["Liens web", Object.values(linksFetched).filter(Boolean).length||"—","🔗"],
                 ].map(([l,v,icon],i,arr)=>(
@@ -3218,8 +3216,23 @@ FORMAT
                   <button onClick={()=>saveEspacesDyn([...espacesDyn,{id:"esp_"+Date.now(),nom:"Nouvel espace",color:"#8B5CF6",capacite:"",description:""}])} style={{padding:"10px",borderRadius:8,border:"2px dashed #EAE6E1",background:"transparent",color:"#8A8178",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                     + Ajouter un espace
                   </button>
+
+                  {/* Notes complémentaires — remplace l'ancien textarea "Espaces & Capacités" */}
+                  <div style={{marginTop:4}}>
+                    <div style={{fontSize:11,fontWeight:600,color:"#5C564F",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📝 Notes complémentaires sur les espaces</div>
+                    <textarea
+                      value={espacesCtx}
+                      onChange={e=>setEspacesCtx(e.target.value)}
+                      onBlur={()=>saveEspacesCtx(espacesCtx)}
+                      placeholder={"Équipements disponibles, accès PMR, parking, matériel sonorisation, contraintes techniques, règles d'accès, horaires d'ouverture des espaces…"}
+                      rows={5}
+                      style={{...inp,lineHeight:1.75,resize:"vertical",width:"100%",fontFamily:"inherit",fontSize:12}}
+                    />
+                    <div style={{fontSize:11,color:"#A09890",marginTop:4}}>Ces informations complètent les espaces ci-dessus — équipements, accès, contraintes non structurées.</div>
+                  </div>
+
                   <div style={{fontSize:11,color:"#A09890",padding:"8px 12px",background:"#F5F3EF",borderRadius:8}}>
-                    💡 Ces espaces remplacent les salles codées en dur (Rez-de-chaussée, Patio, Belvédère). L'IA les utilisera pour les attributions et les réponses.
+                    💡 Les espaces ci-dessus remplacent les salles codées en dur. L'IA les utilisera pour les attributions et les réponses.
                   </div>
                 </div>
               )}
@@ -3229,7 +3242,6 @@ FORMAT
             {([
               ["menus",      "🍽️", "Menus & Tarifs",        "Collez ici vos menus, formules, tarifs par personne, options boissons…",            menusCtx,      saveMenusCtx],
               ["conditions", "📜", "Conditions & Politique", "Politique d'annulation, acomptes, délais de confirmation, horaires d'accès…",       conditionsCtx, saveConditionsCtx],
-              ["espaces",    "🏛️", "Espaces & Capacités",    "Détails des espaces, configurations, équipements, accès PMR, parking…",            espacesCtx,    saveEspacesCtx],
               ["ton",        "✏️", "Règles & Ton IA",        "Ex: Toujours proposer une visite. Ne pas mentionner les prix avant une demande de devis. Signature personnalisée…", tonCtx, saveTonCtx],
             ] as [string, string, string, string, string, (v:string)=>void][]).map(([key, icon, title, ph, val, save]) => (
               <div key={key} style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1"}}>
