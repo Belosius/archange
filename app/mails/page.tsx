@@ -1132,7 +1132,7 @@ export default function App() {
     setLoadingMail(true);
     try {
       if (withSync) {
-        try { await fetch("/api/emails/sync", { method: "POST" }); } catch {}
+        try { await fetch("/api/emails", { method: "POST" }); } catch {}
       }
       const r = await fetch("/api/emails");
       if (!r.ok) throw new Error("Erreur " + r.status);
