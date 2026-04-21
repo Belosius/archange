@@ -1064,6 +1064,7 @@ export default function App() {
       setSyncLastDate(new Date().toISOString());
     } catch(e) {
       setSyncStatus('error');
+      syncRunning.current = false; // Fix #7 — éviter le blocage permanent après erreur
     }
     syncRunning.current = false;
   };
@@ -1097,7 +1098,7 @@ export default function App() {
       setAnalysingProgress(`${i + 1}/${aAnalyser.length}`);
       try {
         const raw = await callClaude(
-          `Email:\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n\n${(m.body || m.snippet || "").slice(0, 1500)}`,
+          `Email:\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n\n${(m.body || m.snippet || "").slice(0, 3000)}`,
           buildExtractPrompt(nomEtab, espacesDyn), null
         );
         const extracted = JSON.parse(raw.replace(/```json|```/g, "").trim());
@@ -1107,7 +1108,10 @@ export default function App() {
           ...prev,
           [m.id]: { ...(prev[m.id] || { reply: "", editReply: "" }), extracted },
         }));
-      } catch { /* email ignoré silencieusement */ }
+      } catch {
+        // Fix #8 — ne pas marquer comme analysé si échec : sera retenté au prochain cycle
+        console.warn(`Analyse email ${m.id} échouée — sera retentée`);
+      }
     }
     // Sauvegarder en Supabase UNE SEULE FOIS à la fin — payload maîtrisé
     if (Object.keys(nouvellesExtractions).length > 0) {
@@ -1132,7 +1136,17 @@ export default function App() {
     setLoadingMail(true);
     try {
       if (withSync) {
-        try { await fetch("/api/emails", { method: "POST" }); } catch {}
+        try {
+          const syncRes = await fetch("/api/emails", { method: "POST" });
+          if (syncRes.status === 401) {
+            const syncData = await syncRes.json();
+            if (syncData.error === "GMAIL_AUTH_EXPIRED") {
+              toast("Session Gmail expirée — reconnectez-vous", "err");
+              setLoadingMail(false);
+              return;
+            }
+          }
+        } catch {}
       }
       const r = await fetch("/api/emails");
       if (!r.ok) throw new Error("Erreur " + r.status);
@@ -1313,6 +1327,14 @@ export default function App() {
     return () => { window.removeEventListener("online", flushQueue); clearInterval(interval); };
   }, []);
 
+  // Fix #3 — Polling automatique toutes les 2 minutes pour détecter les nouveaux emails
+  useEffect(() => {
+    const pollingInterval = setInterval(() => {
+      loadEmailsFromApi(true);
+    }, 2 * 60 * 1000);
+    return () => clearInterval(pollingInterval);
+  }, []);
+
   // P2 — Sauvegarder l'état UI dans localStorage à chaque changement
   useEffect(() => {
     try { localStorage.setItem("arc_ui_state", JSON.stringify({ view, mailFilter, generalFilter, navCollapsed, calView, planFilter })); } catch {}
@@ -1451,22 +1473,45 @@ export default function App() {
   };
 
   // ─── Sauvegarde brouillon local ──────────────────────────────────────────────
-  const saveDraft = () => {
+  const saveDraft = async () => {
     if (!replyEditorText.trim() && !composeBody.trim()) return;
+    const to      = showCompose ? composeTo : replyEditorTo;
+    const subject = showCompose ? composeSubject : (sel ? `Re: ${sel.subject}` : "");
+    const body    = showCompose ? composeBody : replyEditorText;
+
     const draft: DraftItem = {
       id: "draft_" + Date.now(),
-      to: showCompose ? composeTo : replyEditorTo,
-      subject: showCompose ? composeSubject : (sel ? `Re: ${sel.subject}` : ""),
-      body: showCompose ? composeBody : replyEditorText,
+      to, subject, body,
       date: new Date().toLocaleDateString("fr-FR"),
       emailId: showReplyEditor ? sel?.id : undefined,
     };
-    const updated = [...localDrafts, draft];
-    setLocalDrafts(updated);
-    saveToSupabase({ replies_cache: JSON.stringify(updated) }); // réutilise la colonne
+
+    // Fix #6 — Créer le brouillon dans Gmail réel (en parallèle du stockage local)
+    try {
+      const res = await fetch("/api/gmail/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to, subject, body }),
+      });
+      if (res.ok) {
+        toast("Brouillon créé dans Gmail ✓");
+      } else {
+        // Fallback : stockage local si Gmail échoue
+        const updated = [...localDrafts, draft];
+        setLocalDrafts(updated);
+        saveToSupabase({ replies_cache: JSON.stringify(updated) });
+        toast("Brouillon sauvegardé localement ✓");
+      }
+    } catch {
+      // Fallback hors ligne
+      const updated = [...localDrafts, draft];
+      setLocalDrafts(updated);
+      saveToSupabase({ replies_cache: JSON.stringify(updated) });
+      toast("Brouillon sauvegardé ✓");
+    }
+
     setShowReplyEditor(false);
     setShowCompose(false);
-    toast("Brouillon sauvegardé ✓");
   };
 
   // ─── Snooze ─────────────────────────────────────────────────────────────────
@@ -3532,14 +3577,22 @@ FORMAT
                             </div>
                     }
                     <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #E6DCC9",background:"#F7F2EA",flexWrap:"wrap"}}>
-                      {reply && <><button onClick={()=>{
+                      {reply && <><button onClick={async()=>{
                         const replyText = editing ? editReply : reply;
-                        window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+replyText);
+                        const subject = sel.subject?.startsWith("Re:") ? sel.subject : `Re: ${sel.subject||""}`;
+                        // Fix #6 — appel direct /api/gmail/draft
+                        try {
+                          const res = await fetch("/api/gmail/draft", {
+                            method:"POST",
+                            headers:{"Content-Type":"application/json"},
+                            body: JSON.stringify({ to: sel.fromEmail, subject, body: replyText })
+                          });
+                          if (res.ok) toast("Brouillon créé dans Gmail ✓");
+                          else toast("Erreur création brouillon", "err");
+                        } catch { toast("Erreur réseau", "err"); }
                         setDrafted(p=>new Set([...p,sel.id]));
-                        // Sauvegarder la réponse dans l'historique
                         const upd = { ...sentReplies, [sel.id]: { text: replyText, date: new Date().toLocaleDateString("fr-FR"), subject: sel.subject||"", toEmail: sel.fromEmail||"" }};
                         saveSentReplies(upd);
-                        toast("Brouillon créé dans Gmail ✓");
                       }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
                       {sel?.fromEmail&&<button onClick={()=>{
                         const replyText = editing ? editReply : reply;
