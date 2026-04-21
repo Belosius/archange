@@ -997,27 +997,45 @@ export default function App() {
   };
 
   const mapEmail = (m: any) => {
-    const rawBody = m.body || m.snippet || "";
-    const rawSnippet = m.snippet || "";
-    // Détection HTML robuste — certains emails commencent par un espace, BOM, ou attribut avant <
-    const isHtml = rawBody.trim().startsWith("<") ||
-      /<(html|head|body|div|table|td|tr|p|style)\b/i.test(rawBody.slice(0, 1000));
+    // Champs emails_cache (body_html/body_text) + rétrocompat ancienne table (body)
+    const rawBodyHtml = m.body_html || null;
+    const rawBodyText = m.body_text || m.body || "";
+    const rawSnippet  = m.snippet || "";
+
+    // bodyHtml : priorité au HTML de emails_cache (déjà stocké proprement)
+    // Si absent, détecter si body est du HTML
+    let bodyHtml: string | null = null;
+    if (rawBodyHtml) {
+      bodyHtml = sanitizeHtmlForDisplay(rawBodyHtml);
+    } else if (rawBodyText.trim().startsWith("<") || /<(html|head|body|div|table)\b/i.test(rawBodyText.slice(0, 500))) {
+      bodyHtml = sanitizeHtmlForDisplay(rawBodyText);
+    }
+
+    // Flags — is_starred de emails_cache → flag "star"
+    const baseFlags = Array.isArray(m.flags) ? m.flags : [];
+    const flags = m.is_starred && !baseFlags.includes("star")
+      ? [...baseFlags, "star"]
+      : baseFlags;
+
     return {
       id:          m.id,
+      gmailId:     m.gmail_id   || null,  // ID Gmail pour les appels PATCH/DELETE
       from:        m.from_name  || "",
       fromEmail:   m.from_email || "",
       subject:     m.subject    || "(sans objet)",
       date:        fmtEmailDate(m.date_iso || m.created_at) || m.date || "",
-      rawDate:     m.date_iso   || m.created_at || "", // ISO pour tri chronologique exact
+      rawDate:     m.date_iso   || m.created_at || "",
       threadId:    m.thread_id  || null,
-      gmailId:     m.gmail_id   || null,
-      cc:          Array.isArray(m.cc) ? m.cc : (m.cc ? [m.cc] : []),
-      snippet:     stripHtml(rawSnippet),            // toujours texte propre
-      body:        stripHtml(rawBody),               // texte propre pour IA
-      bodyHtml:    isHtml ? sanitizeHtmlForDisplay(rawBody) : null, // HTML pour iframe
-      flags:       Array.isArray(m.flags) ? m.flags : [],
+      cc:          Array.isArray(m.cc_addresses) ? m.cc_addresses : (Array.isArray(m.cc) ? m.cc : []),
+      snippet:     stripHtml(rawSnippet),
+      body:        stripHtml(rawBodyText),   // texte propre pour IA
+      bodyHtml,                              // HTML sanitisé pour iframe
+      bodyLoaded:  !!(rawBodyHtml || rawBodyText), // true si corps déjà chargé
+      flags,
       aTraiter:    m.a_traiter  || false,
       unread:      m.is_unread  || false,
+      archived:    m.is_archived || false,
+      direction:   m.direction  || "received",
       attachments: Array.isArray(m.attachments) ? m.attachments : [],
     };
   };
@@ -1150,19 +1168,13 @@ export default function App() {
       }
       const r = await fetch("/api/emails");
       if (!r.ok) throw new Error("Erreur " + r.status);
-      const data = await r.json();
-      if (Array.isArray(data) && data.length > 0) {
-        let emailMeta: Record<string,any> = {};
-        try { const m = localStorage.getItem("arc_email_meta"); if(m) emailMeta = JSON.parse(m); } catch {}
-        const mapped = data.map(m => {
-          const em = mapEmail(m);
-          const meta = emailMeta[em.id];
-          if (meta) return { ...em, flags: meta.flags ?? em.flags, aTraiter: !!meta.aTraiter, unread: meta.unread !== undefined ? meta.unread : em.unread };
-          return em;
-        });
+      const payload = await r.json();
+      // Nouveau format : { emails: [], syncCompleted: bool } — rétrocompat avec []
+      const data = Array.isArray(payload) ? payload : (payload?.emails || []);
+      if (data.length > 0) {
+        const mapped = data.map((m: any) => mapEmail(m));
         setEmails(mapped);
         toast(mapped.length + " emails chargés");
-        // Lancer l'analyse en arrière-plan (non bloquant)
         if (withSync) setTimeout(() => analyserEmailsEnArrierePlan(mapped), 500);
       } else {
         setEmails([]);
@@ -1256,29 +1268,11 @@ export default function App() {
       }
 
       if (emailsData.status === "fulfilled") {
-        const data = emailsData.value;
-        // Fusionner les métadonnées persistées — Supabase prioritaire, localStorage en fallback
-        let emailMeta: Record<string,any> = {};
-        // 1. localStorage en premier (disponible immédiatement)
-        try { const m = localStorage.getItem("arc_email_meta"); if(m) emailMeta = JSON.parse(m); } catch {}
-        // 2. Supabase écrase localStorage si disponible (plus fiable, multi-appareils)
-        if (userData.status === "fulfilled") {
-          try { if (userData.value.email_meta) {
-            const supabaseMeta = JSON.parse(userData.value.email_meta);
-            // Fusionner : pour chaque email, Supabase gagne sauf si la clé manque
-            Object.entries(supabaseMeta).forEach(([id, v]) => { emailMeta[id] = v; });
-          } } catch {}
-        }
-        const mapped = Array.isArray(data) && data.length > 0 ? data.map(m => {
-          const em = mapEmail(m);
-          const meta = emailMeta[em.id];
-          // La meta stockée écrase TOUJOURS les valeurs de l'API Gmail
-          if (meta) return { ...em, flags: meta.flags ?? em.flags, aTraiter: !!meta.aTraiter, unread: meta.unread !== undefined ? meta.unread : em.unread };
-          return em;
-        }) : [];
+        const payload = emailsData.value;
+        // Nouveau format : { emails: [], syncCompleted } — rétrocompat avec []
+        const data = Array.isArray(payload) ? payload : (payload?.emails || []);
+        const mapped = data.length > 0 ? data.map((m: any) => mapEmail(m)) : [];
         setEmails(mapped);
-        // Mettre à jour localStorage avec la meta Supabase (sync multi-appareils)
-        try { localStorage.setItem("arc_email_meta", JSON.stringify(emailMeta)); } catch {}
       } else {
         console.error("Chargement emails échoué :", emailsData.reason);
         setEmails([]);
@@ -1335,6 +1329,59 @@ export default function App() {
     return () => clearInterval(pollingInterval);
   }, []);
 
+  // Supabase Realtime — mise à jour instantanée quand emails_cache change (via webhook Pub/Sub)
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return;
+    let channel: any = null;
+    try {
+      // Lazy import pour ne pas bloquer si @supabase/supabase-js n'est pas installé côté client
+      import('@supabase/supabase-js').then(({ createClient }) => {
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+        channel = supabase
+          .channel('emails_cache_changes')
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'emails_cache',
+          }, (payload: any) => {
+            const newEmail = mapEmail(payload.new);
+            setEmails(prev => {
+              if (prev.some(m => m.id === newEmail.id)) return prev;
+              return [newEmail, ...prev];
+            });
+            if (newEmail.unread) {
+              toast(`Nouvel email de ${newEmail.from} — ${newEmail.subject}`);
+            }
+          })
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'emails_cache',
+          }, (payload: any) => {
+            const updated = mapEmail(payload.new);
+            setEmails(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m));
+            if (sel?.id === updated.id) setSel((prev: any) => prev ? { ...prev, ...updated } : prev);
+          })
+          .on('postgres_changes', {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'emails_cache',
+          }, (payload: any) => {
+            const deletedId = payload.old?.id;
+            if (deletedId) {
+              setEmails(prev => prev.filter(m => m.id !== deletedId));
+              if (sel?.id === deletedId) setSel(null);
+            }
+          })
+          .subscribe();
+      }).catch(() => {}); // Silencieux si @supabase/supabase-js absent côté client
+    } catch {}
+    return () => { if (channel) channel.unsubscribe?.(); };
+  }, []);
+
   // P2 — Sauvegarder l'état UI dans localStorage à chaque changement
   useEffect(() => {
     try { localStorage.setItem("arc_ui_state", JSON.stringify({ view, mailFilter, generalFilter, navCollapsed, calView, planFilter })); } catch {}
@@ -1354,42 +1401,69 @@ export default function App() {
   // [bandeau alerteUrgente supprimé — point 6]
 
   const deleteEmailWithUndo = (em: any) => {
-    // Annuler un éventuel undo précédent
     if (undoDelete?.timer) clearTimeout(undoDelete.timer);
-    // Retirer immédiatement de la liste
-    const upd = emails.filter(m => m.id !== em.id);
-    saveEmails(upd);
+    // Retirer immédiatement de la liste (optimiste)
+    setEmails(prev => prev.filter(m => m.id !== em.id));
     if (sel?.id === em.id) setSel(null);
-    // Préparer le undo pendant 4 secondes
-    const timer = setTimeout(() => { setUndoDelete(null); }, 4000);
+    const timer = setTimeout(() => {
+      // Confirmer la suppression après 4s — appel Gmail trash
+      if (em.gmailId) {
+        fetch("/api/emails", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gmail_id: em.gmailId }),
+        }).catch(() => {});
+      }
+      setUndoDelete(null);
+    }, 4000);
     setUndoDelete({ email: em, timer });
-    toast(`Email supprimé — Annuler ?`, "undo");
+    toast("Email supprimé — Annuler ?", "undo");
   };
+
   const toggleFlag = (id: string, flag: string) => {
-    const upd = emails.map(m => {
-      if (m.id !== id) return m;
-      const f = m.flags || [];
-      return { ...m, flags: f.includes(flag) ? f.filter((x: string) => x !== flag) : [...f, flag] };
-    });
-    saveEmails(upd);
-    if (sel?.id === id) setSel(upd.find(m => m.id === id) || null);
+    const email = emails.find(m => m.id === id);
+    if (!email) return;
+    const hasFlag = (email.flags || []).includes(flag);
+    const newFlags = hasFlag
+      ? (email.flags || []).filter((x: string) => x !== flag)
+      : [...(email.flags || []), flag];
+    // Optimiste local
+    setEmails(prev => prev.map(m => m.id === id ? { ...m, flags: newFlags } : m));
+    if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, flags: newFlags } : prev);
+    // Bidirectionnel Gmail
+    if (email.gmailId && flag === "star") {
+      fetch("/api/emails", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gmail_id: email.gmailId, action: "star", value: !hasFlag }),
+      }).catch(() => {});
+    }
   };
+
   const toggleATraiter = (id: string) => {
-    const upd = emails.map(m => m.id === id ? { ...m, aTraiter: !m.aTraiter } : m);
-    saveEmails(upd);
-    if (sel?.id === id) setSel(upd.find(m => m.id === id) || null);
+    setEmails(prev => prev.map(m => m.id === id ? { ...m, aTraiter: !m.aTraiter } : m));
+    if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, aTraiter: !prev.aTraiter } : prev);
   };
 
   // ─── Archivage ──────────────────────────────────────────────────────────────
   const archiveEmail = (id: string) => {
-    const upd = emails.map(m => m.id === id ? { ...m, archived: true } : m);
-    saveEmails(upd);
+    const email = emails.find(m => m.id === id);
+    // Optimiste local
+    setEmails(prev => prev.map(m => m.id === id ? { ...m, archived: true } : m));
     if (sel?.id === id) setSel(null);
+    // Bidirectionnel Gmail
+    if (email?.gmailId) {
+      fetch("/api/emails", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gmail_id: email.gmailId, action: "archive" }),
+      }).catch(() => {});
+    }
     toast("Email archivé — E pour archiver");
   };
+
   const unarchiveEmail = (id: string) => {
-    const upd = emails.map(m => m.id === id ? { ...m, archived: false } : m);
-    saveEmails(upd);
+    setEmails(prev => prev.map(m => m.id === id ? { ...m, archived: false } : m));
     toast("Email restauré dans la boîte");
   };
 
@@ -1612,18 +1686,54 @@ export default function App() {
 
   const handleSel = async (emailArg: any) => {
     let email = emailArg;
-    setMailOrigine(null); // réinitialiser le fil d'Ariane quand sélection manuelle
-    if(email.unread) {
-      const upd = emails.map(m=>m.id===email.id?{...m,unread:false}:m);
-      saveEmails(upd); email={...email,unread:false};
+    setMailOrigine(null);
+
+    // Marquer comme lu — optimiste puis sync Gmail via PATCH
+    if (email.unread) {
+      email = { ...email, unread: false };
+      setEmails(prev => prev.map(m => m.id === email.id ? { ...m, unread: false } : m));
+      if (email.gmailId) {
+        fetch("/api/emails", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gmail_id: email.gmailId, action: "read" }),
+        }).catch(() => {});
+      }
     }
-    // Restaurer la réponse mise en cache pour cet email (ne pas effacer !)
+
+    // Restaurer la réponse mise en cache
     const cached = repliesCache[email.id];
     setReply(cached?.reply || "");
     setEditReply(cached?.editReply || "");
     setExtracted(cached?.extracted || null);
     setEditing(false); setShowPlanForm(false);
     setSel(email);
+
+    // Charger le corps complet à la demande (format=full) si pas encore en cache
+    if (email.gmailId && !email.bodyLoaded) {
+      try {
+        const res = await fetch(`/api/emails?gmail_id=${encodeURIComponent(email.gmailId)}`);
+        if (res.ok) {
+          const body = await res.json();
+          if (body.body_html || body.body_text) {
+            const rawHtml = body.body_html || "";
+            const rawText = body.body_text || "";
+            const bodyHtml = rawHtml ? sanitizeHtmlForDisplay(rawHtml) : null;
+            const enriched = {
+              ...email,
+              body:        stripHtml(rawText || rawHtml),
+              bodyHtml,
+              bodyLoaded:  true,
+              attachments: Array.isArray(body.attachments) ? body.attachments : email.attachments,
+            };
+            setSel(enriched);
+            setEmails(prev => prev.map(m => m.id === email.id ? enriched : m));
+          }
+        }
+      } catch (e) {
+        console.warn("Chargement corps email échoué:", e);
+      }
+    }
   };
 
   const genererReponse = async () => {
@@ -2124,9 +2234,21 @@ FORMAT
 
   const mailListRef = useRef<HTMLDivElement>(null);
 
-  const toggleUnread = id => {
-    const upd = emails.map(m=>m.id===id?{...m,unread:!m.unread}:m);
-    saveEmails(upd); if(sel?.id===id) setSel(upd.find(m=>m.id===id));
+  const toggleUnread = (id: string) => {
+    const email = emails.find(m => m.id === id);
+    if (!email) return;
+    const newUnread = !email.unread;
+    // Optimiste local
+    setEmails(prev => prev.map(m => m.id === id ? { ...m, unread: newUnread } : m));
+    if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, unread: newUnread } : prev);
+    // Bidirectionnel Gmail
+    if (email.gmailId) {
+      fetch("/api/emails", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gmail_id: email.gmailId, action: newUnread ? "unread" : "read" }),
+      }).catch(() => {});
+    }
   };
 
   const total=resas.length, conf=resas.filter(r=>r.statut==="confirme").length, att=resas.filter(r=>r.statut==="en_attente"||r.statut==="nouveau"||r.statut==="en_cours").length;
@@ -3429,7 +3551,19 @@ FORMAT
                             const icon = icons[ext] || "📎";
                             const size = att.size ? (att.size > 1048576 ? (att.size/1048576).toFixed(1)+" Mo" : Math.round(att.size/1024)+" Ko") : "";
                             return (
-                              <div key={i} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:"#EFE7DA",borderRadius:2,border:"1px solid #E6DCC9",cursor:"pointer"}} onClick={()=>{if(att.url)window.open(att.url,"_blank");}}>
+                              <div key={i} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:"#EFE7DA",borderRadius:2,border:"1px solid #E6DCC9",cursor:"pointer"}} onClick={async()=>{
+                                if (att.id && sel?.gmailId) {
+                                  // Téléchargement via /api/gmail/attachment
+                                  try {
+                                    const url = `/api/gmail/attachment?gmailId=${encodeURIComponent(sel.gmailId)}&attachmentId=${encodeURIComponent(att.id)}&filename=${encodeURIComponent(att.filename||att.name||"attachment")}`;
+                                    const a = document.createElement("a");
+                                    a.href = url; a.download = att.filename||att.name||"attachment";
+                                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                  } catch { toast("Erreur téléchargement", "err"); }
+                                } else if (att.url) {
+                                  window.open(att.url, "_blank");
+                                }
+                              }}>
                                 <span style={{fontSize:14}}>{icon}</span>
                                 <div>
                                   <div style={{fontSize:11,fontWeight:500,color:"#1B1E2B",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{att.filename||att.name||"Pièce jointe"}</div>
