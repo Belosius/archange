@@ -509,6 +509,16 @@ export default function App() {
   const [emails, setEmails] = useState([]);
   const [resas, setResas] = useState<any[]>([]);
   const [sel, setSel] = useState(null);
+  // Origine du mail ouvert — pour le fil d'Ariane "← Retour à l'événement"
+  const [mailOrigine, setMailOrigine] = useState<{type:'evenement',resaId:string,nom:string}|null>(null);
+
+  // Ouvrir un mail depuis une fiche événement
+  const ouvrirMailDepuisEvenement = (email: any, resa: any) => {
+    setSel(email);
+    setMailOrigine({type:'evenement', resaId: resa.id, nom: resa.nom || resa.entreprise || "l'événement"});
+    setView("mails");
+    setMailFilter("all");
+  };
   const [reply, setReply] = useState("");
   const [genReply, setGenReply] = useState(false);
   const [extracted, setExtracted] = useState<any>(null);
@@ -645,9 +655,17 @@ export default function App() {
   const [loadingMail, setLoadingMail] = useState(false);
   const [analysing, setAnalysing] = useState(false);
   const [analysingProgress, setAnalysingProgress] = useState("");
+
+  // ─── Synchronisation complète Gmail ─────────────────────────────────────────
+  const [syncStatus, setSyncStatus] = useState<'idle'|'running'|'done'|'error'>('idle');
+  const [syncProgress, setSyncProgress] = useState({synced: 0, total: 0, pageToken: null as string|null});
+  const [syncLastDate, setSyncLastDate] = useState<string|null>(null);
+  const [deepSearching, setDeepSearching] = useState(false);
+  const [deepResults, setDeepResults] = useState<any[]>([]);
+  const syncRunning = useRef(false);
   const [saveIndicator, setSaveIndicator] = useState(false);
   const [offlineQueue, setOfflineQueue] = useState<Record<string,string>>({}); // P4: file hors-ligne
-  const [alerteUrgente, setAlerteUrgente] = useState<any[]>([]);
+  // alerteUrgente supprimé
   const saveTimer = useRef<any>(null);
   // ─── États Radar ARCHANGE ───────────────────────────────────────────────────
   const [radarSelEmail, setRadarSelEmail] = useState<any>(null); // email sélectionné dans Radar
@@ -1002,6 +1020,70 @@ export default function App() {
     };
   };
 
+  // ─── Synchronisation complète Gmail en arrière-plan ─────────────────────────
+  const lancerSyncComplete = async () => {
+    if (syncRunning.current) return;
+    syncRunning.current = true;
+    setSyncStatus('running');
+    setSyncProgress({synced: 0, total: 0, pageToken: null});
+
+    // Vérifier l'état actuel du cache
+    try {
+      const statusRes = await fetch('/api/emails/sync');
+      if (statusRes.ok) {
+        const { count, lastSync } = await statusRes.json();
+        if (count > 0) setSyncLastDate(lastSync);
+      }
+    } catch {}
+
+    let pageToken: string|null = null;
+    let totalSynced = 0;
+    let estimatedTotal = 0;
+
+    try {
+      // Synchroniser INBOX + SENT en boucle
+      while (syncRunning.current) {
+        const res = await fetch('/api/emails/sync', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ pageToken, labels: ['INBOX', 'SENT'] }),
+        });
+        if (!res.ok) { setSyncStatus('error'); break; }
+        const data = await res.json();
+        totalSynced += data.synced || 0;
+        if (data.total > estimatedTotal) estimatedTotal = data.total;
+        pageToken = data.nextPageToken || null;
+        setSyncProgress({synced: totalSynced, total: estimatedTotal, pageToken});
+        if (!pageToken) break;
+        // Pause 300ms entre les pages pour ne pas surcharger l'API
+        await new Promise(r => setTimeout(r, 300));
+      }
+      setSyncStatus('done');
+      setSyncLastDate(new Date().toISOString());
+    } catch(e) {
+      setSyncStatus('error');
+    }
+    syncRunning.current = false;
+  };
+
+  // ─── Recherche approfondie dans Gmail ────────────────────────────────────────
+  const lancerDeepSearch = async (q: string) => {
+    if (!q.trim()) return;
+    setDeepSearching(true);
+    setDeepResults([]);
+    try {
+      const res = await fetch(`/api/emails/deep-search?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const { results } = await res.json();
+        setDeepResults((results || []).map((m: any) => ({
+          ...mapEmail(m),
+          _fromGmailSearch: true,
+        })));
+      }
+    } catch {}
+    setDeepSearching(false);
+  };
+
   // Analyse IA en arrière-plan — uniquement les emails sans extraction
   const analyserEmailsEnArrierePlan = async (emailsList: any[]) => {
     const aAnalyser = emailsList.filter(m => !repliesCache[m.id]?.extracted);
@@ -1186,7 +1268,12 @@ export default function App() {
         setEmails([]);
       }
 
-      if (!cancelled) { setInitializing(false); setLoadingMail(false); }
+      if (!cancelled) {
+        setInitializing(false);
+        setLoadingMail(false);
+        // Lancer la synchronisation complète en arrière-plan (sans bloquer l'UI)
+        setTimeout(() => lancerSyncComplete(), 2000);
+      }
     };
 
     setLoadingMail(true);
@@ -1240,19 +1327,7 @@ export default function App() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [reply, drafted, sel]);
-  useEffect(() => {
-    if (resas.length === 0) return;
-    const today = new Date(); today.setHours(0,0,0,0);
-    const in7 = new Date(today); in7.setDate(today.getDate() + 7);
-    const urgentes = resas.filter(r => {
-      if (!r.dateDebut) return false;
-      const d = new Date(r.dateDebut + "T12:00:00");
-      if (d < today || d > in7) return false;
-      // Alerter si pas confirmé
-      return r.statut !== "confirme" && r.statut !== "annule";
-    });
-    setAlerteUrgente(urgentes);
-  }, [resas]);
+  // [bandeau alerteUrgente supprimé — point 6]
 
   const deleteEmailWithUndo = (em: any) => {
     // Annuler un éventuel undo précédent
@@ -1490,6 +1565,7 @@ export default function App() {
 
   const handleSel = async (emailArg: any) => {
     let email = emailArg;
+    setMailOrigine(null); // réinitialiser le fil d'Ariane quand sélection manuelle
     if(email.unread) {
       const upd = emails.map(m=>m.id===email.id?{...m,unread:false}:m);
       saveEmails(upd); email={...email,unread:false};
@@ -1531,11 +1607,30 @@ export default function App() {
         + (tonCtx        ? "\n\n=== RÈGLES & TON IA ===\n"         + tonCtx.slice(0, 1500)        : "")
         + (customCtx     ? "\n\n=== CONTEXTE SUPPLÉMENTAIRE ===\n" + customCtx.slice(0, 1000)     : "")
         + (linkCtx       ? "\n\n=== INFOS WEB ANALYSÉES ===\n"     + linkCtx                      : "")
-        + planningCtx;
+        + planningCtx
+        + historiqueCtx;
+
+      // ── Historique échanges avec cet expéditeur (emails envoyés) ─────────
+      const emailsEnvoyesAuClient = Object.entries(sentReplies)
+        .filter(([emailId, sr]: [string, any]) => {
+          // Trouver l'email correspondant pour récupérer le fromEmail
+          const emailSrc = emails.find(m => m.id === emailId);
+          return emailSrc?.fromEmail?.toLowerCase() === sel.fromEmail?.toLowerCase();
+        })
+        .map(([, sr]: [string, any]) => sr)
+        .sort((a: any, b: any) => b.date.localeCompare(a.date))
+        .slice(0, 5); // Max 5 derniers échanges
+
+      const historiqueCtx = emailsEnvoyesAuClient.length > 0
+        ? "\n\n=== HISTORIQUE DES ÉCHANGES PRÉCÉDENTS ===\n" +
+          emailsEnvoyesAuClient.map((sr: any) =>
+            `[${sr.date}] Réponse envoyée (${sr.subject}):\n${(sr.text || "").slice(0, 800)}`
+          ).join("\n\n---\n\n")
+        : "";
 
       // ── Prompt email — corps tronqué à 3000 chars ─────────────────────────
       const bodyTronque = (sel.body || sel.snippet || "").slice(0, 3000);
-      const prompt = `Email reçu:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${bodyTronque}${(sel.body||"").length > 3000 ? "\n[…message tronqué]" : ""}\n\nRédige une réponse professionnelle.`;
+      const prompt = `Email reçu:\nDe: ${sel.from} <${sel.fromEmail}>\nObjet: ${sel.subject}\n\n${bodyTronque}${(sel.body||"").length > 3000 ? "\n[…message tronqué]" : ""}${historiqueCtx ? "\n\n[Tiens compte de l'historique des échanges fourni dans le contexte système]" : ""}\n\nRédige une réponse professionnelle.`;
 
       const [reponse, infoRaw] = await Promise.allSettled([
         callClaude(prompt, sys, null),
@@ -2106,17 +2201,7 @@ FORMAT
       {saveIndicator&&<div style={{position:"fixed",top:12,right:16,zIndex:9998,padding:"5px 12px",borderRadius:20,background:"#0A1F0E",color:"#6EE7B7",fontSize:11,fontWeight:600,letterSpacing:"0.04em",border:"1px solid rgba(52,211,153,.2)",pointerEvents:"none"}}>✓ Sauvegardé</div>}
       {Object.keys(offlineQueue).length>0&&<div style={{position:"fixed",top:12,right:16,zIndex:9998,padding:"5px 12px",borderRadius:20,background:"#431407",color:"#FED7AA",fontSize:11,fontWeight:600,letterSpacing:"0.04em",border:"1px solid rgba(251,146,60,.2)",cursor:"default"}} title="Les modifications seront sauvegardées dès le retour de connexion">⚠ Non sauvegardé</div>}
 
-      {/* ── Alerte événements urgents — banner ── */}
-      {alerteUrgente.length>0&&!initializing&&(
-        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9997,background:"#7C2D12",borderBottom:"1px solid #9A3412",padding:"8px 20px",display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:14}}>⚠️</span>
-          <span style={{fontSize:12,color:"#FED7AA",fontWeight:500,flex:1}}>
-            {alerteUrgente.length} événement{alerteUrgente.length>1?"s":""} dans les 7 prochains jours sans confirmation — {alerteUrgente.map(r=>r.nom).join(", ")}
-          </span>
-          <button onClick={()=>{setView("general");setAlerteUrgente([]);}} style={{fontSize:11,color:"#FED7AA",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:6,padding:"3px 10px",cursor:"pointer",flexShrink:0}}>Voir →</button>
-          <button onClick={()=>setAlerteUrgente([])} style={{background:"none",border:"none",color:"rgba(254,215,170,0.5)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1,flexShrink:0}}>×</button>
-        </div>
-      )}
+      {/* bandeau alerteUrgente supprimé */}
 
       {/* Nav principale — Céleste */}
       <aside style={{width:navCollapsed?52:220,background:"#EFE7DA",display:"flex",flexDirection:"column",flexShrink:0,transition:"width .3s cubic-bezier(.4,0,.2,1)",overflow:"hidden",borderRight:"1px solid #E6DCC9"}}>
@@ -2632,7 +2717,7 @@ FORMAT
                                       <span style={{fontSize:11,color:"#6B6E7E",flexShrink:0}}>{m.date}</span>
                                     </div>
                                     <div style={{fontSize:12,color:"#6B6E7E",lineHeight:1.5,marginBottom:10}}>{(m.snippet||"").slice(0,120)}{(m.snippet||"").length>120?"…":""}</div>
-                                    <button onClick={()=>{ setView("mails"); setMailFilter("all"); setSel(m); handleSel(m); setSelResaGeneral(null); setShowMailHistory(false); }} style={{width:"100%",padding:"7px",borderRadius:7,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer"}}>Ouvrir le mail →</button>
+                                    <button onClick={()=>{ ouvrirMailDepuisEvenement(m, selResaGeneral); }} style={{width:"100%",padding:"7px",borderRadius:7,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer"}}>Ouvrir le mail →</button>
                                   </div>
                                   {/* Réponse envoyée pour cet email */}
                                   {sentReplies[m.id]&&(
@@ -2705,6 +2790,25 @@ FORMAT
           <>
             {/* Sidebar catégories mails — collapsible */}
             <div style={{width:subCollapsed?44:160,background:"#EFE7DA",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid #E6DCC9",transition:"width .2s ease",overflow:"hidden"}}>
+              {/* Barre de progression synchronisation */}
+              {!subCollapsed&&syncStatus==="running"&&(
+                <div style={{padding:"6px 10px",background:"rgba(184,148,86,0.08)",borderBottom:"1px solid #E6DCC9",flexShrink:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
+                    <Spin s={9}/>
+                    <span style={{fontSize:9,color:"#B89456",letterSpacing:"0.06em",fontFamily:"'Inter',sans-serif"}}>Synchronisation…</span>
+                  </div>
+                  <div style={{height:2,background:"#E6DCC9",borderRadius:1,overflow:"hidden"}}>
+                    <div style={{height:"100%",background:"#B89456",borderRadius:1,width:syncProgress.total>0?`${Math.min(100,syncProgress.synced/syncProgress.total*100)}%`:"30%",transition:"width .5s ease"}}/>
+                  </div>
+                  {syncProgress.total>0&&<div style={{fontSize:8,color:"#6B6E7E",marginTop:3,fontFamily:"'Inter',sans-serif"}}>{syncProgress.synced.toLocaleString('fr')} / {syncProgress.total.toLocaleString('fr')}</div>}
+                </div>
+              )}
+              {!subCollapsed&&syncStatus==="done"&&(
+                <div style={{padding:"4px 10px",borderBottom:"1px solid #E6DCC9",flexShrink:0,display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:9,color:"#059669",fontFamily:"'Inter',sans-serif"}}>✓ Synchronisé</span>
+                  {syncLastDate&&<span style={{fontSize:8,color:"#6B6E7E"}}>{new Date(syncLastDate).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>}
+                </div>
+              )}
               <div style={{padding:subCollapsed?"10px 6px":"10px 10px 8px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0,gap:6}}>
                 {!subCollapsed&&<>
                   <button onClick={()=>{setShowCompose(true);setComposeTo("");setComposeSubject("");setComposeBody(`\n\n--\nCordialement,\nL'équipe ${nomEtab}`);}} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
@@ -3012,11 +3116,26 @@ FORMAT
                   <span style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>{filtered.length} message{filtered.length!==1?"s":""}</span>
                 </div>
                 {/* Recherche style Céleste */}
-                <div style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:"#EFE7DA",border:"1px solid #E6DCC9",borderRadius:2,marginBottom:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:"#EFE7DA",border:"1px solid #E6DCC9",borderRadius:2,marginBottom:search&&filtered.length===0?4:8}}>
                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#6B6E7E" strokeWidth="1.3"><circle cx="5" cy="5" r="3.5"/><path d="M8 8l3 3"/></svg>
-                  <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un contact, une date…" style={{border:"none",background:"transparent",outline:"none",fontSize:12,color:"#1B1E2B",width:"100%",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}/>
-                  {search&&<button onClick={()=>setSearch("")} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:13,padding:0}}>×</button>}
+                  <input value={search} onChange={e=>{setSearch(e.target.value);setDeepResults([]);}} placeholder="Rechercher un contact, une date…" style={{border:"none",background:"transparent",outline:"none",fontSize:12,color:"#1B1E2B",width:"100%",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}/>
+                  {search&&<button onClick={()=>{setSearch("");setDeepResults([]);}} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:13,padding:0}}>×</button>}
                 </div>
+                {/* Proposition recherche approfondie Gmail */}
+                {search&&filtered.length===0&&deepResults.length===0&&!deepSearching&&(
+                  <div style={{padding:"6px 0 8px",display:"flex",alignItems:"center",gap:6}}>
+                    <button onClick={()=>lancerDeepSearch(search)} style={{display:"flex",alignItems:"center",gap:5,fontSize:10,padding:"4px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#B89456",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#B89456" strokeWidth="1.3"><circle cx="5" cy="5" r="3.5"/><path d="M8 8l3 3"/></svg>
+                      Chercher dans tout Gmail
+                    </button>
+                  </div>
+                )}
+                {deepSearching&&(
+                  <div style={{padding:"6px 0 8px",display:"flex",alignItems:"center",gap:6}}>
+                    <Spin s={10}/>
+                    <span style={{fontSize:10,color:"#6B6E7E",fontFamily:"'Inter',sans-serif",fontStyle:"italic"}}>Recherche dans tous vos emails…</span>
+                  </div>
+                )}
                 {/* Contrôles */}
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <select value={sortOrder} onChange={e=>setSortOrder(e.target.value as any)} style={{fontSize:10,border:"1px solid #E6DCC9",borderRadius:2,padding:"3px 6px",background:"#F7F2EA",color:"#6B6E7E",cursor:"pointer",flex:1,fontFamily:"'Inter',sans-serif"}}>
@@ -3136,6 +3255,29 @@ FORMAT
                     </div>
                   </div>
                 );})}
+
+                {/* ── Résultats recherche approfondie Gmail ── */}
+                {deepResults.length>0&&(
+                  <>
+                    <div style={{padding:"8px 14px 4px",display:"flex",alignItems:"center",gap:6,borderTop:"1px solid #E6DCC9",marginTop:4}}>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#B89456" strokeWidth="1.3"><circle cx="5" cy="5" r="3.5"/><path d="M8 8l3 3"/></svg>
+                      <span style={{fontSize:10,color:"#B89456",fontWeight:500,letterSpacing:"0.08em",fontFamily:"'Inter',sans-serif"}}>RÉSULTATS GMAIL ({deepResults.length})</span>
+                    </div>
+                    {deepResults.map(em=>(
+                      <div key={em.id} onClick={()=>handleSel(em)} style={{padding:"10px 14px 8px 14px",borderBottom:"1px solid #E6DCC9",cursor:"pointer",background:"rgba(184,148,86,0.03)",borderLeft:"2px solid rgba(184,148,86,0.3)"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:2}}>
+                          <span style={{fontSize:12,fontWeight:500,color:"#1B1E2B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{em.from||"(inconnu)"}</span>
+                          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,marginLeft:6}}>
+                            <span style={{fontSize:8,padding:"1px 5px",borderRadius:1,background:"rgba(184,148,86,0.15)",color:"#B89456",border:"1px solid rgba(184,148,86,0.3)",letterSpacing:"0.06em",fontFamily:"'Inter',sans-serif"}}>Gmail</span>
+                            <span style={{fontSize:10,color:"#6B6E7E",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>{em.date}</span>
+                          </div>
+                        </div>
+                        <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:13,fontWeight:500,color:"#1B1E2B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}}>{em.subject}</div>
+                        <div style={{fontSize:11,color:"#6B6E7E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{em.snippet}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             </>}
             </div>
@@ -3156,6 +3298,20 @@ FORMAT
                 </div>
               ) : (
                 <div style={{maxWidth:720,margin:"0 auto",padding:"20px 28px 80px"}}>
+
+                  {/* ── Fil d'Ariane retour événement ── */}
+                  {mailOrigine?.type==="evenement"&&(
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"6px 10px",background:"rgba(184,148,86,0.08)",borderRadius:2,border:"1px solid rgba(184,148,86,0.2)"}}>
+                      <button onClick={()=>{
+                        const resa = resas.find(r=>r.id===mailOrigine.resaId);
+                        if(resa){ setSelResaGeneral(resa); setView("general"); }
+                        setMailOrigine(null);
+                      }} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:"#B89456",fontSize:11,fontWeight:500,padding:0,fontFamily:"'Inter',sans-serif",letterSpacing:"0.02em"}}>
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="#B89456" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                        Retour à {mailOrigine.nom}
+                      </button>
+                    </div>
+                  )}
 
                   {/* ── Barre d'actions Céleste ── */}
                   <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:18,padding:"7px 12px",background:"#F7F2EA",borderRadius:2,border:"1px solid #E6DCC9",flexWrap:"wrap"}}>
