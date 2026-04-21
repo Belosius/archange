@@ -518,23 +518,90 @@ export default function App() {
   useEffect(() => () => { if (notifTimer.current) clearTimeout(notifTimer.current); }, []);
 
   // Suppression mail au clavier (Delete ou Backspace) quand un mail est sélectionné
+  // ─── Badge non lus dans le titre de l'onglet ────────────────────────────────
+  useEffect(() => {
+    const unreadCount = emails.filter(m => m.unread && !m.archived).length;
+    document.title = unreadCount > 0 ? `(${unreadCount}) ARCHANGE` : "ARCHANGE";
+  }, [emails]);
+
+  // ─── États tri, archivage, sélection multiple, snooze ───────────────────────
+  const [sortOrder, setSortOrder] = useState<"date_desc"|"date_asc"|"from"|"subject">("date_desc");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showArchived, setShowArchived] = useState(false);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!sel) return;
-      if (e.key !== "Delete" && e.key !== "Backspace") return;
-      // Ne pas intercepter si on est dans un champ de saisie
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea" || (e.target as HTMLElement)?.isContentEditable) return;
-      e.preventDefault();
-      if (!window.confirm("Supprimer cet email de l'app ? (Pas supprimé de Gmail)")) return;
-      const upd = emails.filter(m => m.id !== sel.id);
-      saveEmails(upd);
-      setSel(null);
-      toast("Email supprimé de l'app");
+
+      // "/" — focus recherche
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>('input[placeholder="Rechercher..."]')?.focus();
+        return;
+      }
+      // "?" — aide raccourcis
+      if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
+        e.preventDefault();
+        setShowKeyHelp(v => !v);
+        return;
+      }
+
+      if (!sel) return;
+
+      // J / K — email suivant/précédent
+      if (e.key === "j" || e.key === "J") {
+        e.preventDefault();
+        const idx = filtered.findIndex(m => m.id === sel.id);
+        if (idx < filtered.length - 1) handleSel(filtered[idx + 1]);
+        return;
+      }
+      if (e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        const idx = filtered.findIndex(m => m.id === sel.id);
+        if (idx > 0) handleSel(filtered[idx - 1]);
+        return;
+      }
+      // E — archiver
+      if (e.key === "e" || e.key === "E") {
+        e.preventDefault();
+        archiveEmail(sel.id);
+        return;
+      }
+      // U — toggle non lu
+      if (e.key === "u" || e.key === "U") {
+        e.preventDefault();
+        toggleUnread(sel.id);
+        return;
+      }
+      // S — toggle étoile
+      if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        toggleFlag(sel.id, "star");
+        return;
+      }
+      // F — toggle flag
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleFlag(sel.id, "flag");
+        return;
+      }
+      // R — transfert (ouvrir Gmail)
+      if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        forwardEmail(sel);
+        return;
+      }
+      // Delete / Backspace — supprimer
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        deleteEmailWithUndo(sel);
+        return;
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [sel, emails]);
+  }, [sel, emails, filtered]);
   const [loadingMail, setLoadingMail] = useState(false);
   const [analysing, setAnalysing] = useState(false);
   const [analysingProgress, setAnalysingProgress] = useState("");
@@ -612,6 +679,7 @@ export default function App() {
   const [generalSubFilter, setGeneralSubFilter] = useState<"statuts"|"arelancer">("statuts");
   // Modal relance IA
   const [showRelanceIA, setShowRelanceIA] = useState<any>(null); // resa
+  const [showKeyHelp, setShowKeyHelp] = useState(false);
   const [relanceIAText, setRelanceIAText] = useState("");
   const [genRelanceIA, setGenRelanceIA] = useState(false);
   // Motifs de relance — personnalisables, persistés en Supabase
@@ -1144,19 +1212,107 @@ export default function App() {
     if (sel?.id === id) setSel(upd.find(m => m.id === id) || null);
   };
 
-  const filtered = React.useMemo(() => emails.filter(m => {
+  // ─── Archivage ──────────────────────────────────────────────────────────────
+  const archiveEmail = (id: string) => {
+    const upd = emails.map(m => m.id === id ? { ...m, archived: true } : m);
+    saveEmails(upd);
+    if (sel?.id === id) setSel(null);
+    toast("Email archivé — E pour archiver");
+  };
+  const unarchiveEmail = (id: string) => {
+    const upd = emails.map(m => m.id === id ? { ...m, archived: false } : m);
+    saveEmails(upd);
+    toast("Email restauré dans la boîte");
+  };
+
+  // ─── Transfert email ────────────────────────────────────────────────────────
+  const forwardEmail = (em: any) => {
+    const body = encodeURIComponent(
+      `\n\n---------- Message transféré ----------\nDe : ${em.from} <${em.fromEmail}>\nDate : ${em.date}\nObjet : ${em.subject}\n\n${em.body || em.snippet || ""}`
+    );
+    const subject = encodeURIComponent(`Tr: ${em.subject || ""}`);
+    window.open(`https://mail.google.com/mail/?view=cm&su=${subject}&body=${body}`, "_blank");
+  };
+
+  // ─── Snooze ─────────────────────────────────────────────────────────────────
+  const snoozeEmail = (id: string, until: string) => {
+    const upd = emails.map(m => m.id === id ? { ...m, snoozedUntil: until } : m);
+    saveEmails(upd);
+    if (sel?.id === id) setSel(null);
+    toast("Email reporté ⏰");
+  };
+  // Réveil des emails snoozés
+  useEffect(() => {
+    const now = new Date().toISOString();
+    const toWake = emails.filter(m => m.snoozedUntil && m.snoozedUntil <= now);
+    if (toWake.length > 0) {
+      const upd = emails.map(m => m.snoozedUntil && m.snoozedUntil <= now ? { ...m, snoozedUntil: null, unread: true } : m);
+      saveEmails(upd);
+      toast(`${toWake.length} email${toWake.length > 1 ? "s" : ""} reporté${toWake.length > 1 ? "s" : ""} reveillé${toWake.length > 1 ? "s" : ""} ⏰`);
+    }
+  }, []);
+
+  // ─── Sélection multiple ─────────────────────────────────────────────────────
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const selectAll = () => setSelectedIds(new Set(filtered.map(m => m.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+  const bulkMarkRead = () => {
+    const upd = emails.map(m => selectedIds.has(m.id) ? { ...m, unread: false } : m);
+    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) marqués lus`);
+  };
+  const bulkMarkUnread = () => {
+    const upd = emails.map(m => selectedIds.has(m.id) ? { ...m, unread: true } : m);
+    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) marqués non lus`);
+  };
+  const bulkArchive = () => {
+    const upd = emails.map(m => selectedIds.has(m.id) ? { ...m, archived: true } : m);
+    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) archivé(s)`);
+  };
+  const bulkDelete = () => {
+    const upd = emails.filter(m => !selectedIds.has(m.id));
+    saveEmails(upd); clearSelection(); setSel(null); toast(`${selectedIds.size} email(s) supprimé(s)`);
+  };
+  const bulkATraiter = () => {
+    const upd = emails.map(m => selectedIds.has(m.id) ? { ...m, aTraiter: true } : m);
+    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) marqués à traiter`);
+  };
+
+  const filtered = React.useMemo(() => {
     const q = search.toLowerCase();
-    const matchesSearch = !q
-      || m.from?.toLowerCase().includes(q)
-      || m.subject?.toLowerCase().includes(q)
-      || (m.body || "").toLowerCase().includes(q);
-    if (!matchesSearch) return false;
-    if (mailFilter === "nonlus")   return !!m.unread;
-    if (mailFilter === "star")     return (m.flags || []).includes("star");
-    if (mailFilter === "flag")     return (m.flags || []).includes("flag");
-    if (mailFilter === "atraiter") return !!m.aTraiter;
-    return true;
-  }), [emails, search, mailFilter]);
+    let res = emails.filter(m => {
+      // Archivés/snoozés
+      if (m.snoozedUntil && m.snoozedUntil > new Date().toISOString()) return false;
+      if (showArchived) return !!m.archived;
+      if (m.archived) return false;
+      // Recherche full-text (from + subject + body + snippet)
+      const matchesSearch = !q
+        || m.from?.toLowerCase().includes(q)
+        || m.subject?.toLowerCase().includes(q)
+        || (m.body || "").toLowerCase().includes(q)
+        || (m.snippet || "").toLowerCase().includes(q)
+        || m.fromEmail?.toLowerCase().includes(q);
+      if (!matchesSearch) return false;
+      if (mailFilter === "nonlus")   return !!m.unread;
+      if (mailFilter === "star")     return (m.flags || []).includes("star");
+      if (mailFilter === "flag")     return (m.flags || []).includes("flag");
+      if (mailFilter === "atraiter") return !!m.aTraiter;
+      return true;
+    });
+    // Tri
+    res = [...res].sort((a, b) => {
+      if (sortOrder === "date_asc")  return (a.date||"").localeCompare(b.date||"");
+      if (sortOrder === "from")      return (a.from||"").localeCompare(b.from||"");
+      if (sortOrder === "subject")   return (a.subject||"").localeCompare(b.subject||"");
+      return (b.date||"").localeCompare(a.date||""); // date_desc par défaut
+    });
+    return res;
+  }, [emails, search, mailFilter, sortOrder, showArchived]);
 
   const handleSel = async (emailArg: any) => {
     let email = emailArg;
@@ -1687,7 +1843,7 @@ FORMAT
 
   return (
     <div style={{display:"flex",height:"100vh",overflow:"hidden",fontFamily:"'DM Sans', 'Helvetica Neue', sans-serif",background:"#F5F3EF"}}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#C9C3B8;border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:#A89E8F;}.mail-row:hover .mail-actions{opacity:1!important}.nav-btn:hover{background:rgba(209,196,178,0.12)!important;}.fade-in{animation:fadeIn .25s ease}@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}"}</style>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#C9C3B8;border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:#A89E8F;}.mail-row:hover .mail-actions{opacity:1!important}.mail-row:hover .mail-checkbox{opacity:1!important}.nav-btn:hover{background:rgba(209,196,178,0.12)!important;}.fade-in{animation:fadeIn .25s ease}@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}.snooze-wrap:hover .snooze-menu{display:block!important}.snooze-menu button:hover{background:#F5F3EF!important}"}</style>
 
       {/* Écran de chargement initial */}
       {initializing && (
@@ -1700,6 +1856,29 @@ FORMAT
       )}
 
       {notif && <div style={{position:"fixed",bottom:32,left:"50%",transform:"translateX(-50%)",zIndex:9999,padding:"12px 24px",borderRadius:12,background:notif.type==="err"?"#2D0A0A":notif.type==="undo"?"#1C1814":"#0A1F0E",color:notif.type==="err"?"#FCA5A5":notif.type==="undo"?"#D1C4B2":"#6EE7B7",fontSize:13,fontWeight:500,whiteSpace:"nowrap",boxShadow:"0 8px 32px rgba(0,0,0,.25)",letterSpacing:"0.01em",border:notif.type==="err"?"1px solid rgba(239,68,68,.2)":notif.type==="undo"?"1px solid rgba(209,196,178,.2)":"1px solid rgba(52,211,153,.2)",display:"flex",alignItems:"center",gap:12}}>
+
+      {/* ── Modal raccourcis clavier ── */}
+      {showKeyHelp&&(
+        <div onClick={()=>setShowKeyHelp(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:9990,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#FFFFFF",borderRadius:16,padding:"28px 32px",minWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,.2)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div style={{fontSize:16,fontWeight:700,color:"#1C1814"}}>⌨️ Raccourcis clavier</div>
+              <button onClick={()=>setShowKeyHelp(false)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"#8A8178"}}>×</button>
+            </div>
+            {[
+              ["/","Rechercher"],["J / K","Email suivant / précédent"],["E","Archiver"],
+              ["U","Marquer lu / non lu"],["S","Étoile"],["F","Flaggé"],
+              ["R","Transférer dans Gmail"],["Del","Supprimer"],["?","Afficher cette aide"],
+            ].map(([k,v])=>(
+              <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #F0EDE8"}}>
+                <span style={{fontSize:12,color:"#5C564F"}}>{v}</span>
+                <kbd style={{fontSize:11,background:"#F5F3EF",border:"1px solid #EAE6E1",borderRadius:5,padding:"2px 8px",color:"#1C1814",fontFamily:"monospace",fontWeight:600}}>{k}</kbd>
+              </div>
+            ))}
+            <div style={{fontSize:11,color:"#A09890",marginTop:12,textAlign:"center"}}>Appuie sur ? ou Échap pour fermer</div>
+          </div>
+        </div>
+      )}
         <span>{notif.msg}</span>
         {notif.type==="undo"&&undoDelete&&<button onClick={()=>{
           if(undoDelete.timer) clearTimeout(undoDelete.timer);
@@ -2322,17 +2501,29 @@ FORMAT
                     </button>
                   </div>
                   {/* Catégories standard */}
-                  <button onClick={()=>setMailFilter("all")} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="all"?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                  <button onClick={()=>{setMailFilter("all");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="all"&&!showArchived?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="all"&&!showArchived?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                       <span style={{fontSize:12}}>📬</span>
                       <span style={{flex:1}}>Tous les mails</span>
                   </button>
                   {MAIL_CATS.map(c=>(
-                    <button key={c.id} onClick={()=>setMailFilter(c.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(209,196,178,0.1)":"transparent",color:mailFilter===c.id?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                    <button key={c.id} onClick={()=>{setMailFilter(c.id);setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter===c.id&&!showArchived?"rgba(209,196,178,0.1)":"transparent",color:mailFilter===c.id&&!showArchived?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                       <span style={{fontSize:12}}>{c.icon}</span>
                       <span style={{flex:1}}>{c.label}</span>
-                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.5)"}}>{emails.filter(m=>c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id)).length||""}</span>
+                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.5)"}}>{emails.filter(m=>!m.archived&&(c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id))).length||""}</span>
                     </button>
                   ))}
+                  {/* Archivés */}
+                  <button onClick={()=>setShowArchived(v=>!v)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:showArchived?"rgba(209,196,178,0.1)":"transparent",color:showArchived?"#D1C4B2":"rgba(209,196,178,0.5)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                    <span style={{fontSize:12}}>📦</span>
+                    <span style={{flex:1}}>Archivés</span>
+                    <span style={{fontSize:10,color:"rgba(209,196,178,0.4)"}}>{emails.filter(m=>m.archived).length||""}</span>
+                  </button>
+                  {/* Aide raccourcis */}
+                  <div style={{marginTop:"auto",paddingTop:8}}>
+                    <button onClick={()=>setShowKeyHelp(true)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"7px 9px",borderRadius:8,border:"none",background:"transparent",color:"rgba(209,196,178,0.4)",fontSize:10,cursor:"pointer",textAlign:"left"}}>
+                      <span>⌨️</span><span>Raccourcis clavier</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -2503,12 +2694,39 @@ FORMAT
             {/* Liste emails standard */}
             {mailFilter!=="priorites" && (
             <div style={{width:320,borderRight:"1px solid #EAE6E1",background:"#FFFFFF",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
-              <div style={{padding:"10px 12px",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:7,background:"#F5F3EF",borderRadius:8,padding:"6px 10px",border:"1px solid #EAE6E1"}}>
+              {/* ── Barre recherche ── */}
+              <div style={{padding:"8px 10px 0",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,background:"#F5F3EF",borderRadius:8,padding:"6px 10px",border:"1px solid #EAE6E1",marginBottom:7}}>
                   <span style={{fontSize:12,color:"#8A8178"}}>🔍</span>
                   <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..." style={{border:"none",background:"transparent",outline:"none",fontSize:12,color:"#1C1814",width:"100%"}}/>
                   {search&&<button onClick={()=>setSearch("")} style={{background:"none",border:"none",color:"#8A8178",cursor:"pointer",fontSize:14,padding:0}}>×</button>}
                 </div>
+                {/* ── Contrôles tri + archivage + sélection ── */}
+                <div style={{display:"flex",alignItems:"center",gap:4,paddingBottom:7}}>
+                  {/* Tri */}
+                  <select value={sortOrder} onChange={e=>setSortOrder(e.target.value as any)} style={{fontSize:10,border:"1px solid #EAE6E1",borderRadius:6,padding:"3px 6px",background:"#F9F8F6",color:"#5C564F",cursor:"pointer",flex:1}}>
+                    <option value="date_desc">↓ Plus récents</option>
+                    <option value="date_asc">↑ Plus anciens</option>
+                    <option value="from">A→Z Expéditeur</option>
+                    <option value="subject">A→Z Objet</option>
+                  </select>
+                  {/* Archivés */}
+                  <button onClick={()=>setShowArchived(v=>!v)} title="Emails archivés" style={{fontSize:10,padding:"3px 8px",borderRadius:6,border:`1px solid ${showArchived?"#C9A96E":"#EAE6E1"}`,background:showArchived?"#FDF8EF":"#F9F8F6",color:showArchived?"#C9A96E":"#8A8178",cursor:"pointer",whiteSpace:"nowrap"}}>📦 {showArchived?"Archivés":"Archiver"}</button>
+                  {/* Sélectionner tout */}
+                  <button onClick={selectedIds.size>0?clearSelection:selectAll} title={selectedIds.size>0?"Désélectionner tout":"Sélectionner tout"} style={{fontSize:10,padding:"3px 8px",borderRadius:6,border:`1px solid ${selectedIds.size>0?"#6D9BE8":"#EAE6E1"}`,background:selectedIds.size>0?"#EFF6FF":"#F9F8F6",color:selectedIds.size>0?"#2563EB":"#8A8178",cursor:"pointer",whiteSpace:"nowrap"}}>
+                    {selectedIds.size>0?`✓ ${selectedIds.size}`:"Tous"}
+                  </button>
+                </div>
+                {/* ── Barre actions en lot ── */}
+                {selectedIds.size>0&&(
+                  <div style={{display:"flex",gap:4,paddingBottom:7,flexWrap:"wrap"}}>
+                    <button onClick={bulkMarkRead} style={{fontSize:10,padding:"3px 7px",borderRadius:6,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>● Lu</button>
+                    <button onClick={bulkMarkUnread} style={{fontSize:10,padding:"3px 7px",borderRadius:6,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>○ Non lu</button>
+                    <button onClick={bulkATraiter} style={{fontSize:10,padding:"3px 7px",borderRadius:6,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>📋 Traiter</button>
+                    <button onClick={bulkArchive} style={{fontSize:10,padding:"3px 7px",borderRadius:6,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>📦 Archiver</button>
+                    <button onClick={bulkDelete} style={{fontSize:10,padding:"3px 7px",borderRadius:6,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer"}}>🗑 Supprimer</button>
+                  </div>
+                )}
               </div>
               <div ref={mailListRef} style={{flex:1,overflowY:"auto"}}>
                 {filtered.length===0&&(
@@ -2527,15 +2745,21 @@ FORMAT
                   if(drafted.has(em.id)) tags.push({label:"Brouillon",color:"#065F46",bg:"#D1FAE5"});
                   if((em.flags||[]).includes("star")) tags.push({label:"⭐",color:"#92400E",bg:"#FEF3C7"});
                   if((em.flags||[]).includes("flag")) tags.push({label:"🚩",color:"#991B1B",bg:"#FEE2E2"});
+                  if(em.snoozedUntil) tags.push({label:"⏰",color:"#7C3AED",bg:"#EDE9FE"});
                   const visibleTags = tags.slice(0,2);
                   const extraTags = tags.length - visibleTags.length;
                   const isActive = sel?.id===em.id;
+                  const isSelected = selectedIds.has(em.id);
                   return (
                   <div key={em.id} className="mail-row"
                     style={{position:"relative",padding:"10px 12px 0",borderBottom:"1px solid #EAE6E1",cursor:"pointer",
-                      background:isActive?"#F0EDE8":"transparent",
-                      borderLeft:isActive?"3px solid #C9A96E":em.unread?"3px solid #7BA8C4":"3px solid transparent",
+                      background:isSelected?"#F0F4FF":isActive?"#F0EDE8":"transparent",
+                      borderLeft:isSelected?"3px solid #6D9BE8":isActive?"3px solid #C9A96E":em.unread?"3px solid #7BA8C4":"3px solid transparent",
                       transition:"background .1s"}}>
+                    {/* Checkbox sélection (visible au survol ou si sélectionné) */}
+                    <div className="mail-checkbox" onClick={e=>{e.stopPropagation();toggleSelect(em.id);}} style={{position:"absolute",top:10,left:4,width:18,height:18,borderRadius:4,border:`2px solid ${isSelected?"#6D9BE8":"#D1C4B2"}`,background:isSelected?"#6D9BE8":"transparent",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,opacity:isSelected?1:0,transition:"opacity .1s",cursor:"pointer"}}>
+                      {isSelected&&<span style={{color:"#fff",fontSize:11,lineHeight:1}}>✓</span>}
+                    </div>
                     {/* Zone cliquable principale */}
                     <div onClick={()=>handleSel(em)} style={{display:"flex",gap:9,minWidth:0,paddingBottom:8}}>
                       <div style={{position:"relative",flexShrink:0,marginTop:1}}>
@@ -2560,14 +2784,32 @@ FORMAT
                         </div>
                       </div>
                     </div>
-                    {/* Barre d'actions — apparaît au survol SOUS le contenu, pas par-dessus */}
+                    {/* Barre d'actions — apparaît au survol */}
                     <div className="mail-actions" style={{display:"flex",gap:1,opacity:0,transition:"opacity .15s",borderTop:"1px solid #F0EDE8",margin:"0 -12px",padding:"3px 8px",background:isActive?"#EAE6DF":"#F9F8F6",justifyContent:"flex-end",alignItems:"center"}}>
-                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:(em.flags||[]).includes("star")?1:0.3,padding:"3px 5px",borderRadius:5}}>⭐</button>
-                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"flag");}} title="Flaggé" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:(em.flags||[]).includes("flag")?1:0.3,padding:"3px 5px",borderRadius:5}}>🚩</button>
+                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori (S)" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:(em.flags||[]).includes("star")?1:0.3,padding:"3px 5px",borderRadius:5}}>⭐</button>
+                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"flag");}} title="Flaggé (F)" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:(em.flags||[]).includes("flag")?1:0.3,padding:"3px 5px",borderRadius:5}}>🚩</button>
                       <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title="À traiter" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:em.aTraiter?1:0.3,padding:"3px 5px",borderRadius:5}}>📋</button>
-                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title={em.unread?"Marquer lu":"Marquer non lu"} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.4,padding:"3px 5px",borderRadius:5}}>●</button>
+                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title="Lu/Non lu (U)" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.4,padding:"3px 5px",borderRadius:5}}>●</button>
+                      <button onClick={e=>{e.stopPropagation();archiveEmail(em.id);}} title="Archiver (E)" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:0.5,padding:"3px 5px",borderRadius:5}}>📦</button>
+                      {/* Snooze */}
+                      <div style={{position:"relative"}} className="snooze-wrap">
+                        <button onClick={e=>{e.stopPropagation(); const el=e.currentTarget.nextElementSibling as HTMLElement; if(el) el.style.display=el.style.display==="block"?"none":"block";}} title="Reporter ⏰" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:0.5,padding:"3px 5px",borderRadius:5}}>⏰</button>
+                        <div className="snooze-menu" style={{display:"none",position:"absolute",bottom:"100%",right:0,background:"#fff",border:"1px solid #EAE6E1",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,.12)",zIndex:100,minWidth:140,padding:4}}>
+                          {[
+                            {label:"Dans 1 heure",hours:1},{label:"Ce soir 18h",tonight:18},
+                            {label:"Demain matin",days:1},{label:"Dans 3 jours",days:3},
+                            {label:"Dans 1 semaine",days:7},
+                          ].map(opt=>{
+                            const d = new Date();
+                            if(opt.hours) d.setHours(d.getHours()+opt.hours);
+                            else if(opt.tonight) { d.setDate(d.getDate()+(d.getHours()>=opt.tonight?1:0)); d.setHours(opt.tonight,0,0,0); }
+                            else if(opt.days) { d.setDate(d.getDate()+opt.days); d.setHours(8,0,0,0); }
+                            return <button key={opt.label} onClick={e=>{e.stopPropagation();snoozeEmail(em.id,d.toISOString());}} style={{display:"block",width:"100%",textAlign:"left",padding:"7px 10px",fontSize:11,color:"#3D3530",background:"none",border:"none",cursor:"pointer",borderRadius:5}}>{opt.label}</button>;
+                          })}
+                        </div>
+                      </div>
                       <div style={{flex:1}}/>
-                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#DC2626",padding:"3px 6px",borderRadius:5,opacity:0.75,fontWeight:600}}>✕</button>
+                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer (Del)" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#DC2626",padding:"3px 6px",borderRadius:5,opacity:0.75,fontWeight:600}}>✕</button>
                     </div>
                   </div>
                 );})}
@@ -2587,14 +2829,20 @@ FORMAT
 
                   {/* ── Barre d'actions compacte ── */}
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12,padding:"6px 12px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",boxShadow:"0 1px 3px rgba(28,24,20,.04)"}}>
-                    <button onClick={()=>toggleFlag(sel.id,"star")} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(sel.flags||[]).includes("star")?1:0.3,padding:"3px 6px",borderRadius:6}}>⭐</button>
-                    <button onClick={()=>toggleFlag(sel.id,"flag")} title="Flaggé" style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(sel.flags||[]).includes("flag")?1:0.3,padding:"3px 6px",borderRadius:6}}>🚩</button>
+                    <button onClick={()=>toggleFlag(sel.id,"star")} title="Favori (S)" style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(sel.flags||[]).includes("star")?1:0.3,padding:"3px 6px",borderRadius:6}}>⭐</button>
+                    <button onClick={()=>toggleFlag(sel.id,"flag")} title="Flaggé (F)" style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(sel.flags||[]).includes("flag")?1:0.3,padding:"3px 6px",borderRadius:6}}>🚩</button>
                     <div style={{width:1,height:16,background:"#EAE6E1",margin:"0 2px"}}/>
-                    <button onClick={()=>toggleUnread(sel.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.unread?"#EFF6FF":"#F5F3EF",color:sel.unread?"#1D4ED8":"#5C564F",cursor:"pointer",fontWeight:sel.unread?600:400}}>
+                    <button onClick={()=>toggleUnread(sel.id)} title="Lu/Non lu (U)" style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.unread?"#EFF6FF":"#F5F3EF",color:sel.unread?"#1D4ED8":"#5C564F",cursor:"pointer",fontWeight:sel.unread?600:400}}>
                       {sel.unread?"● Non lu":"○ Marquer non lu"}
                     </button>
                     <button onClick={()=>toggleATraiter(sel.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.aTraiter?"#DBEAFE":"#F5F3EF",color:sel.aTraiter?"#2563EB":"#5C564F",cursor:"pointer",fontWeight:sel.aTraiter?600:400}}>
                       📋 {sel.aTraiter?"À traiter":"Traiter"}
+                    </button>
+                    <button onClick={()=>archiveEmail(sel.id)} title="Archiver (E)" style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.archived?"#FDF8EF":"#F5F3EF",color:sel.archived?"#C9A96E":"#5C564F",cursor:"pointer"}}>
+                      {sel.archived ? "📦 Archivé" : "📦 Archiver"}
+                    </button>
+                    <button onClick={()=>forwardEmail(sel)} title="Transférer (R)" style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:"#F5F3EF",color:"#5C564F",cursor:"pointer"}}>
+                      ↪ Transférer
                     </button>
                     <div style={{flex:1}}/>
                     <button onClick={()=>{ deleteEmailWithUndo(sel); }} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer"}}>🗑 Supprimer</button>
