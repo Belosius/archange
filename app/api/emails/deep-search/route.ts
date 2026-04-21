@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 
 function decodeBase64(data: string): string {
   try { return Buffer.from(data.replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString('utf-8') } catch { return '' }
@@ -23,7 +23,6 @@ export async function GET(req: NextRequest) {
   if (!session?.accessToken) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
   const q = new URL(req.url).searchParams.get('q') || ''
   if (!q.trim()) return NextResponse.json({ results: [] })
-
   const listRes = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=20`,
     { headers: { Authorization: `Bearer ${session.accessToken}` } }
@@ -31,12 +30,8 @@ export async function GET(req: NextRequest) {
   if (!listRes.ok) return NextResponse.json({ results: [] })
   const { messages = [] } = await listRes.json()
   if (!messages.length) return NextResponse.json({ results: [] })
-
   const results = await Promise.all(messages.slice(0, 15).map(async (m: any) => {
-    const r = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`,
-      { headers: { Authorization: `Bearer ${session.accessToken}` } }
-    )
+    const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`, { headers: { Authorization: `Bearer ${session.accessToken}` } })
     if (!r.ok) return null
     const msg = await r.json()
     const h = msg.payload?.headers || []
@@ -47,8 +42,7 @@ export async function GET(req: NextRequest) {
       from_name: fromRaw.replace(/<.*>/, '').trim(),
       from_email: (fromRaw.match(/<(.+)>/) || [])[1] || fromRaw,
       subject: header(h, 'subject') || '(sans objet)',
-      snippet: msg.snippet || '',
-      body: text.slice(0, 3000),
+      snippet: msg.snippet || '', body: text.slice(0, 3000),
       date: new Date(Number(msg.internalDate)).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}),
       date_iso: new Date(Number(msg.internalDate)).toISOString(),
       _fromGmailSearch: true,
