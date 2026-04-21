@@ -385,7 +385,7 @@ function renderPlainText(text: string): React.ReactNode[] {
 
 
 const Spin = ({s=16}: {s?: number}) => (
-  <div style={{width:s,height:s,borderRadius:"50%",border:`${Math.max(1.5,s*.1)}px solid rgba(201,169,110,0.2)`,borderTopColor:"#C9A96E",animation:"spin .7s linear infinite",flexShrink:0}} />
+  <div style={{width:s,height:s,borderRadius:"50%",border:`${Math.max(1.5,s*.1)}px solid rgba(184,148,86,0.2)`,borderTopColor:"#B89456",animation:"spin .7s linear infinite",flexShrink:0}} />
 );
 
 const Avatar = ({name: nameProp, size=34}) => {
@@ -405,7 +405,7 @@ const TimePicker = ({value, onChange, placeholder="Heure", light=false}: {value:
   <select
     value={value||""}
     onChange={e=>onChange(e.target.value)}
-    style={{padding:"8px 10px",borderRadius:8,border:light?"1px solid #D1D5DB":"1px solid #DDD8D0",background:light?"#F9FAFB":"#F5F3EF",color:light?value?"#111111":"#9CA3AF":value?"#1C1814":"#8A8178",fontSize:13,width:"100%",cursor:"pointer",appearance:"auto"}}
+    style={{padding:"8px 10px",borderRadius:8,border:light?"1px solid #D1D5DB":"1px solid #E6DCC9",background:light?"#F9FAFB":"#F5F3EF",color:light?value?"#111111":"#9CA3AF":value?"#1C1814":"#8A8178",fontSize:13,width:"100%",cursor:"pointer",appearance:"auto"}}
   >
     <option value="">{placeholder}</option>
     {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
@@ -438,7 +438,7 @@ const DatePicker = ({value, onChange, light=false}: {value:string, onChange:(v:s
   const fmtDisplay = (s:string)=>{ const d=parseDate(s); if(!d) return ""; return d.getDate()+" "+MOIS_COURTS[d.getMonth()]+" "+d.getFullYear(); };
 
   const bg = light?"#F9FAFB":"#F5F3EF";
-  const border = light?"1px solid #D1D5DB":"1px solid #DDD8D0";
+  const border = light?"1px solid #D1D5DB":"1px solid #E6DCC9";
   const textMain = light?"#111111":"#1C1814";
   const textSub = light?"#9CA3AF":"#8A8178";
 
@@ -1997,23 +1997,23 @@ FORMAT
     {id:"sources",  icon:"⟡", label:"Sources IA"},
   ];
 
-  const inp = {padding:"9px 12px",borderRadius:8,border:"1.5px solid #C8C0B4",background:"#FFFFFF",color:"#1C1814",fontSize:13,width:"100%",outline:"none",transition:"border-color .15s",fontFamily:"'DM Sans',sans-serif"};
-  const inpLight = {padding:"9px 12px",borderRadius:8,border:"1.5px solid #C8C0B4",background:"#FFFFFF",color:"#111111",fontSize:13,width:"100%",fontFamily:"'DM Sans',sans-serif"};
-  const gold = {padding:"9px 18px",borderRadius:8,border:"none",background:"#C9A96E",color:"#1C1814",fontWeight:600,fontSize:12,cursor:"pointer",letterSpacing:"0.04em",boxShadow:"0 2px 8px rgba(201,169,110,.3)"};
-  const out  = {padding:"8px 14px",borderRadius:8,border:"1px solid #D5CFC6",background:"transparent",color:"#3D3530",fontSize:12,cursor:"pointer",letterSpacing:"0.02em"};
-  const outLight = {padding:"7px 14px",borderRadius:8,border:"1px solid #D1D5DB",background:"transparent",color:"#374151",fontSize:13,cursor:"pointer"};
+  const inp = {padding:"8px 12px",borderRadius:3,border:"1px solid #E6DCC9",background:"#F7F2EA",color:"#1B1E2B",fontSize:13,width:"100%",outline:"none",transition:"border-color .15s",fontFamily:"'Inter',sans-serif"};
+  const inpLight = {padding:"8px 12px",borderRadius:3,border:"1px solid #E6DCC9",background:"#EFE7DA",color:"#1B1E2B",fontSize:13,width:"100%",fontFamily:"'Inter',sans-serif"};
+  const gold = {padding:"8px 18px",borderRadius:3,border:"none",background:"#1B1E2B",color:"#F7F2EA",fontWeight:500,fontSize:12,cursor:"pointer",letterSpacing:"0.04em",fontFamily:"'Inter',sans-serif"};
+  const out  = {padding:"7px 14px",borderRadius:3,border:"1px solid #E6DCC9",background:"transparent",color:"#3A3F52",fontSize:12,cursor:"pointer",letterSpacing:"0.02em",fontFamily:"'Inter',sans-serif"};
+  const outLight = {padding:"7px 14px",borderRadius:3,border:"1px solid #E6DCC9",background:"transparent",color:"#3A3F52",fontSize:12,cursor:"pointer",fontFamily:"'Inter',sans-serif"};
 
   return (
-    <div style={{display:"flex",height:"100vh",overflow:"hidden",fontFamily:"'DM Sans', 'Helvetica Neue', sans-serif",background:"#F5F3EF"}}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#C9C3B8;border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:#A89E8F;}.mail-row:hover .mail-actions{opacity:1!important}.mail-row:hover .mail-checkbox{opacity:1!important}.nav-btn:hover{background:rgba(209,196,178,0.12)!important;}.fade-in{animation:fadeIn .25s ease}@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}.snooze-wrap:hover .snooze-menu{display:block!important}.snooze-menu button:hover{background:#F5F3EF!important}"}</style>
+    <div style={{display:"flex",height:"100vh",overflow:"hidden",fontFamily:"'Inter','DM Sans','Helvetica Neue',sans-serif",background:"#F7F2EA"}}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#D5C9B5;border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:#B89456;}.mail-row:hover .mail-actions{opacity:1!important}.mail-row:hover .mail-checkbox{opacity:1!important}.celeste-nav-btn:hover{background:#E6DCC9!important;}.fade-in{animation:fadeIn .25s ease}@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}.snooze-wrap:hover .snooze-menu{display:block!important}.snooze-menu button:hover{background:#EFE7DA!important}.celeste-email-item:hover{background:#EFE7DA!important}@keyframes celesteBlink{0%,50%{opacity:1}51%,100%{opacity:0}}"}</style>
 
       {/* Écran de chargement initial */}
       {initializing && (
-        <div style={{position:"fixed",inset:0,background:"#1C1814",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:9999}}>
-          <div style={{fontSize:11,fontWeight:700,color:"#D1C4B2",letterSpacing:"0.28em",textTransform:"uppercase"}}>ARCHANGE</div>
-          <div style={{fontSize:8,color:"rgba(209,196,178,0.4)",letterSpacing:"0.18em",textTransform:"uppercase",marginTop:-8}}>{nomEtab} · AGENT IA</div>
+        <div style={{position:"fixed",inset:0,background:"#1B1E2B",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:9999}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#1B1E2B",letterSpacing:"0.28em",textTransform:"uppercase"}}>ARCHANGE</div>
+          <div style={{fontSize:8,color:"#6B6E7E",letterSpacing:"0.18em",textTransform:"uppercase",marginTop:-8}}>{nomEtab} · AGENT IA</div>
           <Spin s={18}/>
-          <div style={{fontSize:11,color:"rgba(209,196,178,0.35)",letterSpacing:"0.08em"}}>Chargement en cours…</div>
+          <div style={{fontSize:11,color:"#6B6E7E",letterSpacing:"0.08em"}}>Chargement en cours…</div>
         </div>
       )}
 
@@ -2024,7 +2024,7 @@ FORMAT
           saveEmails([undoDelete.email,...emails]);
           setUndoDelete(null); setNotif(null);
           toast("Email restauré ✓");
-        }} style={{fontSize:12,fontWeight:700,color:"#C9A96E",background:"none",border:"1px solid rgba(201,169,110,.4)",borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Annuler</button>}
+        }} style={{fontSize:12,fontWeight:700,color:"#B89456",background:"none",border:"1px solid rgba(184,148,86,.4)",borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Annuler</button>}
       </div>}
 
       {/* ── Modal raccourcis clavier ── */}
@@ -2032,8 +2032,8 @@ FORMAT
         <div onClick={()=>setShowKeyHelp(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:9990,display:"flex",alignItems:"center",justifyContent:"center"}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#FFFFFF",borderRadius:16,padding:"28px 32px",minWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,.2)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-              <div style={{fontSize:16,fontWeight:700,color:"#1C1814"}}>⌨️ Raccourcis clavier</div>
-              <button onClick={()=>setShowKeyHelp(false)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"#8A8178"}}>×</button>
+              <div style={{fontSize:16,fontWeight:700,color:"#1B1E2B"}}>⌨️ Raccourcis clavier</div>
+              <button onClick={()=>setShowKeyHelp(false)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"#6B6E7E"}}>×</button>
             </div>
             {[
               ["/","Rechercher"],["J / K","Email suivant / précédent"],["R","Répondre"],
@@ -2041,11 +2041,11 @@ FORMAT
               ["S","Étoile"],["#","Supprimer"],["Del","Supprimer"],["?","Afficher cette aide"],
             ].map(([k,v])=>(
               <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #F0EDE8"}}>
-                <span style={{fontSize:12,color:"#5C564F"}}>{v}</span>
-                <kbd style={{fontSize:11,background:"#F5F3EF",border:"1px solid #EAE6E1",borderRadius:5,padding:"2px 8px",color:"#1C1814",fontFamily:"monospace",fontWeight:600}}>{k}</kbd>
+                <span style={{fontSize:12,color:"#6B6E7E"}}>{v}</span>
+                <kbd style={{fontSize:11,background:"#F7F2EA",border:"1px solid #E6DCC9",borderRadius:5,padding:"2px 8px",color:"#1B1E2B",fontFamily:"monospace",fontWeight:600}}>{k}</kbd>
               </div>
             ))}
-            <div style={{fontSize:11,color:"#A09890",marginTop:12,textAlign:"center"}}>Appuie sur ? ou Échap pour fermer</div>
+            <div style={{fontSize:11,color:"#6B6E7E",marginTop:12,textAlign:"center"}}>Appuie sur ? ou Échap pour fermer</div>
           </div>
         </div>
       )}
@@ -2066,26 +2066,59 @@ FORMAT
         </div>
       )}
 
-      {/* Nav principale — collapsible */}
-      <aside style={{width:navCollapsed?60:200,background:"#1C1814",display:"flex",flexDirection:"column",flexShrink:0,transition:"width .3s cubic-bezier(.4,0,.2,1)",overflow:"hidden",borderRight:"1px solid rgba(255,255,255,0.06)"}}>
-        <div style={{padding:navCollapsed?"16px 0 12px":"24px 18px 16px",display:"flex",alignItems:"center",justifyContent:navCollapsed?"center":"space-between",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-          {!navCollapsed&&<div><div style={{fontSize:13,fontWeight:700,color:"#FFFFFF",letterSpacing:"0.2em",textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif"}}>ARCHANGE</div><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:4,letterSpacing:"0.1em",textTransform:"uppercase"}}>{nomEtab} · AGENT IA</div></div>}
-          <button onClick={()=>setNavCollapsed(v=>!v)} title={navCollapsed?"Agrandir":"Réduire"} style={{width:24,height:24,borderRadius:6,border:"none",background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.6)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      {/* Nav principale — Céleste */}
+      <aside style={{width:navCollapsed?52:220,background:"#EFE7DA",display:"flex",flexDirection:"column",flexShrink:0,transition:"width .3s cubic-bezier(.4,0,.2,1)",overflow:"hidden",borderRight:"1px solid #E6DCC9"}}>
+        <div style={{padding:navCollapsed?"14px 0 12px":"18px 18px 14px",display:"flex",alignItems:"center",justifyContent:navCollapsed?"center":"space-between",flexShrink:0,borderBottom:"1px solid #E6DCC9"}}>
+          {!navCollapsed&&<div style={{display:"flex",alignItems:"center",gap:9}}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}>
+              <circle cx="12" cy="12" r="11" stroke="#B89456" strokeWidth="1"/>
+              <path d="M12 9 C 9.5 9, 7 9.5, 5 10.5 C 6.8 10.8, 8.5 10.7, 10.5 10.2" stroke="#B89456" strokeWidth="0.9" fill="none" strokeLinecap="round"/>
+              <path d="M12 9 C 14.5 9, 17 9.5, 19 10.5 C 17.2 10.8, 15.5 10.7, 13.5 10.2" stroke="#B89456" strokeWidth="0.9" fill="none" strokeLinecap="round"/>
+              <path d="M8.5 9 L 15.5 9" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/>
+              <circle cx="12" cy="7" r="1.1" fill="#B89456"/>
+              <path d="M12 9.6 L 12 18.2" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/>
+              <path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B89456"/>
+            </svg>
+            <div>
+              <div style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:19,fontWeight:500,color:"#1B1E2B",letterSpacing:0.3,lineHeight:1}}>Archange</div>
+              <div style={{fontSize:9,letterSpacing:"0.16em",textTransform:"uppercase",color:"#6B6E7E",marginTop:2}}>{nomEtab}</div>
+            </div>
+          </div>}
+          {navCollapsed&&<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B89456" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B89456"/><path d="M12 9.6 L 12 18.2" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B89456"/></svg>}
+          <button onClick={()=>setNavCollapsed(v=>!v)} title={navCollapsed?"Agrandir":"Réduire"} style={{width:20,height:20,borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:navCollapsed?0:6}}>
             {navCollapsed?"›":"‹"}
           </button>
         </div>
-        <div style={{flex:1,padding:navCollapsed?"8px 6px":"10px 8px",display:"flex",flexDirection:"column",gap:2,overflowY:"auto"}}>
+        <div style={{flex:1,padding:navCollapsed?"6px 5px":"8px 8px",display:"flex",flexDirection:"column",gap:1,overflowY:"auto"}}>
           {NAV.map(n=>(
-            <button key={n.id} onClick={()=>{setView(n.id);setSubCollapsed(false);}} title={navCollapsed?n.label:undefined} className="nav-btn" style={{display:"flex",alignItems:"center",gap:navCollapsed?0:10,width:"100%",padding:navCollapsed?"11px 0":"10px 14px",borderRadius:8,border:"none",background:view===n.id?"rgba(255,255,255,0.12)":"transparent",color:view===n.id?"#FFFFFF":"rgba(255,255,255,0.7)",fontSize:12,textAlign:"left",cursor:"pointer",justifyContent:navCollapsed?"center":"flex-start",position:"relative",transition:"all .15s",letterSpacing:"0.04em",textTransform:"uppercase",fontWeight:view===n.id?600:400}}>
-              <span style={{fontSize:14,opacity:view===n.id?1:.75}}>{n.icon}</span>
-              {!navCollapsed&&<><span style={{flex:1}}>{n.label}</span>{n.badge>0&&<span style={{fontSize:10,background:view===n.id?"rgba(201,169,110,0.3)":"rgba(255,255,255,0.1)",color:view===n.id?"#C9A96E":"rgba(255,255,255,0.7)",padding:"2px 7px",borderRadius:100,fontWeight:700}}>{n.badge}</span>}</>}
-              {navCollapsed&&n.badge>0&&<span style={{position:"absolute",top:6,right:6,width:6,height:6,borderRadius:"50%",background:"#C9A96E"}}/>}
+            <button key={n.id} onClick={()=>{setView(n.id);setSubCollapsed(false);}} title={navCollapsed?n.label:undefined} className="celeste-nav-btn" style={{display:"flex",alignItems:"center",gap:navCollapsed?0:9,width:"100%",padding:navCollapsed?"10px 0":"7px 10px",borderRadius:3,border:"none",background:view===n.id?"#F7F2EA":"transparent",color:view===n.id?"#1B1E2B":"#3A3F52",fontSize:12,textAlign:"left",cursor:"pointer",justifyContent:navCollapsed?"center":"flex-start",position:"relative",transition:"all .12s",letterSpacing:"0.03em",fontWeight:view===n.id?500:400,fontFamily:"'Inter',sans-serif"}}>
+              <span style={{fontSize:13,opacity:view===n.id?1:.55}}>{n.icon}</span>
+              {!navCollapsed&&<><span style={{flex:1}}>{n.label}</span>{n.badge>0&&<span style={{fontSize:10,background:view===n.id?"rgba(184,148,86,0.12)":"rgba(27,30,43,0.06)",color:view===n.id?"#B89456":"#6B6E7E",padding:"1px 5px",borderRadius:2,fontWeight:500}}>{n.badge}</span>}</>}
+              {navCollapsed&&n.badge>0&&<span style={{position:"absolute",top:5,right:5,width:5,height:5,borderRadius:"50%",background:"#B89456"}}/>}
             </button>
           ))}
         </div>
-        {!navCollapsed&&<div style={{padding:"14px 18px",borderTop:"1px solid rgba(255,255,255,0.08)",flexShrink:0}}>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",lineHeight:1.7,letterSpacing:"0.01em"}}>{adresseEtab||"133 Av. de France, 75013 Paris"}</div>
-          <button onClick={()=>signOut({callbackUrl:"/"})} style={{marginTop:10,width:"100%",padding:"7px 0",borderRadius:7,border:"1px solid rgba(255,255,255,0.2)",background:"transparent",color:"rgba(255,255,255,0.7)",fontSize:11,letterSpacing:"0.06em",cursor:"pointer",textTransform:"uppercase",fontWeight:500}}>⎋ Déconnexion</button>
+        {!navCollapsed&&<div style={{padding:"12px 14px",borderTop:"1px solid #E6DCC9",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <div style={{flex:1,height:1,background:"#E6DCC9"}}/>
+            <svg width="7" height="7" viewBox="0 0 10 10"><path d="M5 0L6 4L10 5L6 6L5 10L4 6L0 5L4 4Z" fill="#B89456"/></svg>
+            <div style={{flex:1,height:1,background:"#E6DCC9"}}/>
+          </div>
+          {espacesDyn.slice(0,3).map(e=>(
+            <div key={e.id} style={{display:"flex",alignItems:"center",gap:7,padding:"3px 2px"}}>
+              <div style={{width:5,height:5,borderRadius:"50%",background:e.color,flexShrink:0}}/>
+              <span style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontStyle:"italic",fontSize:12,color:"#3A3F52",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.nom}</span>
+            </div>
+          ))}
+          <div style={{marginTop:10,display:"flex",alignItems:"center",gap:7}}>
+            <div style={{width:22,height:22,borderRadius:"50%",background:"#1B1E2B",color:"#F7F2EA",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:500,flexShrink:0}}>
+              {(session?.user?.name||"?")[0].toUpperCase()}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:11,fontWeight:500,color:"#1B1E2B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{session?.user?.name||"Directeur"}</div>
+              <button onClick={()=>signOut({callbackUrl:"/"})} style={{fontSize:9.5,color:"#6B6E7E",background:"none",border:"none",cursor:"pointer",padding:0,letterSpacing:"0.05em",textTransform:"uppercase",fontFamily:"'Inter',sans-serif"}}>⎋ Déconnexion</button>
+            </div>
+          </div>
         </div>}
       </aside>
 
@@ -2095,10 +2128,10 @@ FORMAT
         {view==="general" && (
           <div style={{display:"flex",flex:1,overflow:"hidden"}}>
             {/* Sidebar filtres statuts — collapsible */}
-            <div style={{width:subCollapsed?44:210,background:"#221E19",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid rgba(209,196,178,0.06)",transition:"width .2s ease",overflow:"hidden"}}>
+            <div style={{width:subCollapsed?44:210,background:"#EFE7DA",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid #E6DCC9",transition:"width .2s ease",overflow:"hidden"}}>
               <div style={{padding:subCollapsed?"10px 6px":"16px 12px 10px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0}}>
                 {!subCollapsed&&<div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)",letterSpacing:"0.14em",textTransform:"uppercase"}}>Filtrer</div>}
-                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"rgba(209,196,178,0.07)",color:"rgba(209,196,178,0.35)",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"#E6DCC9",color:"#6B6E7E",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   {subCollapsed?"›":"‹"}
                 </button>
               </div>
@@ -2194,11 +2227,11 @@ FORMAT
             </div>
 
             {/* Liste des réservations */}
-            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#F5F3EF"}}>
+            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#F7F2EA"}}>
               <div style={{padding:"20px 24px 0",flexShrink:0,display:"flex",alignItems:"flex-end",justifyContent:"space-between"}}>
                 <div>
-                  <div style={{fontSize:22,fontWeight:300,color:"#1C1814",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.01em"}}>Événements</div>
-                  <div style={{fontSize:11,color:"#A09890",marginTop:3}}>
+                  <div style={{fontSize:22,fontWeight:300,color:"#1B1E2B",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.01em"}}>Événements</div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3}}>
                     {generalFilter==="all"?`${resas.length} demande${resas.length!==1?"s":""}`:
                     `${resas.filter(r=>(r.statut||"nouveau")===generalFilter).length} demande${resas.filter(r=>(r.statut||"nouveau")===generalFilter).length!==1?"s":""} · ${statuts.find(s=>s.id===generalFilter)?.label||""}`}
                   </div>
@@ -2206,15 +2239,15 @@ FORMAT
                 <button onClick={()=>{ setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setNewEventErrors({}); setShowNewEvent(true); }} style={{...gold}}>+ Nouvelle demande</button>
               </div>
               <div style={{padding:"12px 24px",flexShrink:0,position:"relative"}}>
-                <span style={{position:"absolute",left:36,top:"50%",transform:"translateY(-50%)",fontSize:12,color:"#A09890",pointerEvents:"none"}}>🔍</span>
+                <span style={{position:"absolute",left:36,top:"50%",transform:"translateY(-50%)",fontSize:12,color:"#6B6E7E",pointerEvents:"none"}}>🔍</span>
                 <input value={searchEvt} onChange={e=>setSearchEvt(e.target.value)} placeholder="Rechercher par nom, entreprise, type, date…" style={{...inp,paddingLeft:32,paddingRight:searchEvt?28:12}} />
-                {searchEvt&&<button onClick={()=>setSearchEvt("")} style={{position:"absolute",right:36,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#A09890",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>×</button>}
+                {searchEvt&&<button onClick={()=>setSearchEvt("")} style={{position:"absolute",right:36,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>×</button>}
               </div>
 
               {/* ── Barre de filtre pills par statut ── */}
               <div style={{padding:"0 24px 12px",flexShrink:0,display:"flex",gap:6,flexWrap:"wrap"}}>
                 {/* Tous */}
-                <button onClick={()=>setGeneralFilter("all")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${generalFilter==="all"?"#C9A96E":"#DDD8D0"}`,background:generalFilter==="all"?"#C9A96E":"transparent",color:generalFilter==="all"?"#1C1814":"#5C564F",fontSize:11,fontWeight:generalFilter==="all"?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
+                <button onClick={()=>setGeneralFilter("all")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${generalFilter==="all"?"#B89456":"#E6DCC9"}`,background:generalFilter==="all"?"#B89456":"transparent",color:generalFilter==="all"?"#1C1814":"#5C564F",fontSize:11,fontWeight:generalFilter==="all"?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
                   Tous ({resas.length})
                 </button>
                 {/* Un pill par statut */}
@@ -2229,13 +2262,13 @@ FORMAT
                 })}
                 {/* Sans statut */}
                 {(()=>{const c=resas.filter(r=>!r.statut||!statuts.find(s=>s.id===r.statut)).length;const active=generalFilter==="__none__";return c>0&&(
-                  <button onClick={()=>setGeneralFilter("__none__")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?"#8A8178":"#DDD8D0"}`,background:active?"#F1EFE8":"transparent",color:active?"#3D3530":"#8A8178",fontSize:11,fontWeight:active?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  <button onClick={()=>setGeneralFilter("__none__")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?"#8A8178":"#E6DCC9"}`,background:active?"#F1EFE8":"transparent",color:active?"#3D3530":"#8A8178",fontSize:11,fontWeight:active?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
                     Sans statut ({c})
                   </button>
                 );})()}
                 {/* À relancer */}
                 {(()=>{const active=generalFilter==="arelancer";return(
-                  <button onClick={()=>setGeneralFilter("arelancer")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?"#F59E0B":"#DDD8D0"}`,background:active?"#FFFBEB":"transparent",color:active?"#92400E":"#8A8178",fontSize:11,fontWeight:active?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  <button onClick={()=>setGeneralFilter("arelancer")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?"#F59E0B":"#E6DCC9"}`,background:active?"#FFFBEB":"transparent",color:active?"#92400E":"#8A8178",fontSize:11,fontWeight:active?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
                     ⏰ Relances ({relances.length})
                   </button>
                 );})()}
@@ -2246,11 +2279,11 @@ FORMAT
               {generalFilter==="arelancer"&&(
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-                    <span style={{fontSize:16,fontWeight:600,color:"#1C1814"}}>⏰ À relancer</span>
-                    <span style={{fontSize:12,color:"#8A8178"}}>{relances.length} relance{relances.length!==1?"s":""}</span>
+                    <span style={{fontSize:16,fontWeight:600,color:"#1B1E2B"}}>⏰ À relancer</span>
+                    <span style={{fontSize:12,color:"#6B6E7E"}}>{relances.length} relance{relances.length!==1?"s":""}</span>
                   </div>
                   {relances.length===0?(
-                    <div style={{textAlign:"center",padding:"60px 24px",color:"#8A8178"}}>
+                    <div style={{textAlign:"center",padding:"60px 24px",color:"#6B6E7E"}}>
                       <div style={{fontSize:36,marginBottom:10}}>⏰</div>
                       <div style={{fontSize:14}}>Aucune relance programmée</div>
                       <div style={{fontSize:12,marginTop:4}}>Ouvrez un événement et cliquez sur "Relance date"</div>
@@ -2262,12 +2295,12 @@ FORMAT
                         const st=resa?statuts.find(s=>s.id===(resa.statut||"nouveau"))||statuts[0]:null;
                         const isOverdue=rel.date<new Date().toISOString().slice(0,10);
                         return (
-                          <div key={rel.id} onClick={()=>resa&&setSelResaGeneral(resa)} style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",padding:"14px 18px",cursor:resa?"pointer":"default",display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${isOverdue?"#DC2626":"#F59E0B"}`}}>
+                          <div key={rel.id} onClick={()=>resa&&setSelResaGeneral(resa)} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",padding:"14px 18px",cursor:resa?"pointer":"default",display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${isOverdue?"#DC2626":"#F59E0B"}`}}>
                             <div style={{width:36,height:36,borderRadius:"50%",background:isOverdue?"#FEE2E2":"#FFFBEB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>⏰</div>
                             <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:13,fontWeight:600,color:"#1C1814",marginBottom:3}}>{rel.resaNom||"—"}</div>
+                              <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B",marginBottom:3}}>{rel.resaNom||"—"}</div>
                               <div style={{fontSize:12,color:isOverdue?"#DC2626":"#92400E",fontWeight:isOverdue?600:400}}>{isOverdue?"En retard · ":""}{rel.date}{rel.heure&&` à ${rel.heure}`}</div>
-                              {rel.note&&<div style={{fontSize:11,color:"#8A8178",marginTop:2}}>{rel.note}</div>}
+                              {rel.note&&<div style={{fontSize:11,color:"#6B6E7E",marginTop:2}}>{rel.note}</div>}
                             </div>
                             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end",flexShrink:0}}>
                               {st&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:100,background:st.bg,color:st.color,fontWeight:600}}>{st.label}</span>}
@@ -2287,17 +2320,17 @@ FORMAT
                 if(generalFilter==="__none__") {
                   const group=resas.filter(r=>(!r.statut||!statuts.find(s=>s.id===r.statut))&&(!q||r.nom?.toLowerCase().includes(q)||r.entreprise?.toLowerCase().includes(q)||r.typeEvenement?.toLowerCase().includes(q)||r.email?.toLowerCase().includes(q)||r.dateDebut?.includes(q)));
                   return group.length===0
-                    ? <div style={{textAlign:"center",padding:"60px 0",color:"#8A8178",fontSize:13}}>Aucun événement sans statut</div>
+                    ? <div style={{textAlign:"center",padding:"60px 0",color:"#6B6E7E",fontSize:13}}>Aucun événement sans statut</div>
                     : <div style={{display:"flex",flexDirection:"column",gap:8}}>{group.map(r=>{
                         const st=statuts[0]||{bg:"#F3F4F6",color:"#6B7280",label:"—"};
-                        return <div key={r.id} onClick={()=>setSelResaGeneral(r)} style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",padding:"13px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,borderLeft:"3px solid #DDD8D0",boxShadow:selResaGeneral?.id===r.id?"0 2px 10px rgba(28,24,20,.07)":"0 1px 3px rgba(28,24,20,.04)"}}>
+                        return <div key={r.id} onClick={()=>setSelResaGeneral(r)} style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #E6DCC9",padding:"13px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,borderLeft:"3px solid #E6DCC9",boxShadow:selResaGeneral?.id===r.id?"0 2px 10px rgba(28,24,20,.07)":"0 1px 3px rgba(28,24,20,.04)"}}>
                           <Avatar name={r.nom||"?"} size={36}/>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:600,color:"#1C1814",marginBottom:3}}>{r.nom||"—"}</div>
+                            <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B",marginBottom:3}}>{r.nom||"—"}</div>
                             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                              {r.typeEvenement&&<span style={{fontSize:11,color:"#8A8178"}}>{r.typeEvenement}</span>}
-                              {r.dateDebut&&<span style={{fontSize:11,color:"#8A8178"}}>📅 {fmtDateFr(r.dateDebut)}</span>}
-                              {r.nombrePersonnes&&<span style={{fontSize:11,color:"#8A8178"}}>👥 {r.nombrePersonnes}</span>}
+                              {r.typeEvenement&&<span style={{fontSize:11,color:"#6B6E7E"}}>{r.typeEvenement}</span>}
+                              {r.dateDebut&&<span style={{fontSize:11,color:"#6B6E7E"}}>📅 {fmtDateFr(r.dateDebut)}</span>}
+                              {r.nombrePersonnes&&<span style={{fontSize:11,color:"#6B6E7E"}}>👥 {r.nombrePersonnes}</span>}
                             </div>
                           </div>
                         </div>;
@@ -2312,13 +2345,13 @@ FORMAT
                     {generalFilter==="all"&&(
                       <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:10,marginTop:4}}>
                         <div style={{width:7,height:7,borderRadius:"50%",background:statut.color}}/>
-                        <span style={{fontSize:9,fontWeight:700,color:"#8A8178",textTransform:"uppercase",letterSpacing:"0.14em"}}>{statut.label}</span>
-                        <span style={{fontSize:10,color:"#A09890",background:"#EAE6E1",padding:"2px 7px",borderRadius:100}}>{group.length}</span>
+                        <span style={{fontSize:9,fontWeight:700,color:"#6B6E7E",textTransform:"uppercase",letterSpacing:"0.14em"}}>{statut.label}</span>
+                        <span style={{fontSize:10,color:"#6B6E7E",background:"#E6DCC9",padding:"2px 7px",borderRadius:100}}>{group.length}</span>
                         <div style={{flex:1,height:1,background:"#E8E4DF"}}/>
                       </div>
                     )}
                     {group.length===0&&generalFilter!=="all"&&(
-                      <div style={{textAlign:"center",padding:"48px 24px",color:"#8A8178",fontSize:13}}>
+                      <div style={{textAlign:"center",padding:"48px 24px",color:"#6B6E7E",fontSize:13}}>
                         <div style={{fontSize:32,marginBottom:8}}>📭</div>
                         Aucune demande avec ce statut
                       </div>
@@ -2328,17 +2361,17 @@ FORMAT
                         const st=statuts.find(s=>s.id===(r.statut||"nouveau"))||statuts[0];
                         const linkedEmails=getLinkedEmails(r);
                         return (
-                          <div key={r.id} onClick={()=>setSelResaGeneral(r)} style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",padding:"13px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,borderLeft:`3px solid ${st.color}`,boxShadow:selResaGeneral?.id===r.id?"0 2px 10px rgba(28,24,20,.07)":"0 1px 3px rgba(28,24,20,.04)"}}>
+                          <div key={r.id} onClick={()=>setSelResaGeneral(r)} style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #E6DCC9",padding:"13px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,borderLeft:`3px solid ${st.color}`,boxShadow:selResaGeneral?.id===r.id?"0 2px 10px rgba(28,24,20,.07)":"0 1px 3px rgba(28,24,20,.04)"}}>
                             <Avatar name={r.nom||"?"} size={34}/>
                             <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:13,fontWeight:600,color:"#1C1814",marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                                {r.nom||"—"}{r.entreprise&&<span style={{fontSize:12,fontWeight:400,color:"#8A8178"}}> · {r.entreprise}</span>}
+                              <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B",marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                                {r.nom||"—"}{r.entreprise&&<span style={{fontSize:12,fontWeight:400,color:"#6B6E7E"}}> · {r.entreprise}</span>}
                               </div>
                               <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-                                {r.typeEvenement&&<span style={{fontSize:11,color:"#5C564F"}}>🎉 {r.typeEvenement}</span>}
-                                {r.dateDebut&&<span style={{fontSize:11,color:"#5C564F"}}>📅 {r.dateDebut}</span>}
-                                {(r.heureDebut||r.heureFin)&&<span style={{fontSize:11,color:"#5C564F"}}>🕐 {r.heureDebut}{r.heureFin?" → "+r.heureFin:""}</span>}
-                                {r.nombrePersonnes&&<span style={{fontSize:11,color:"#5C564F"}}>👥 {r.nombrePersonnes} pers.</span>}
+                                {r.typeEvenement&&<span style={{fontSize:11,color:"#6B6E7E"}}>🎉 {r.typeEvenement}</span>}
+                                {r.dateDebut&&<span style={{fontSize:11,color:"#6B6E7E"}}>📅 {r.dateDebut}</span>}
+                                {(r.heureDebut||r.heureFin)&&<span style={{fontSize:11,color:"#6B6E7E"}}>🕐 {r.heureDebut}{r.heureFin?" → "+r.heureFin:""}</span>}
+                                {r.nombrePersonnes&&<span style={{fontSize:11,color:"#6B6E7E"}}>👥 {r.nombrePersonnes} pers.</span>}
                               </div>
                             </div>
                             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
@@ -2354,16 +2387,16 @@ FORMAT
               });
               })()}
               {resas.length===0?(
-                <div style={{textAlign:"center",padding:"80px 24px",color:"#8A8178"}}>
+                <div style={{textAlign:"center",padding:"80px 24px",color:"#6B6E7E"}}>
                   <div style={{fontSize:40,marginBottom:12}}>📭</div>
                   <div style={{fontSize:14}}>Aucune demande de réservation</div>
                   <div style={{fontSize:12,marginTop:4}}>Les demandes détectées dans vos mails apparaîtront ici.</div>
                 </div>
               ):searchEvt&&resas.filter(r=>{const q=searchEvt.toLowerCase();return r.nom?.toLowerCase().includes(q)||r.entreprise?.toLowerCase().includes(q)||r.typeEvenement?.toLowerCase().includes(q)||r.email?.toLowerCase().includes(q)||r.dateDebut?.includes(q);}).length===0?(
-                <div style={{textAlign:"center",padding:"60px 24px",color:"#8A8178"}}>
+                <div style={{textAlign:"center",padding:"60px 24px",color:"#6B6E7E"}}>
                   <div style={{fontSize:32,marginBottom:10}}>🔍</div>
                   <div style={{fontSize:14}}>Aucun résultat pour "{searchEvt}"</div>
-                  <button onClick={()=>setSearchEvt("")} style={{marginTop:12,background:"none",border:"none",color:"#C9A96E",fontSize:12,cursor:"pointer",fontWeight:600}}>Effacer la recherche</button>
+                  <button onClick={()=>setSearchEvt("")} style={{marginTop:12,background:"none",border:"none",color:"#B89456",fontSize:12,cursor:"pointer",fontWeight:600}}>Effacer la recherche</button>
                 </div>
               ):null}
               </div>
@@ -2371,30 +2404,30 @@ FORMAT
 
             {/* Panel détail réservation (général) — XL */}
             {selResaGeneral&&!editResaPanel&&(
-              <div style={{flex:1,minWidth:380,borderLeft:"1px solid #EAE6E1",background:"#FDFCFA",display:"flex",flexDirection:"column",overflowY:"auto"}}>
+              <div style={{flex:1,minWidth:380,borderLeft:"1px solid #E6DCC9",background:"#FDFCFA",display:"flex",flexDirection:"column",overflowY:"auto"}}>
 
                 {/* Header avec avatar */}
-                <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
+                <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #E6DCC9",flexShrink:0}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14}}>
                     <div style={{display:"flex",gap:14,alignItems:"flex-start",flex:1,minWidth:0}}>
                       <Avatar name={selResaGeneral.nom||"?"} size={48}/>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:18,fontWeight:600,color:"#1C1814",letterSpacing:"-0.01em",marginBottom:5}}>{selResaGeneral.nom}</div>
+                        <div style={{fontSize:18,fontWeight:600,color:"#1B1E2B",letterSpacing:"-0.01em",marginBottom:5}}>{selResaGeneral.nom}</div>
                         <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
-                          {selResaGeneral.entreprise&&<span style={{fontSize:12,color:"#8A8178"}}>🏢 {selResaGeneral.entreprise}</span>}
-                          {selResaGeneral.email&&<span style={{fontSize:12,color:"#8A8178"}}>📧 {selResaGeneral.email}</span>}
-                          {selResaGeneral.telephone&&<span style={{fontSize:12,color:"#8A8178"}}>📞 {selResaGeneral.telephone}</span>}
+                          {selResaGeneral.entreprise&&<span style={{fontSize:12,color:"#6B6E7E"}}>🏢 {selResaGeneral.entreprise}</span>}
+                          {selResaGeneral.email&&<span style={{fontSize:12,color:"#6B6E7E"}}>📧 {selResaGeneral.email}</span>}
+                          {selResaGeneral.telephone&&<span style={{fontSize:12,color:"#6B6E7E"}}>📞 {selResaGeneral.telephone}</span>}
                         </div>
                       </div>
                     </div>
-                    <button onClick={()=>{setSelResaGeneral(null);setShowMailHistory(false);}} style={{width:26,height:26,borderRadius:6,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+                    <button onClick={()=>{setSelResaGeneral(null);setShowMailHistory(false);}} style={{width:26,height:26,borderRadius:6,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
                   </div>
                 </div>
 
                 {/* Onglets */}
-                <div style={{display:"flex",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
+                <div style={{display:"flex",borderBottom:"1px solid #E6DCC9",flexShrink:0}}>
                   {[["details","📋 Détails",false],["mails","✉ Mails "+(getLinkedEmails(selResaGeneral).length>0?"("+getLinkedEmails(selResaGeneral).length+")":""),true]].map(([tab,label,isMail])=>(
-                    <button key={tab} onClick={()=>setShowMailHistory(isMail)} style={{flex:1,padding:"11px 0",fontSize:12,fontWeight:showMailHistory===isMail?600:400,color:showMailHistory===isMail?"#1C1814":"#8A8178",background:"transparent",border:"none",borderBottom:showMailHistory===isMail?"2px solid #C9A96E":"2px solid transparent",cursor:"pointer"}}>{label}</button>
+                    <button key={tab} onClick={()=>setShowMailHistory(isMail)} style={{flex:1,padding:"11px 0",fontSize:12,fontWeight:showMailHistory===isMail?600:400,color:showMailHistory===isMail?"#1C1814":"#8A8178",background:"transparent",border:"none",borderBottom:showMailHistory===isMail?"2px solid #B89456":"2px solid transparent",cursor:"pointer"}}>{label}</button>
                   ))}
                 </div>
 
@@ -2404,13 +2437,13 @@ FORMAT
 
                       {/* Statut */}
                       <div>
-                        <div style={{fontSize:9,fontWeight:700,color:"#8A8178",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:9}}>Statut</div>
+                        <div style={{fontSize:9,fontWeight:700,color:"#6B6E7E",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:9}}>Statut</div>
                         <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
                           {statuts.map(s=>(
                             <button key={s.id} onClick={()=>{
                               const upd=resas.map(r=>r.id===selResaGeneral.id?{...r,statut:s.id}:r);
                               saveResas(upd); setSelResaGeneral({...selResaGeneral,statut:s.id});
-                            }} style={{padding:"6px 15px",borderRadius:100,border:"none",background:(selResaGeneral.statut||"nouveau")===s.id?s.bg:"#F0EDE8",color:(selResaGeneral.statut||"nouveau")===s.id?s.color:"#8A8178",fontSize:12,fontWeight:(selResaGeneral.statut||"nouveau")===s.id?700:500,cursor:"pointer"}}>{s.label}</button>
+                            }} style={{padding:"6px 15px",borderRadius:100,border:"none",background:(selResaGeneral.statut||"nouveau")===s.id?s.bg:"#F0EDE8",color:(selResaGeneral.statut||"nouveau")===s.id?s.color:"#6B6E7E",fontSize:12,fontWeight:(selResaGeneral.statut||"nouveau")===s.id?700:500,cursor:"pointer"}}>{s.label}</button>
                           ))}
                         </div>
                       </div>
@@ -2419,7 +2452,7 @@ FORMAT
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                         {[["🎉","Type",selResaGeneral.typeEvenement],["👥","Personnes",selResaGeneral.nombrePersonnes?selResaGeneral.nombrePersonnes+" pers.":null],["📅","Date",fmtDateFr(selResaGeneral.dateDebut)],["🕐","Horaires",selResaGeneral.heureDebut+(selResaGeneral.heureFin?" → "+selResaGeneral.heureFin:"")],["📍","Espace",ESPACES.find(e=>e.id===selResaGeneral.espaceId)?.nom],["💰","Budget",selResaGeneral.budget]].map(([icon,k,v])=>(
                           <div key={k} style={{background:"#F5F2EE",borderRadius:10,padding:"13px 15px"}}>
-                            <div style={{fontSize:10,color:"#A09890",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.04em"}}>{icon} {k}</div>
+                            <div style={{fontSize:10,color:"#6B6E7E",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.04em"}}>{icon} {k}</div>
                             <div style={{fontSize:14,fontWeight:500,color:v?"#1C1814":"#C0BAB2",fontStyle:v?"normal":"italic"}}>{v||"Non renseigné"}</div>
                           </div>
                         ))}
@@ -2428,48 +2461,48 @@ FORMAT
                       {/* Notes */}
                       {selResaGeneral.notes&&(
                         <div style={{background:"#F5F2EE",borderRadius:10,padding:"13px 15px"}}>
-                          <div style={{fontSize:10,color:"#A09890",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em"}}>📝 Notes</div>
-                          <div style={{fontSize:13,color:"#5C564F",lineHeight:1.65}}>{selResaGeneral.notes}</div>
+                          <div style={{fontSize:10,color:"#6B6E7E",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em"}}>📝 Notes</div>
+                          <div style={{fontSize:13,color:"#6B6E7E",lineHeight:1.65}}>{selResaGeneral.notes}</div>
                         </div>
                       )}
 
                       {/* ── NOTE IA ── */}
-                      <div style={{borderRadius:10,border:"1px solid #DDD8D0",overflow:"hidden"}}>
-                        <div style={{padding:"11px 15px",background:"#F7F5F1",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:noteIA[selResaGeneral.id]?"1px solid #DDD8D0":"none"}}>
-                          <div style={{fontSize:11,fontWeight:600,color:"#1C1814",display:"flex",alignItems:"center",gap:6}}>
+                      <div style={{borderRadius:10,border:"1px solid #E6DCC9",overflow:"hidden"}}>
+                        <div style={{padding:"11px 15px",background:"#EFE7DA",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:noteIA[selResaGeneral.id]?"1px solid #E6DCC9":"none"}}>
+                          <div style={{fontSize:11,fontWeight:600,color:"#1B1E2B",display:"flex",alignItems:"center",gap:6}}>
                             <span>✨</span> Note IA
-                            {noteIA[selResaGeneral.id]&&<span style={{fontSize:10,color:"#A09890",fontWeight:400}}>· {noteIA[selResaGeneral.id].date}</span>}
+                            {noteIA[selResaGeneral.id]&&<span style={{fontSize:10,color:"#6B6E7E",fontWeight:400}}>· {noteIA[selResaGeneral.id].date}</span>}
                           </div>
                           <button
                             onClick={()=>generateNoteIA(selResaGeneral)}
                             disabled={genNoteIA===selResaGeneral.id}
-                            style={{padding:"5px 12px",borderRadius:7,border:"none",background:"#1C1814",color:"#C9A96E",fontSize:11,fontWeight:600,cursor:genNoteIA===selResaGeneral.id?"default":"pointer",display:"flex",alignItems:"center",gap:6,opacity:genNoteIA===selResaGeneral.id?.7:1}}
+                            style={{padding:"5px 12px",borderRadius:7,border:"none",background:"#1B1E2B",color:"#B89456",fontSize:11,fontWeight:600,cursor:genNoteIA===selResaGeneral.id?"default":"pointer",display:"flex",alignItems:"center",gap:6,opacity:genNoteIA===selResaGeneral.id?.7:1}}
                           >
                             {genNoteIA===selResaGeneral.id?<><Spin s={11}/> Analyse…</>:noteIA[selResaGeneral.id]?"↻ Régénérer":"Générer"}
                           </button>
                         </div>
                         {genNoteIA===selResaGeneral.id&&(
-                          <div style={{padding:"16px 15px",display:"flex",alignItems:"center",gap:10,color:"#8A8178",fontSize:12,background:"#FDFCFA"}}>
+                          <div style={{padding:"16px 15px",display:"flex",alignItems:"center",gap:10,color:"#6B6E7E",fontSize:12,background:"#FDFCFA"}}>
                             <Spin s={14}/>
                             <span style={{fontStyle:"italic"}}>ARCHANGE analyse les échanges…</span>
                           </div>
                         )}
                         {!genNoteIA&&noteIA[selResaGeneral.id]&&(
                           <div style={{padding:"13px 15px",background:"#FDFCFA"}}>
-                            <div style={{fontSize:12,color:"#3D3530",lineHeight:1.75,whiteSpace:"pre-wrap"}}>{noteIA[selResaGeneral.id].text}</div>
+                            <div style={{fontSize:12,color:"#3A3F52",lineHeight:1.75,whiteSpace:"pre-wrap"}}>{noteIA[selResaGeneral.id].text}</div>
                           </div>
                         )}
                         {!genNoteIA&&!noteIA[selResaGeneral.id]&&(
                           <div style={{padding:"12px 15px",background:"#FDFCFA"}}>
-                            <div style={{fontSize:12,color:"#A09890",fontStyle:"italic"}}>Cliquez sur "Générer" pour qu'ARCHANGE analyse les échanges liés à cet événement.</div>
+                            <div style={{fontSize:12,color:"#6B6E7E",fontStyle:"italic"}}>Cliquez sur "Générer" pour qu'ARCHANGE analyse les échanges liés à cet événement.</div>
                           </div>
                         )}
                       </div>
 
                       {/* ── NOTE DIRECTEUR ── */}
-                      <div style={{borderRadius:10,border:"1px solid #DDD8D0",overflow:"hidden"}}>
-                        <div style={{padding:"11px 15px",background:"#F7F5F1",borderBottom:"1px solid #DDD8D0"}}>
-                          <div style={{fontSize:11,fontWeight:600,color:"#1C1814",display:"flex",alignItems:"center",gap:6}}>
+                      <div style={{borderRadius:10,border:"1px solid #E6DCC9",overflow:"hidden"}}>
+                        <div style={{padding:"11px 15px",background:"#EFE7DA",borderBottom:"1px solid #E6DCC9"}}>
+                          <div style={{fontSize:11,fontWeight:600,color:"#1B1E2B",display:"flex",alignItems:"center",gap:6}}>
                             <span>📝</span> Note directeur
                           </div>
                         </div>
@@ -2482,7 +2515,7 @@ FORMAT
                             }}
                             placeholder="Note confidentielle réservée à la direction…"
                             rows={4}
-                            style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1px solid #DDD8D0",background:"#F5F2EE",color:"#1C1814",fontSize:12,lineHeight:1.7,resize:"vertical",outline:"none",fontFamily:"inherit"}}
+                            style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1px solid #E6DCC9",background:"#F5F2EE",color:"#1B1E2B",fontSize:12,lineHeight:1.7,resize:"vertical",outline:"none",fontFamily:"inherit"}}
                           />
                         </div>
                       </div>
@@ -2501,13 +2534,13 @@ FORMAT
 
                       {/* Form relance date */}
                       {showRelanceForm===selResaGeneral.id&&(
-                        <div style={{background:"#F5F3EF",borderRadius:10,padding:"16px",border:"1px solid #DDD8D0"}}>
-                          <div style={{fontSize:13,fontWeight:600,color:"#1C1814",marginBottom:12}}>⏰ Programmer une relance</div>
+                        <div style={{background:"#F7F2EA",borderRadius:10,padding:"16px",border:"1px solid #E6DCC9"}}>
+                          <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B",marginBottom:12}}>⏰ Programmer une relance</div>
                           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-                            <div><label style={{fontSize:10,color:"#8A8178",display:"block",marginBottom:4}}>Date</label><DatePicker value={relanceDate} onChange={v=>setRelanceDate(v)}/></div>
-                            <div><label style={{fontSize:10,color:"#8A8178",display:"block",marginBottom:4}}>Heure</label><TimePicker value={relanceHeure} onChange={v=>setRelanceHeure(v)} placeholder="Heure"/></div>
+                            <div><label style={{fontSize:10,color:"#6B6E7E",display:"block",marginBottom:4}}>Date</label><DatePicker value={relanceDate} onChange={v=>setRelanceDate(v)}/></div>
+                            <div><label style={{fontSize:10,color:"#6B6E7E",display:"block",marginBottom:4}}>Heure</label><TimePicker value={relanceHeure} onChange={v=>setRelanceHeure(v)} placeholder="Heure"/></div>
                           </div>
-                          <div style={{marginBottom:12}}><label style={{fontSize:10,color:"#8A8178",display:"block",marginBottom:4}}>Note (optionnel)</label><input value={relanceNote} onChange={e=>setRelanceNote(e.target.value)} placeholder="Ex: Rappeler pour le devis…" style={{...inp}}/></div>
+                          <div style={{marginBottom:12}}><label style={{fontSize:10,color:"#6B6E7E",display:"block",marginBottom:4}}>Note (optionnel)</label><input value={relanceNote} onChange={e=>setRelanceNote(e.target.value)} placeholder="Ex: Rappeler pour le devis…" style={{...inp}}/></div>
                           <div style={{display:"flex",gap:8}}>
                             <button onClick={()=>{
                               if(!relanceDate) return;
@@ -2522,7 +2555,7 @@ FORMAT
                   ):(
                     <div style={{display:"flex",flexDirection:"column",gap:10}}>
                       {getLinkedEmails(selResaGeneral).length===0&&Object.keys(sentReplies).filter(id=>emailResaLinks[id]===selResaGeneral.id).length===0?(
-                        <div style={{textAlign:"center",padding:"40px 16px",color:"#8A8178"}}>
+                        <div style={{textAlign:"center",padding:"40px 16px",color:"#6B6E7E"}}>
                           <div style={{fontSize:32,marginBottom:10}}>✉</div>
                           <div style={{fontSize:13}}>Aucun mail associé</div>
                           <div style={{fontSize:11,marginTop:4}}>à l'adresse {selResaGeneral.email}</div>
@@ -2538,23 +2571,23 @@ FORMAT
                             <div style={{display:"flex",flexDirection:"column",gap:8}}>
                               {linked.map(m=>(
                                 <div key={m.id}>
-                                  <div style={{background:"#F5F3EF",borderRadius:10,padding:"13px 15px",border:"1px solid #EAE6E1"}}>
+                                  <div style={{background:"#F7F2EA",borderRadius:10,padding:"13px 15px",border:"1px solid #E6DCC9"}}>
                                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                                       <div style={{display:"flex",alignItems:"center",gap:6}}>
                                         <span style={{fontSize:11,background:"#EFF6FF",color:"#1D4ED8",padding:"2px 7px",borderRadius:100,fontWeight:600}}>📥 Reçu</span>
-                                        <span style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>{m.from}</span>
+                                        <span style={{fontSize:13,fontWeight:600,color:"#1B1E2B"}}>{m.from}</span>
                                       </div>
-                                      <span style={{fontSize:11,color:"#8A8178",flexShrink:0}}>{m.date}</span>
+                                      <span style={{fontSize:11,color:"#6B6E7E",flexShrink:0}}>{m.date}</span>
                                     </div>
-                                    <div style={{fontSize:12,color:"#5C564F",lineHeight:1.5,marginBottom:10}}>{(m.snippet||"").slice(0,120)}{(m.snippet||"").length>120?"…":""}</div>
-                                    <button onClick={()=>{ setView("mails"); setMailFilter("all"); setSel(m); handleSel(m); setSelResaGeneral(null); setShowMailHistory(false); }} style={{width:"100%",padding:"7px",borderRadius:7,border:"1px solid #DDD8D0",background:"transparent",color:"#5C564F",fontSize:12,cursor:"pointer"}}>Ouvrir le mail →</button>
+                                    <div style={{fontSize:12,color:"#6B6E7E",lineHeight:1.5,marginBottom:10}}>{(m.snippet||"").slice(0,120)}{(m.snippet||"").length>120?"…":""}</div>
+                                    <button onClick={()=>{ setView("mails"); setMailFilter("all"); setSel(m); handleSel(m); setSelResaGeneral(null); setShowMailHistory(false); }} style={{width:"100%",padding:"7px",borderRadius:7,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer"}}>Ouvrir le mail →</button>
                                   </div>
                                   {/* Réponse envoyée pour cet email */}
                                   {sentReplies[m.id]&&(
                                     <div style={{marginLeft:20,marginTop:4,background:"#F0FDF4",borderRadius:10,padding:"11px 14px",border:"1px solid #BBF7D0"}}>
                                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                                         <span style={{fontSize:11,background:"#D1FAE5",color:"#065F46",padding:"2px 7px",borderRadius:100,fontWeight:600}}>📤 Vous</span>
-                                        <span style={{fontSize:11,color:"#8A8178"}}>{sentReplies[m.id].date}</span>
+                                        <span style={{fontSize:11,color:"#6B6E7E"}}>{sentReplies[m.id].date}</span>
                                       </div>
                                       <div style={{fontSize:12,color:"#374151",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{sentReplies[m.id].text.slice(0,200)}{sentReplies[m.id].text.length>200?"…":""}</div>
                                     </div>
@@ -2570,11 +2603,11 @@ FORMAT
                 </div>
 
                 {/* Actions fixées en bas */}
-                <div style={{padding:"14px 24px",borderTop:"1px solid #EAE6E1",display:"flex",flexDirection:"column",gap:8,flexShrink:0}}>
+                <div style={{padding:"14px 24px",borderTop:"1px solid #E6DCC9",display:"flex",flexDirection:"column",gap:8,flexShrink:0}}>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     <button onClick={()=>setEditResaPanel({...selResaGeneral})} style={{...out,fontSize:12,padding:"9px",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✏️ Modifier</button>
                     <button onClick={()=>setShowRelanceForm(selResaGeneral.id)} style={{padding:"9px",borderRadius:8,border:"1px solid #FDE68A",background:"#FFFBEB",color:"#92400E",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>⏰ Relance date</button>
-                    <button onClick={()=>{ setRelanceIAText(""); setMotifSelectionne(""); setMotifPersonnalise(""); setShowRelanceIA(selResaGeneral); }} style={{padding:"9px",borderRadius:8,border:"none",background:"#1C1814",color:"#C9A96E",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✨ Mail relance IA</button>
+                    <button onClick={()=>{ setRelanceIAText(""); setMotifSelectionne(""); setMotifPersonnalise(""); setShowRelanceIA(selResaGeneral); }} style={{padding:"9px",borderRadius:8,border:"none",background:"#1B1E2B",color:"#B89456",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✨ Mail relance IA</button>
                     <button onClick={()=>openSendMail(selResaGeneral)} style={{...gold,fontSize:12,padding:"9px",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>📤 Envoyer mail</button>
                   </div>
                   <button onClick={()=>{ saveResas(resas.filter(r=>r.id!==selResaGeneral.id)); setSelResaGeneral(null); toast("Supprimé"); }} style={{width:"100%",padding:"9px",borderRadius:8,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",fontSize:12,cursor:"pointer"}}>Supprimer l'événement</button>
@@ -2584,23 +2617,23 @@ FORMAT
 
             {/* Panel MODIFIER inline */}
             {editResaPanel&&(
-              <div style={{width:380,borderLeft:"1px solid #EAE6E1",overflowY:"auto",background:"#FDFCFA",flexShrink:0}}>
-                <div style={{padding:"16px 18px 12px",borderBottom:"1px solid #EAE6E1",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div style={{fontSize:15,fontWeight:600,color:"#1C1814"}}>✏️ Modifier l'événement</div>
-                  <button onClick={()=>setEditResaPanel(null)} style={{width:28,height:28,borderRadius:6,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              <div style={{width:380,borderLeft:"1px solid #E6DCC9",overflowY:"auto",background:"#FDFCFA",flexShrink:0}}>
+                <div style={{padding:"16px 18px 12px",borderBottom:"1px solid #E6DCC9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{fontSize:15,fontWeight:600,color:"#1B1E2B"}}>✏️ Modifier l'événement</div>
+                  <button onClick={()=>setEditResaPanel(null)} style={{width:28,height:28,borderRadius:6,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                 </div>
                 <div style={{padding:18,display:"flex",flexDirection:"column",gap:10}}>
                   {[["nom","👤 Nom"],["email","📧 Email"],["telephone","📞 Téléphone"],["entreprise","🏢 Entreprise"],["nombrePersonnes","👥 Nb personnes"]].map(([k,l])=>(
-                    <div key={k}><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>{l}</label><input value={editResaPanel[k]||""} onChange={e=>setEditResaPanel({...editResaPanel,[k]:e.target.value})} style={{...inp}}/></div>
+                    <div key={k}><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>{l}</label><input value={editResaPanel[k]||""} onChange={e=>setEditResaPanel({...editResaPanel,[k]:e.target.value})} style={{...inp}}/></div>
                   ))}
-                  <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📅 Date</label><DatePicker value={editResaPanel.dateDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,dateDebut:v})}/></div>
-                  <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🕐 Heure début</label><TimePicker value={editResaPanel.heureDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,heureDebut:v})} placeholder="Heure début"/></div>
-                  <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🕕 Heure fin</label><TimePicker value={editResaPanel.heureFin||""} onChange={v=>setEditResaPanel({...editResaPanel,heureFin:v})} placeholder="Heure fin"/></div>
-                  <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📍 Espace</label><select value={editResaPanel.espaceId||espacesDyn[0]?.id||""} onChange={e=>setEditResaPanel({...editResaPanel,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
-                  <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🎉 Type</label><input value={editResaPanel.typeEvenement||""} onChange={e=>setEditResaPanel({...editResaPanel,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inp}}/></div>
-                  <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>💰 Budget client</label><input value={editResaPanel.budget||""} onChange={e=>setEditResaPanel({...editResaPanel,budget:e.target.value})} placeholder="Ex: 5 000€…" style={{...inp}}/></div>
-                  <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🏷 Statut</label><select value={editResaPanel.statut||"nouveau"} onChange={e=>setEditResaPanel({...editResaPanel,statut:e.target.value})} style={{...inp}}>{statuts.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
-                  <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📝 Notes</label><textarea value={editResaPanel.notes||""} onChange={e=>setEditResaPanel({...editResaPanel,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
+                  <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📅 Date</label><DatePicker value={editResaPanel.dateDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,dateDebut:v})}/></div>
+                  <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🕐 Heure début</label><TimePicker value={editResaPanel.heureDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,heureDebut:v})} placeholder="Heure début"/></div>
+                  <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🕕 Heure fin</label><TimePicker value={editResaPanel.heureFin||""} onChange={v=>setEditResaPanel({...editResaPanel,heureFin:v})} placeholder="Heure fin"/></div>
+                  <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📍 Espace</label><select value={editResaPanel.espaceId||espacesDyn[0]?.id||""} onChange={e=>setEditResaPanel({...editResaPanel,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
+                  <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🎉 Type</label><input value={editResaPanel.typeEvenement||""} onChange={e=>setEditResaPanel({...editResaPanel,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inp}}/></div>
+                  <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>💰 Budget client</label><input value={editResaPanel.budget||""} onChange={e=>setEditResaPanel({...editResaPanel,budget:e.target.value})} placeholder="Ex: 5 000€…" style={{...inp}}/></div>
+                  <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🏷 Statut</label><select value={editResaPanel.statut||"nouveau"} onChange={e=>setEditResaPanel({...editResaPanel,statut:e.target.value})} style={{...inp}}>{statuts.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
+                  <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📝 Notes</label><textarea value={editResaPanel.notes||""} onChange={e=>setEditResaPanel({...editResaPanel,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
                   <div style={{display:"flex",gap:8,paddingTop:4}}>
                     <button onClick={()=>{
                       if(!editResaPanel.nom) return;
@@ -2619,7 +2652,7 @@ FORMAT
         {view==="mails" && (
           <>
             {/* Sidebar catégories mails — collapsible */}
-            <div style={{width:subCollapsed?44:160,background:"#221E19",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid rgba(209,196,178,0.06)",transition:"width .2s ease",overflow:"hidden"}}>
+            <div style={{width:subCollapsed?44:160,background:"#EFE7DA",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid #E6DCC9",transition:"width .2s ease",overflow:"hidden"}}>
               <div style={{padding:subCollapsed?"10px 6px":"10px 10px 8px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0,gap:6}}>
                 {!subCollapsed&&<>
                   <button onClick={()=>{setShowCompose(true);setComposeTo("");setComposeSubject("");setComposeBody(`\n\n--\nCordialement,\nL'équipe ${nomEtab}`);}} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
@@ -2630,7 +2663,7 @@ FORMAT
                   </button>
                 </>}
                 {subCollapsed&&<button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>{loadingMail?<Spin s={10}/>:"↺"}</button>}
-                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"rgba(209,196,178,0.07)",color:"rgba(209,196,178,0.35)",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"#E6DCC9",color:"#6B6E7E",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   {subCollapsed?"›":"‹"}
                 </button>
               </div>
@@ -2638,7 +2671,7 @@ FORMAT
                 <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center",height:"100%"}}>
                   <button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13}}>↺</button>
                   {/* Radar ARCHANGE — en premier */}
-                  <button onClick={()=>setMailFilter("priorites")} title="Radar ARCHANGE" style={{width:32,height:32,borderRadius:8,border:`1px solid ${mailFilter==="priorites"?"rgba(201,169,110,0.5)":"rgba(201,169,110,0.2)"}`,background:mailFilter==="priorites"?"rgba(201,169,110,0.15)":"rgba(201,169,110,0.06)",cursor:"pointer",fontSize:12,color:"#C9A96E",fontWeight:700,position:"relative"}}>
+                  <button onClick={()=>setMailFilter("priorites")} title="Radar ARCHANGE" style={{width:32,height:32,borderRadius:8,border:`1px solid ${mailFilter==="priorites"?"rgba(184,148,86,0.5)":"rgba(184,148,86,0.2)"}`,background:mailFilter==="priorites"?"rgba(184,148,86,0.15)":"rgba(184,148,86,0.06)",cursor:"pointer",fontSize:12,color:"#B89456",fontWeight:700,position:"relative"}}>
                     ◆
                     {prioritesArchange.length>0&&<span style={{position:"absolute",top:1,right:1,width:8,height:8,borderRadius:"50%",background:"#E24B4A"}}/>}
                   </button>
@@ -2652,18 +2685,18 @@ FORMAT
               ):(
                 <div style={{padding:"4px 6px",flex:1,display:"flex",flexDirection:"column"}}>
                   {/* Radar ARCHANGE — en premier */}
-                  <div style={{paddingBottom:8,marginBottom:6,borderBottom:"1px solid rgba(209,196,178,0.1)"}}>
+                  <div style={{paddingBottom:8,marginBottom:6,borderBottom:"1px solid #E6DCC9"}}>
                     {analysing&&(
                       <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 9px",marginBottom:4}}>
                         <Spin s={10}/>
-                        <span style={{fontSize:10,color:"rgba(209,196,178,0.5)"}}>Analyse {analysingProgress}…</span>
+                        <span style={{fontSize:10,color:"#6B6E7E"}}>Analyse {analysingProgress}…</span>
                       </div>
                     )}
-                    <button onClick={()=>setMailFilter("priorites")} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 11px",borderRadius:9,border:`1px solid ${mailFilter==="priorites"?"rgba(201,169,110,0.5)":"rgba(201,169,110,0.18)"}`,background:mailFilter==="priorites"?"rgba(201,169,110,0.12)":"rgba(201,169,110,0.06)",color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.7)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",transition:"all .15s"}}>
-                      <span style={{fontSize:13,color:"#C9A96E"}}>◆</span>
+                    <button onClick={()=>setMailFilter("priorites")} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 11px",borderRadius:9,border:`1px solid ${mailFilter==="priorites"?"rgba(184,148,86,0.5)":"rgba(184,148,86,0.18)"}`,background:mailFilter==="priorites"?"rgba(184,148,86,0.12)":"rgba(184,148,86,0.06)",color:mailFilter==="priorites"?"#B89456":"rgba(209,196,178,0.7)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",transition:"all .15s"}}>
+                      <span style={{fontSize:13,color:"#B89456"}}>◆</span>
                       <div style={{flex:1}}>
-                        <div style={{fontWeight:600,fontSize:11,color:mailFilter==="priorites"?"#C9A96E":"rgba(209,196,178,0.88)"}}>Radar ARCHANGE</div>
-                        <div style={{fontSize:10,color:"rgba(209,196,178,0.45)",marginTop:1}}>{analysing?`Analyse en cours…`:`${prioritesArchange.length} demande${prioritesArchange.length!==1?"s":""}`}</div>
+                        <div style={{fontWeight:600,fontSize:11,color:mailFilter==="priorites"?"#B89456":"rgba(209,196,178,0.88)"}}>Radar ARCHANGE</div>
+                        <div style={{fontSize:10,color:"#6B6E7E",marginTop:1}}>{analysing?`Analyse en cours…`:`${prioritesArchange.length} demande${prioritesArchange.length!==1?"s":""}`}</div>
                       </div>
                       {prioritesArchange.length>0&&<span style={{fontSize:11,background:"#E24B4A",color:"#fff",padding:"2px 7px",borderRadius:100,fontWeight:700,flexShrink:0}}>{prioritesArchange.length}</span>}
                     </button>
@@ -2677,30 +2710,30 @@ FORMAT
                     <button key={c.id} onClick={()=>{setMailFilter(c.id);setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter===c.id&&!showArchived?"rgba(209,196,178,0.1)":"transparent",color:mailFilter===c.id&&!showArchived?"#D1C4B2":"rgba(209,196,178,0.88)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                       <span style={{fontSize:12}}>{c.icon}</span>
                       <span style={{flex:1}}>{c.label}</span>
-                      <span style={{fontSize:10,color:mailFilter===c.id?"#C9A96E":"rgba(209,196,178,0.5)"}}>{emails.filter(m=>!m.archived&&(c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id))).length||""}</span>
+                      <span style={{fontSize:10,color:mailFilter===c.id?"#B89456":"rgba(209,196,178,0.5)"}}>{emails.filter(m=>!m.archived&&(c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id))).length||""}</span>
                     </button>
                   ))}
                   {/* Archivés */}
                   <button onClick={()=>setShowArchived(v=>!v)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:showArchived?"rgba(209,196,178,0.1)":"transparent",color:showArchived?"#D1C4B2":"rgba(209,196,178,0.5)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                     <span style={{fontSize:12}}>📦</span>
                     <span style={{flex:1}}>Archivés</span>
-                    <span style={{fontSize:10,color:"rgba(209,196,178,0.4)"}}>{emails.filter(m=>m.archived).length||""}</span>
+                    <span style={{fontSize:10,color:"#6B6E7E"}}>{emails.filter(m=>m.archived).length||""}</span>
                   </button>
                   {/* Envoyés */}
                   <button onClick={()=>{setMailFilter("envoyes");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="envoyes"&&!showArchived?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="envoyes"&&!showArchived?"#D1C4B2":"rgba(209,196,178,0.5)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                     <span style={{fontSize:12}}>📤</span>
                     <span style={{flex:1}}>Envoyés</span>
-                    <span style={{fontSize:10,color:"rgba(209,196,178,0.4)"}}>{Object.keys(sentReplies).length||""}</span>
+                    <span style={{fontSize:10,color:"#6B6E7E"}}>{Object.keys(sentReplies).length||""}</span>
                   </button>
                   {/* Brouillons */}
                   <button onClick={()=>{setMailFilter("brouillons");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="brouillons"&&!showArchived?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="brouillons"&&!showArchived?"#D1C4B2":"rgba(209,196,178,0.5)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
                     <span style={{fontSize:12}}>📝</span>
                     <span style={{flex:1}}>Brouillons</span>
-                    <span style={{fontSize:10,color:localDrafts.length>0?"#C9A96E":"rgba(209,196,178,0.4)"}}>{localDrafts.length||""}</span>
+                    <span style={{fontSize:10,color:localDrafts.length>0?"#B89456":"rgba(209,196,178,0.4)"}}>{localDrafts.length||""}</span>
                   </button>
                   {/* Aide raccourcis */}
                   <div style={{marginTop:"auto",paddingTop:8}}>
-                    <button onClick={()=>setShowKeyHelp(true)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"7px 9px",borderRadius:8,border:"none",background:"transparent",color:"rgba(209,196,178,0.4)",fontSize:10,cursor:"pointer",textAlign:"left"}}>
+                    <button onClick={()=>setShowKeyHelp(true)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"7px 9px",borderRadius:8,border:"none",background:"transparent",color:"#6B6E7E",fontSize:10,cursor:"pointer",textAlign:"left"}}>
                       <span>⌨️</span><span>Raccourcis clavier</span>
                     </button>
                   </div>
@@ -2713,18 +2746,18 @@ FORMAT
               <div style={{flex:1,display:"flex",overflow:"hidden"}}>
 
                 {/* ── Panel gauche — liste des cartes ── */}
-                <div style={{flex:radarSelEmail?undefined:1,width:radarSelEmail?560:undefined,flexShrink:0,overflowY:"auto",background:"#F5F3EF",padding:"20px 20px",borderRight:radarSelEmail?"1px solid #EAE6E1":"none"}}>
+                <div style={{flex:radarSelEmail?undefined:1,width:radarSelEmail?560:undefined,flexShrink:0,overflowY:"auto",background:"#F7F2EA",padding:"20px 20px",borderRight:radarSelEmail?"1px solid #E6DCC9":"none"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                     <div>
-                      <div style={{fontSize:18,fontWeight:300,color:"#1C1814",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.01em"}}>Radar ARCHANGE</div>
-                      <div style={{fontSize:12,color:"#8A8178",marginTop:2}}>{prioritesArchange.length} demande{prioritesArchange.length!==1?"s":""} en attente</div>
+                      <div style={{fontSize:18,fontWeight:300,color:"#1B1E2B",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.01em"}}>Radar ARCHANGE</div>
+                      <div style={{fontSize:12,color:"#6B6E7E",marginTop:2}}>{prioritesArchange.length} demande{prioritesArchange.length!==1?"s":""} en attente</div>
                     </div>
                   </div>
 
                   {prioritesArchange.length===0?(
-                    <div style={{textAlign:"center",padding:"60px 24px",color:"#8A8178"}}>
+                    <div style={{textAlign:"center",padding:"60px 24px",color:"#6B6E7E"}}>
                       <div style={{fontSize:36,marginBottom:12}}>◆</div>
-                      <div style={{fontSize:14,color:"#1C1814",marginBottom:6}}>Aucune demande en attente</div>
+                      <div style={{fontSize:14,color:"#1B1E2B",marginBottom:6}}>Aucune demande en attente</div>
                       <div style={{fontSize:12}}>Les demandes de réservation détectées par l'IA apparaîtront ici</div>
                     </div>
                   ):(()=>{
@@ -2744,7 +2777,7 @@ FORMAT
                       const isSelected = radarSelEmail?.id === m.id;
 
                       const headerBg = isRouge ? "linear-gradient(135deg,#FCEBEB,#F7C1C1)" : isOr ? "linear-gradient(135deg,#FAEEDA,#FAC775)" : "#F5F3EF";
-                      const borderCol = isSelected ? "#C9A96E" : isRouge ? "#E24B4A" : isOr ? "#BA7517" : "#DDD8D0";
+                      const borderCol = isSelected ? "#B89456" : isRouge ? "#E24B4A" : isOr ? "#BA7517" : "#E6DCC9";
                       const badgeBg = isRouge ? "#E24B4A" : isOr ? "#BA7517" : "#888780";
                       const nameCol = isRouge ? "#791F1F" : isOr ? "#633806" : "#1C1814";
                       const contactCol = isRouge ? "#C94040" : isOr ? "#854F0B" : "#8A8178";
@@ -2784,10 +2817,10 @@ FORMAT
 
                       return (
                         <div key={m.id}>
-                          {showSection&&<div style={{fontSize:10,fontWeight:500,color:"#8A8178",letterSpacing:"0.1em",textTransform:"uppercase",margin:idx===0?"0 0 10px":"20px 0 10px"}}>{sectionLabels[type]}</div>}
+                          {showSection&&<div style={{fontSize:10,fontWeight:500,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",margin:idx===0?"0 0 10px":"20px 0 10px"}}>{sectionLabels[type]}</div>}
                           <div
                             onClick={()=>setRadarSelEmail(isSelected ? null : m)}
-                            style={{background:"#FFFFFF",borderRadius:12,border:`1.5px solid ${borderCol}`,overflow:"hidden",marginBottom:8,boxShadow:isSelected?"0 0 0 3px rgba(201,169,110,0.2)":isHovered?"0 4px 16px rgba(0,0,0,.08)":"none",transition:"box-shadow .15s, border-color .15s",cursor:"pointer"}}
+                            style={{background:"#FFFFFF",borderRadius:12,border:`1.5px solid ${borderCol}`,overflow:"hidden",marginBottom:8,boxShadow:isSelected?"0 0 0 3px rgba(184,148,86,0.2)":isHovered?"0 4px 16px rgba(0,0,0,.08)":"none",transition:"box-shadow .15s, border-color .15s",cursor:"pointer"}}
                             onMouseEnter={()=>setRadarHoverId(m.id)}
                             onMouseLeave={()=>setRadarHoverId(null)}>
 
@@ -2810,27 +2843,27 @@ FORMAT
                             {/* Grille infos */}
                             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}>
                               {cells.map(([lbl,val],i)=>(
-                                <div key={lbl} style={{padding:"8px 14px",borderBottom:i<3?"0.5px solid #EAE6E1":"none",borderRight:(i+1)%3!==0?"0.5px solid #EAE6E1":"none"}}>
-                                  <div style={{fontSize:10,color:"#8A8178",marginBottom:2}}>{lbl}</div>
+                                <div key={lbl} style={{padding:"8px 14px",borderBottom:i<3?"0.5px solid #E6DCC9":"none",borderRight:(i+1)%3!==0?"0.5px solid #E6DCC9":"none"}}>
+                                  <div style={{fontSize:10,color:"#6B6E7E",marginBottom:2}}>{lbl}</div>
                                   <div style={{fontSize:12,fontWeight:val==="—"?400:500,color:val==="—"?"#C0BAB2":"#1C1814",fontStyle:val==="—"?"italic":"normal"}}>{val}</div>
                                 </div>
                               ))}
                             </div>
 
                             {resume && (
-                              <div style={{padding:"8px 14px",borderTop:"0.5px solid #EAE6E1",background:"#FDFCFA"}}>
-                                <div style={{fontSize:12,color:"#8A8178",fontStyle:"italic",lineHeight:1.6}}>{resume}</div>
+                              <div style={{padding:"8px 14px",borderTop:"0.5px solid #E6DCC9",background:"#FDFCFA"}}>
+                                <div style={{fontSize:12,color:"#6B6E7E",fontStyle:"italic",lineHeight:1.6}}>{resume}</div>
                               </div>
                             )}
 
-                            <div style={{padding:"8px 12px",borderTop:"0.5px solid #EAE6E1",display:"flex",alignItems:"center",gap:6,background:"#FAFAF9"}}>
-                              <button onClick={e=>{e.stopPropagation(); setRadarResaModal({ nom: ext.nom||m.from||"", email: ext.email||m.fromEmail||"", telephone: ext.telephone||"", entreprise: ext.entreprise||"", typeEvenement: ext.typeEvenement||"", nombrePersonnes: ext.nombrePersonnes||"", espaceId: ext.espaceDetecte||resa?.espaceId||espacesDyn[0]?.id||"", dateDebut: ext.dateDebut||resa?.dateDebut||"", heureDebut: ext.heureDebut||resa?.heureDebut||"", heureFin: ext.heureFin||resa?.heureFin||"", budget: ext.budget||resa?.budget||"", notes: ext.notes||"", statut: ext.statutSuggere||"nouveau", _emailId: m.id, });}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
+                            <div style={{padding:"8px 12px",borderTop:"0.5px solid #E6DCC9",display:"flex",alignItems:"center",gap:6,background:"#FAFAF9"}}>
+                              <button onClick={e=>{e.stopPropagation(); setRadarResaModal({ nom: ext.nom||m.from||"", email: ext.email||m.fromEmail||"", telephone: ext.telephone||"", entreprise: ext.entreprise||"", typeEvenement: ext.typeEvenement||"", nombrePersonnes: ext.nombrePersonnes||"", espaceId: ext.espaceDetecte||resa?.espaceId||espacesDyn[0]?.id||"", dateDebut: ext.dateDebut||resa?.dateDebut||"", heureDebut: ext.heureDebut||resa?.heureDebut||"", heureFin: ext.heureFin||resa?.heureFin||"", budget: ext.budget||resa?.budget||"", notes: ext.notes||"", statut: ext.statutSuggere||"nouveau", _emailId: m.id, });}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #E6DCC9",background:"#FFFFFF",color:"#1B1E2B",fontSize:11,fontWeight:500,cursor:"pointer"}}>
                                 📅 Créer réservation
                               </button>
-                              <button onClick={e=>{e.stopPropagation(); setRadarReplyModal({m,ext}); setRadarReplyText(""); genRadarReply(m);}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"#FFFFFF",color:"#1C1814",fontSize:11,fontWeight:500,cursor:"pointer"}}>
+                              <button onClick={e=>{e.stopPropagation(); setRadarReplyModal({m,ext}); setRadarReplyText(""); genRadarReply(m);}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #E6DCC9",background:"#FFFFFF",color:"#1B1E2B",fontSize:11,fontWeight:500,cursor:"pointer"}}>
                                 ✨ Générer réponse
                               </button>
-                              <button onClick={e=>{e.stopPropagation(); saveRadarTraites(new Set([...radarTraites,m.id])); toast("Demande archivée du Radar");}} style={{marginLeft:"auto",padding:"5px 11px",borderRadius:7,border:"1px solid #EAE6E1",background:"transparent",color:"#8A8178",fontSize:11,cursor:"pointer"}} title="Archiver cette carte">
+                              <button onClick={e=>{e.stopPropagation(); saveRadarTraites(new Set([...radarTraites,m.id])); toast("Demande archivée du Radar");}} style={{marginLeft:"auto",padding:"5px 11px",borderRadius:7,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",fontSize:11,cursor:"pointer"}} title="Archiver cette carte">
                                 ✓ Traité
                               </button>
                             </div>
@@ -2845,22 +2878,22 @@ FORMAT
                 {radarSelEmail && (
                 <div style={{flex:1,overflowY:"auto",background:"#EEEAE4"}}>
                     <div style={{maxWidth:720,margin:"0 auto",padding:"24px 24px 60px"}}>
-                      <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",overflow:"hidden"}}>
-                        <div style={{padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:"1px solid #EAE6E1"}}>
+                      <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",overflow:"hidden"}}>
+                        <div style={{padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:"1px solid #E6DCC9"}}>
                           <div style={{display:"flex",gap:12,alignItems:"center"}}>
                             <Avatar name={radarSelEmail.from} size={42}/>
                             <div>
-                              <div style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>{radarSelEmail.from}</div>
-                              <div style={{fontSize:12,color:"#8A8178"}}>{radarSelEmail.fromEmail} · {radarSelEmail.date}</div>
+                              <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B"}}>{radarSelEmail.from}</div>
+                              <div style={{fontSize:12,color:"#6B6E7E"}}>{radarSelEmail.fromEmail} · {radarSelEmail.date}</div>
                             </div>
                           </div>
-                          <button onClick={()=>setRadarSelEmail(null)} style={{background:"none",border:"none",color:"#8A8178",cursor:"pointer",fontSize:20,lineHeight:1}}>×</button>
+                          <button onClick={()=>setRadarSelEmail(null)} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:20,lineHeight:1}}>×</button>
                         </div>
                         <div style={{padding:"16px 20px"}}>
-                          <div style={{fontSize:16,fontWeight:600,color:"#1C1814",marginBottom:14}}>{radarSelEmail.subject}</div>
+                          <div style={{fontSize:16,fontWeight:600,color:"#1B1E2B",marginBottom:14}}>{radarSelEmail.subject}</div>
                           {radarSelEmail.bodyHtml
-                            ? <iframe srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'DM Sans',sans-serif;font-size:14px;color:#3D3530;line-height:1.7;padding:0;margin:0;}img{max-width:100%!important;height:auto!important;}a{color:#C9A96E;}*{box-sizing:border-box;}</style></head><body>${radarSelEmail.bodyHtml}</body></html>`} sandbox="allow-same-origin" style={{width:"100%",border:"none",minHeight:300,display:"block"}} onLoad={e=>{const f=e.currentTarget;try{f.style.height=f.contentDocument?.body?.scrollHeight+"px";}catch{}}}/>
-                            : <div style={{fontSize:14,color:"#5C564F",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{radarSelEmail.body||radarSelEmail.snippet}</div>
+                            ? <iframe srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'DM Sans',sans-serif;font-size:14px;color:#3D3530;line-height:1.7;padding:0;margin:0;}img{max-width:100%!important;height:auto!important;}a{color:#B89456;}*{box-sizing:border-box;}</style></head><body>${radarSelEmail.bodyHtml}</body></html>`} sandbox="allow-same-origin" style={{width:"100%",border:"none",minHeight:300,display:"block"}} onLoad={e=>{const f=e.currentTarget;try{f.style.height=f.contentDocument?.body?.scrollHeight+"px";}catch{}}}/>
+                            : <div style={{fontSize:14,color:"#6B6E7E",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{radarSelEmail.body||radarSelEmail.snippet}</div>
                           }
                         </div>
                       </div>
@@ -2873,153 +2906,169 @@ FORMAT
 
             {/* Liste emails standard */}
             {mailFilter!=="priorites" && (
-            <div style={{width:320,borderRight:"1px solid #EAE6E1",background:"#FFFFFF",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
+            <div style={{width:330,borderRight:"1px solid #E6DCC9",background:"#F7F2EA",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
 
               {/* ── Vues Envoyés / Brouillons ── */}
               {(mailFilter==="envoyes"||mailFilter==="brouillons")&&(
                 <div style={{flex:1,overflowY:"auto"}}>
-                  <div style={{padding:"12px 14px 6px",borderBottom:"1px solid #EAE6E1",fontSize:12,fontWeight:600,color:"#5C564F"}}>
-                    {mailFilter==="envoyes"?"📤 Emails envoyés":"📝 Brouillons"}
+                  <div style={{padding:"16px 18px 10px",borderBottom:"1px solid #E6DCC9"}}>
+                    <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,fontWeight:500,color:"#1B1E2B"}}>
+                      {mailFilter==="envoyes"?"Envoyés":"Brouillons"}
+                    </div>
                   </div>
                   {(mailFilter==="envoyes"?sentList:draftList).length===0&&(
-                    <div style={{padding:"40px 16px",textAlign:"center",color:"#A09890",fontSize:12}}>
+                    <div style={{padding:"40px 16px",textAlign:"center",color:"#6B6E7E",fontSize:12}}>
                       {mailFilter==="envoyes"?"Aucun email envoyé depuis ARCHANGE":"Aucun brouillon sauvegardé"}
                     </div>
                   )}
                   {(mailFilter==="envoyes"?sentList:draftList).map(em=>(
-                    <div key={em.id} onClick={()=>setSel(em as any)} style={{padding:"10px 14px",borderBottom:"1px solid #EAE6E1",cursor:"pointer",background:sel?.id===em.id?"#F0EDE8":"transparent"}}>
+                    <div key={em.id} onClick={()=>setSel(em as any)} style={{padding:"12px 16px",borderBottom:"1px solid #E6DCC9",cursor:"pointer",background:sel?.id===em.id?"#EFE7DA":"transparent",borderLeft:`2px solid ${sel?.id===em.id?"#B89456":"transparent"}`}}>
                       <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                        <span style={{fontSize:12,fontWeight:600,color:"#3D3530",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>{mailFilter==="envoyes"?(em as any).toEmail||"Moi":em.fromEmail}</span>
-                        <span style={{fontSize:10,color:"#A09890",flexShrink:0}}>{em.date}</span>
+                        <span style={{fontSize:12,fontWeight:500,color:"#1B1E2B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>{mailFilter==="envoyes"?(em as any).toEmail||"Moi":em.fromEmail}</span>
+                        <span style={{fontSize:10,color:"#6B6E7E",flexShrink:0,fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>{em.date}</span>
                       </div>
-                      <div style={{fontSize:12,color:"#1C1814",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:2}}>{em.subject}</div>
-                      <div style={{fontSize:11,color:"#8A8178",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{em.snippet}</div>
+                      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,fontWeight:500,color:"#1B1E2B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}}>{em.subject}</div>
+                      <div style={{fontSize:11,color:"#6B6E7E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{em.snippet}</div>
                       {mailFilter==="brouillons"&&(
-                        <button onClick={e=>{e.stopPropagation();const d=em as any;setComposeTo(d.to);setComposeSubject(d.subject);setComposeBody(d.body);setShowCompose(true);setLocalDrafts(prev=>prev.filter(x=>x.id!==d.id));}} style={{marginTop:6,fontSize:10,padding:"3px 10px",borderRadius:6,border:"1px solid #C9A96E",background:"transparent",color:"#C9A96E",cursor:"pointer"}}>Reprendre →</button>
+                        <button onClick={e=>{e.stopPropagation();const d=em as any;setComposeTo(d.to);setComposeSubject(d.subject);setComposeBody(d.body);setShowCompose(true);setLocalDrafts(prev=>prev.filter(x=>x.id!==d.id));}} style={{marginTop:6,fontSize:10,padding:"3px 10px",borderRadius:2,border:"1px solid #B89456",background:"transparent",color:"#B89456",cursor:"pointer",letterSpacing:"0.04em"}}>Reprendre →</button>
                       )}
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* ── Vue standard (tous, filtres, archivés) ── */}
+              {/* ── Vue standard ── */}
               {mailFilter!=="envoyes"&&mailFilter!=="brouillons"&&<>
-              {/* ── Barre recherche ── */}
-              <div style={{padding:"8px 10px 0",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:7,background:"#F5F3EF",borderRadius:8,padding:"6px 10px",border:"1px solid #EAE6E1",marginBottom:7}}>
-                  <span style={{fontSize:12,color:"#8A8178"}}>🔍</span>
-                  <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..." style={{border:"none",background:"transparent",outline:"none",fontSize:12,color:"#1C1814",width:"100%"}}/>
-                  {search&&<button onClick={()=>setSearch("")} style={{background:"none",border:"none",color:"#8A8178",cursor:"pointer",fontSize:14,padding:0}}>×</button>}
+              {/* Header liste */}
+              <div style={{padding:"16px 18px 10px",borderBottom:"1px solid #E6DCC9",flexShrink:0}}>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
+                  <h2 style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:22,fontWeight:500,letterSpacing:"-0.2px",color:"#1B1E2B",margin:0}}>
+                    {showArchived?"Archives":mailFilter==="nonlus"?"Non lus":mailFilter==="atraiter"?"À traiter":mailFilter==="star"?"Favoris":mailFilter==="flag"?"Flaggés":"Réception"}
+                  </h2>
+                  <span style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>{filtered.length} message{filtered.length!==1?"s":""}</span>
                 </div>
-                {/* ── Contrôles tri + archivage + sélection ── */}
-                <div style={{display:"flex",alignItems:"center",gap:4,paddingBottom:7}}>
-                  {/* Tri */}
-                  <select value={sortOrder} onChange={e=>setSortOrder(e.target.value as any)} style={{fontSize:10,border:"1px solid #EAE6E1",borderRadius:6,padding:"3px 6px",background:"#F9F8F6",color:"#5C564F",cursor:"pointer",flex:1}}>
+                {/* Recherche style Céleste */}
+                <div style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:"#EFE7DA",border:"1px solid #E6DCC9",borderRadius:2,marginBottom:8}}>
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#6B6E7E" strokeWidth="1.3"><circle cx="5" cy="5" r="3.5"/><path d="M8 8l3 3"/></svg>
+                  <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un contact, une date…" style={{border:"none",background:"transparent",outline:"none",fontSize:12,color:"#1B1E2B",width:"100%",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}/>
+                  {search&&<button onClick={()=>setSearch("")} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:13,padding:0}}>×</button>}
+                </div>
+                {/* Contrôles */}
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <select value={sortOrder} onChange={e=>setSortOrder(e.target.value as any)} style={{fontSize:10,border:"1px solid #E6DCC9",borderRadius:2,padding:"3px 6px",background:"#F7F2EA",color:"#6B6E7E",cursor:"pointer",flex:1,fontFamily:"'Inter',sans-serif"}}>
                     <option value="date_desc">↓ Plus récents</option>
                     <option value="date_asc">↑ Plus anciens</option>
                     <option value="from">A→Z Expéditeur</option>
                     <option value="subject">A→Z Objet</option>
                   </select>
-                  {/* Archivés */}
-                  <button onClick={()=>setShowArchived(v=>!v)} title="Emails archivés" style={{fontSize:10,padding:"3px 8px",borderRadius:6,border:`1px solid ${showArchived?"#C9A96E":"#EAE6E1"}`,background:showArchived?"#FDF8EF":"#F9F8F6",color:showArchived?"#C9A96E":"#8A8178",cursor:"pointer",whiteSpace:"nowrap"}}>📦 {showArchived?"Archivés":"Archiver"}</button>
-                  {/* Sélectionner tout */}
-                  <button onClick={selectedIds.size>0?clearSelection:selectAll} title={selectedIds.size>0?"Désélectionner tout":"Sélectionner tout"} style={{fontSize:10,padding:"3px 8px",borderRadius:6,border:`1px solid ${selectedIds.size>0?"#6D9BE8":"#EAE6E1"}`,background:selectedIds.size>0?"#EFF6FF":"#F9F8F6",color:selectedIds.size>0?"#2563EB":"#8A8178",cursor:"pointer",whiteSpace:"nowrap"}}>
+                  <button onClick={()=>setShowArchived(v=>!v)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:`1px solid ${showArchived?"#B89456":"#E6DCC9"}`,background:showArchived?"rgba(184,148,86,0.1)":"transparent",color:showArchived?"#B89456":"#6B6E7E",cursor:"pointer",whiteSpace:"nowrap"}}>📦</button>
+                  <button onClick={selectedIds.size>0?clearSelection:selectAll} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:`1px solid ${selectedIds.size>0?"#7BA8C4":"#E6DCC9"}`,background:selectedIds.size>0?"rgba(123,168,196,0.1)":"transparent",color:selectedIds.size>0?"#3B6FCC":"#6B6E7E",cursor:"pointer",whiteSpace:"nowrap"}}>
                     {selectedIds.size>0?`✓ ${selectedIds.size}`:"Tous"}
                   </button>
                 </div>
-                {/* ── Barre actions en lot ── */}
                 {selectedIds.size>0&&(
-                  <div style={{display:"flex",gap:4,paddingBottom:7,flexWrap:"wrap"}}>
-                    <button onClick={bulkMarkRead} style={{fontSize:10,padding:"3px 7px",borderRadius:6,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>● Lu</button>
-                    <button onClick={bulkMarkUnread} style={{fontSize:10,padding:"3px 7px",borderRadius:6,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>○ Non lu</button>
-                    <button onClick={bulkATraiter} style={{fontSize:10,padding:"3px 7px",borderRadius:6,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>📋 Traiter</button>
-                    <button onClick={bulkArchive} style={{fontSize:10,padding:"3px 7px",borderRadius:6,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>📦 Archiver</button>
-                    <button onClick={bulkDelete} style={{fontSize:10,padding:"3px 7px",borderRadius:6,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer"}}>🗑 Supprimer</button>
+                  <div style={{display:"flex",gap:4,paddingTop:6,flexWrap:"wrap"}}>
+                    <button onClick={bulkMarkRead} style={{fontSize:10,padding:"2px 7px",borderRadius:2,border:"1px solid #E6DCC9",background:"#F7F2EA",color:"#3A3F52",cursor:"pointer"}}>● Lu</button>
+                    <button onClick={bulkMarkUnread} style={{fontSize:10,padding:"2px 7px",borderRadius:2,border:"1px solid #E6DCC9",background:"#F7F2EA",color:"#3A3F52",cursor:"pointer"}}>○ Non lu</button>
+                    <button onClick={bulkATraiter} style={{fontSize:10,padding:"2px 7px",borderRadius:2,border:"1px solid #E6DCC9",background:"#F7F2EA",color:"#3A3F52",cursor:"pointer"}}>📋</button>
+                    <button onClick={bulkArchive} style={{fontSize:10,padding:"2px 7px",borderRadius:2,border:"1px solid #E6DCC9",background:"#F7F2EA",color:"#3A3F52",cursor:"pointer"}}>📦</button>
+                    <button onClick={bulkDelete} style={{fontSize:10,padding:"2px 7px",borderRadius:2,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer"}}>✕</button>
                   </div>
                 )}
               </div>
               <div ref={mailListRef} style={{flex:1,overflowY:"auto"}}>
                 {filtered.length===0&&(
-                  <div style={{padding:"32px 16px",textAlign:"center",color:"#8A8178"}}>
-                    <div style={{fontSize:28,marginBottom:8}}>{mailFilter==="all"?"📭":"🔍"}</div>
+                  <div style={{padding:"32px 16px",textAlign:"center",color:"#6B6E7E"}}>
+                    <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:32,marginBottom:8,opacity:.3}}>✦</div>
                     <div style={{fontSize:12,fontWeight:500,marginBottom:4}}>
-                      {mailFilter==="nonlus"?"Aucun email non lu":mailFilter==="atraiter"?"Aucun email à traiter":mailFilter==="star"?"Aucun email favori":mailFilter==="flag"?"Aucun email flaggé":search?"Aucun résultat pour cette recherche":"Aucun email"}
+                      {mailFilter==="nonlus"?"Aucun email non lu":mailFilter==="atraiter"?"Aucun email à traiter":mailFilter==="star"?"Aucun favori":mailFilter==="flag"?"Aucun email flaggé":search?"Aucun résultat":"Aucun email"}
                     </div>
-                    {mailFilter!=="all"&&<button onClick={()=>{setMailFilter("all");setSearch("");}} style={{fontSize:11,color:"#C9A96E",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Voir tous les mails</button>}
+                    {mailFilter!=="all"&&<button onClick={()=>{setMailFilter("all");setSearch("");}} style={{fontSize:11,color:"#B89456",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Voir tous les mails</button>}
                   </div>
                 )}
                 {filtered.map(em=>{
-                  const tags: {label:string,color:string,bg:string}[] = [];
-                  if(em.unread) tags.push({label:"Non lu",color:"#1D4ED8",bg:"#EFF6FF"});
-                  if(em.aTraiter) tags.push({label:"À traiter",color:"#2563EB",bg:"#DBEAFE"});
-                  if(drafted.has(em.id)) tags.push({label:"Brouillon",color:"#065F46",bg:"#D1FAE5"});
-                  if((em.flags||[]).includes("star")) tags.push({label:"⭐",color:"#92400E",bg:"#FEF3C7"});
-                  if((em.flags||[]).includes("flag")) tags.push({label:"🚩",color:"#991B1B",bg:"#FEE2E2"});
-                  if(em.snoozedUntil) tags.push({label:"⏰",color:"#7C3AED",bg:"#EDE9FE"});
-                  const visibleTags = tags.slice(0,2);
-                  const extraTags = tags.length - visibleTags.length;
+                  // Tags Céleste : statut IA + espace + état fonctionnel
+                  const ext = repliesCache[em.id]?.extracted;
                   const isActive = sel?.id===em.id;
                   const isSelected = selectedIds.has(em.id);
+                  // Trouver le statut resa lié
+                  const linkedResa = resas.find(r=>emailResaLinks[em.id]===r.id);
+                  const linkedStatut = linkedResa ? (statuts.find(s=>s.id===(linkedResa.statut||"nouveau"))||statuts[0]) : null;
+                  // Espace détecté
+                  const detectedEspace = ext?.espaceDetecte ? espacesDyn.find(e=>e.id===ext.espaceDetecte) : null;
+
                   return (
-                  <div key={em.id} className="mail-row"
-                    style={{position:"relative",padding:"10px 12px 0",borderBottom:"1px solid #EAE6E1",cursor:"pointer",
-                      background:isSelected?"#F0F4FF":isActive?"#F0EDE8":"transparent",
-                      borderLeft:isSelected?"3px solid #6D9BE8":isActive?"3px solid #C9A96E":em.unread?"3px solid #7BA8C4":"3px solid transparent",
+                  <div key={em.id} className="mail-row celeste-email-item"
+                    style={{position:"relative",borderBottom:"1px solid #E6DCC9",cursor:"pointer",
+                      background:isSelected?"#EEF2FF":isActive?"#EFE7DA":"transparent",
+                      borderLeft:isSelected?"2px solid #7BA8C4":isActive?"2px solid #B89456":em.unread?"2px solid #B89456":"2px solid transparent",
                       transition:"background .1s"}}>
-                    {/* Checkbox sélection (visible au survol ou si sélectionné) */}
-                    <div className="mail-checkbox" onClick={e=>{e.stopPropagation();toggleSelect(em.id);}} style={{position:"absolute",top:10,left:4,width:18,height:18,borderRadius:4,border:`2px solid ${isSelected?"#6D9BE8":"#D1C4B2"}`,background:isSelected?"#6D9BE8":"transparent",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,opacity:isSelected?1:0,transition:"opacity .1s",cursor:"pointer"}}>
-                      {isSelected&&<span style={{color:"#fff",fontSize:11,lineHeight:1}}>✓</span>}
+                    {/* Checkbox sélection */}
+                    <div className="mail-checkbox" onClick={e=>{e.stopPropagation();toggleSelect(em.id);}} style={{position:"absolute",top:12,left:4,width:16,height:16,borderRadius:2,border:`1.5px solid ${isSelected?"#7BA8C4":"#D5C9B5"}`,background:isSelected?"#7BA8C4":"transparent",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,opacity:isSelected?1:0,transition:"opacity .1s",cursor:"pointer"}}>
+                      {isSelected&&<span style={{color:"#fff",fontSize:10,lineHeight:1}}>✓</span>}
                     </div>
-                    {/* Zone cliquable principale */}
-                    <div onClick={()=>handleSel(em)} style={{display:"flex",gap:9,minWidth:0,paddingBottom:8}}>
-                      <div style={{position:"relative",flexShrink:0,marginTop:1}}>
-                        <Avatar name={em.from} size={30}/>
-                        {em.unread&&<div style={{position:"absolute",top:-1,right:-1,width:7,height:7,borderRadius:"50%",background:"#6D9BE8",border:"2px solid #FFFFFF"}}/>}
+                    {/* Corps de la carte */}
+                    <div onClick={()=>handleSel(em)} style={{padding:"12px 14px 10px 16px"}}>
+                      {/* Ligne 1 — expéditeur + date */}
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:2}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                          {em.unread&&<div style={{width:5,height:5,borderRadius:"50%",background:"#B89456",flexShrink:0}}/>}
+                          <span style={{fontSize:13,fontWeight:em.unread?600:500,color:"#1B1E2B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{em.from||"(inconnu)"}</span>
+                        </div>
+                        <span style={{fontSize:10,color:"#6B6E7E",flexShrink:0,marginLeft:6,fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>{em.date}</span>
                       </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        {/* Ligne 1 — expéditeur + date */}
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
-                          <span style={{fontSize:12,fontWeight:em.unread?700:600,color:em.unread?"#3B6FCC":"#1C1814",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:190}}>{em.from||"(inconnu)"}</span>
-                          <span style={{fontSize:10,color:"#A09890",flexShrink:0,marginLeft:4}}>{em.date}</span>
-                        </div>
-                        {/* Ligne 2 — objet */}
-                        <div style={{fontSize:12,fontWeight:em.unread?600:500,color:em.unread?"#1C1814":"#3D3530",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}}>{em.subject||"(sans objet)"}</div>
-                        {/* Ligne 3 — aperçu + tags */}
-                        <div style={{display:"flex",alignItems:"center",gap:4,minWidth:0}}>
-                          <span style={{fontSize:11,color:"#8A8178",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0}}>{em.snippet}</span>
-                          {visibleTags.map((t,i)=>(
-                            <span key={i} style={{fontSize:9,background:t.bg,color:t.color,padding:"1px 5px",borderRadius:100,flexShrink:0,fontWeight:600,whiteSpace:"nowrap"}}>{t.label}</span>
-                          ))}
-                          {extraTags>0&&<span style={{fontSize:9,background:"#F1EFE8",color:"#8A8178",padding:"1px 5px",borderRadius:100,flexShrink:0}}>+{extraTags}</span>}
-                        </div>
+                      {/* Ligne 2 — objet en serif */}
+                      <div style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:14,fontWeight:em.unread?600:500,color:"#1B1E2B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:4,lineHeight:1.2}}>{em.subject||"(sans objet)"}</div>
+                      {/* Ligne 3 — snippet */}
+                      <div style={{fontSize:11.5,color:"#6B6E7E",overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:1.45,marginBottom:8}}>{em.snippet}</div>
+                      {/* Tags enrichis Céleste */}
+                      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                        {/* Statut resa */}
+                        {linkedStatut&&(
+                          <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px",borderRadius:2,fontSize:9.5,letterSpacing:"0.07em",textTransform:"uppercase",color:"#3A3F52",background:"#F7F2EA",border:"1px solid #E6DCC9"}}>
+                            <span style={{width:4,height:4,borderRadius:"50%",background:linkedStatut.color,flexShrink:0}}/>
+                            {linkedStatut.label}
+                          </span>
+                        )}
+                        {/* Espace détecté */}
+                        {detectedEspace&&(
+                          <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px",borderRadius:2,fontSize:9.5,letterSpacing:"0.07em",textTransform:"uppercase",color:"#3A3F52",background:"#F7F2EA",border:"1px solid #E6DCC9"}}>
+                            <span style={{width:4,height:4,borderRadius:"50%",background:detectedEspace.color,flexShrink:0}}/>
+                            {detectedEspace.nom}
+                          </span>
+                        )}
+                        {/* Personnes + type */}
+                        {ext?.nombrePersonnes&&(
+                          <span style={{fontSize:10,color:"#6B6E7E",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>
+                            {ext.nombrePersonnes} pers.{ext.typeEvenement?` · ${ext.typeEvenement}`:""}
+                          </span>
+                        )}
+                        {/* Flags fonctionnels */}
+                        {em.aTraiter&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:1,background:"#EFE7DA",color:"#B89456",border:"1px solid #E6DCC9",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600}}>À traiter</span>}
+                        {(em.flags||[]).includes("star")&&<span style={{fontSize:11,color:"#B89456"}}>✦</span>}
+                        {em.snoozedUntil&&<span style={{fontSize:10,color:"#7C3AED",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>⏰</span>}
                       </div>
                     </div>
-                    {/* Barre d'actions — apparaît au survol */}
-                    <div className="mail-actions" style={{display:"flex",gap:1,opacity:0,transition:"opacity .15s",borderTop:"1px solid #F0EDE8",margin:"0 -12px",padding:"3px 8px",background:isActive?"#EAE6DF":"#F9F8F6",justifyContent:"flex-end",alignItems:"center"}}>
-                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori (S)" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:(em.flags||[]).includes("star")?1:0.3,padding:"3px 5px",borderRadius:5}}>⭐</button>
-                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"flag");}} title="Flaggé (F)" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:(em.flags||[]).includes("flag")?1:0.3,padding:"3px 5px",borderRadius:5}}>🚩</button>
-                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title="À traiter" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:em.aTraiter?1:0.3,padding:"3px 5px",borderRadius:5}}>📋</button>
-                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title="Lu/Non lu (U)" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.4,padding:"3px 5px",borderRadius:5}}>●</button>
-                      <button onClick={e=>{e.stopPropagation();archiveEmail(em.id);}} title="Archiver (E)" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:0.5,padding:"3px 5px",borderRadius:5}}>📦</button>
-                      {/* Snooze */}
+                    {/* Barre d'actions au survol */}
+                    <div className="mail-actions" style={{display:"flex",gap:1,opacity:0,transition:"opacity .15s",borderTop:"1px solid #E6DCC9",padding:"3px 8px",background:isActive?"#E6DCC9":"#EFE7DA",justifyContent:"flex-end",alignItems:"center"}}>
+                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(em.flags||[]).includes("star")?1:0.35,padding:"3px 5px",borderRadius:2}}>✦</button>
+                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title="À traiter" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:em.aTraiter?1:0.35,padding:"3px 5px",borderRadius:2}}>📋</button>
+                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title="Lu/Non lu" style={{background:"none",border:"none",cursor:"pointer",fontSize:10,opacity:0.4,padding:"3px 5px",borderRadius:2,color:"#1B1E2B"}}>●</button>
+                      <button onClick={e=>{e.stopPropagation();archiveEmail(em.id);}} title="Archiver" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.5,padding:"3px 5px",borderRadius:2}}>📦</button>
                       <div style={{position:"relative"}} className="snooze-wrap">
-                        <button onClick={e=>{e.stopPropagation(); const el=e.currentTarget.nextElementSibling as HTMLElement; if(el) el.style.display=el.style.display==="block"?"none":"block";}} title="Reporter ⏰" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:0.5,padding:"3px 5px",borderRadius:5}}>⏰</button>
-                        <div className="snooze-menu" style={{display:"none",position:"absolute",bottom:"100%",right:0,background:"#fff",border:"1px solid #EAE6E1",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,.12)",zIndex:100,minWidth:140,padding:4}}>
-                          {[
-                            {label:"Dans 1 heure",hours:1},{label:"Ce soir 18h",tonight:18},
-                            {label:"Demain matin",days:1},{label:"Dans 3 jours",days:3},
-                            {label:"Dans 1 semaine",days:7},
-                          ].map(opt=>{
+                        <button onClick={e=>{e.stopPropagation(); const el=e.currentTarget.nextElementSibling as HTMLElement; if(el) el.style.display=el.style.display==="block"?"none":"block";}} title="Reporter" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.5,padding:"3px 5px",borderRadius:2}}>⏰</button>
+                        <div className="snooze-menu" style={{display:"none",position:"absolute",bottom:"100%",right:0,background:"#F7F2EA",border:"1px solid #E6DCC9",borderRadius:3,boxShadow:"0 4px 16px rgba(0,0,0,.1)",zIndex:100,minWidth:140,padding:4}}>
+                          {[{label:"Dans 1 heure",hours:1},{label:"Ce soir 18h",tonight:18},{label:"Demain matin",days:1},{label:"Dans 3 jours",days:3},{label:"Dans 1 semaine",days:7}].map(opt=>{
                             const d = new Date();
                             if(opt.hours) d.setHours(d.getHours()+opt.hours);
                             else if(opt.tonight) { d.setDate(d.getDate()+(d.getHours()>=opt.tonight?1:0)); d.setHours(opt.tonight,0,0,0); }
                             else if(opt.days) { d.setDate(d.getDate()+opt.days); d.setHours(8,0,0,0); }
-                            return <button key={opt.label} onClick={e=>{e.stopPropagation();snoozeEmail(em.id,d.toISOString());}} style={{display:"block",width:"100%",textAlign:"left",padding:"7px 10px",fontSize:11,color:"#3D3530",background:"none",border:"none",cursor:"pointer",borderRadius:5}}>{opt.label}</button>;
+                            return <button key={opt.label} onClick={e=>{e.stopPropagation();snoozeEmail(em.id,d.toISOString());}} style={{display:"block",width:"100%",textAlign:"left",padding:"6px 10px",fontSize:11,color:"#3A3F52",background:"none",border:"none",cursor:"pointer",borderRadius:2}}>{opt.label}</button>;
                           })}
                         </div>
                       </div>
                       <div style={{flex:1}}/>
-                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer (Del)" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#DC2626",padding:"3px 6px",borderRadius:5,opacity:0.75,fontWeight:600}}>✕</button>
+                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:"#DC2626",padding:"3px 6px",borderRadius:2,opacity:0.7}}>✕</button>
                     </div>
                   </div>
                 );})}
@@ -3028,113 +3077,84 @@ FORMAT
             </div>
             )}
 
-            {/* Zone lecture — masquée en mode Radar */}
-            {mailFilter!=="priorites" && <div style={{flex:1,overflowY:"auto",background:"#EEEAE4"}}>
+            {/* Zone lecture — Céleste */}
+            {mailFilter!=="priorites" && <div style={{flex:1,overflowY:"auto",background:"#F7F2EA"}}>
               {!sel ? (
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:10,color:"#8A8178"}}>
-                  <div style={{fontSize:40}}>✉</div>
-                  <div style={{fontSize:14}}>Sélectionnez un email</div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:12,color:"#6B6E7E"}}>
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" style={{opacity:.18}}>
+                    <circle cx="12" cy="12" r="11" stroke="#B89456" strokeWidth="1"/>
+                    <path d="M8.5 9 L 15.5 9" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/>
+                    <circle cx="12" cy="7" r="1.1" fill="#B89456"/>
+                    <path d="M12 9.6 L 12 18.2" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/>
+                    <path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B89456"/>
+                  </svg>
+                  <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:15,fontStyle:"italic",color:"#6B6E7E"}}>Sélectionnez un email</div>
                 </div>
               ) : (
-                <div style={{maxWidth:720,margin:"0 auto",padding:"16px 20px 60px"}}>
+                <div style={{maxWidth:720,margin:"0 auto",padding:"20px 28px 80px"}}>
 
-                  {/* ── Barre d'actions compacte ── */}
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12,padding:"6px 12px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",boxShadow:"0 1px 3px rgba(28,24,20,.04)",flexWrap:"wrap"}}>
-                    {/* Répondre — bouton principal */}
-                    <button onClick={()=>openReplyEditor("reply")} title="Répondre (R)" style={{fontSize:11,padding:"5px 12px",borderRadius:100,border:"none",background:"#1C1814",color:"#FFFFFF",cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",gap:5}}>↩ Répondre</button>
-                    {sel.cc?.length>0&&<button onClick={()=>openReplyEditor("replyAll")} title="Répondre à tous" style={{fontSize:11,padding:"5px 12px",borderRadius:100,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>↩↩ À tous</button>}
-                    <button onClick={()=>openReplyEditor("forward")} title="Transférer (F)" style={{fontSize:11,padding:"5px 12px",borderRadius:100,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>↪ Transférer</button>
-                    <div style={{width:1,height:16,background:"#EAE6E1",margin:"0 2px"}}/>
-                    <button onClick={()=>toggleFlag(sel.id,"star")} title="Favori (S)" style={{background:"none",border:"none",cursor:"pointer",fontSize:15,opacity:(sel.flags||[]).includes("star")?1:0.3,padding:"3px 5px",borderRadius:6}}>⭐</button>
-                    <button onClick={()=>toggleFlag(sel.id,"flag")} title="Flaggé" style={{background:"none",border:"none",cursor:"pointer",fontSize:15,opacity:(sel.flags||[]).includes("flag")?1:0.3,padding:"3px 5px",borderRadius:6}}>🚩</button>
-                    <button onClick={()=>toggleUnread(sel.id)} title="Lu/Non lu (U)" style={{fontSize:11,padding:"4px 9px",borderRadius:100,border:"none",background:sel.unread?"#EFF6FF":"#F5F3EF",color:sel.unread?"#1D4ED8":"#5C564F",cursor:"pointer"}}>
+                  {/* ── Barre d'actions Céleste ── */}
+                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:18,padding:"7px 12px",background:"#F7F2EA",borderRadius:2,border:"1px solid #E6DCC9",flexWrap:"wrap"}}>
+                    <button onClick={()=>openReplyEditor("reply")} title="Répondre (R)" style={{fontSize:11,padding:"5px 12px",borderRadius:2,border:"none",background:"#1B1E2B",color:"#F7F2EA",cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:5,letterSpacing:"0.03em",fontFamily:"'Inter',sans-serif"}}>↩ Répondre</button>
+                    {sel.cc?.length>0&&<button onClick={()=>openReplyEditor("replyAll")} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#3A3F52",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↩↩ À tous</button>}
+                    <button onClick={()=>openReplyEditor("forward")} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#3A3F52",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↪ Transférer</button>
+                    <div style={{width:1,height:14,background:"#E6DCC9",margin:"0 2px"}}/>
+                    <button onClick={()=>toggleFlag(sel.id,"star")} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(sel.flags||[]).includes("star")?1:0.25,padding:"3px 4px",color:"#B89456"}}>✦</button>
+                    <button onClick={()=>toggleUnread(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:sel.unread?"rgba(184,148,86,0.12)":"transparent",color:sel.unread?"#B89456":"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>
                       {sel.unread?"● Non lu":"○ Non lu"}
                     </button>
-                    <button onClick={()=>archiveEmail(sel.id)} title="Archiver (E)" style={{fontSize:11,padding:"4px 9px",borderRadius:100,border:"none",background:sel.archived?"#FDF8EF":"#F5F3EF",color:sel.archived?"#C9A96E":"#5C564F",cursor:"pointer"}}>
-                      {sel.archived ? "📦 Archivé" : "📦"}
+                    <button onClick={()=>toggleATraiter(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:sel.aTraiter?"rgba(184,148,86,0.12)":"transparent",color:sel.aTraiter?"#B89456":"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>
+                      📋 {sel.aTraiter?"À traiter":"Traiter"}
+                    </button>
+                    <button onClick={()=>archiveEmail(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>
+                      {sel.archived?"📦 Archivé":"📦"}
                     </button>
                     <div style={{flex:1}}/>
-                    <button onClick={()=>{ deleteEmailWithUndo(sel); }} style={{fontSize:11,padding:"4px 9px",borderRadius:100,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer"}}>🗑</button>
+                    <button onClick={()=>deleteEmailWithUndo(sel)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"1px solid rgba(220,38,38,0.3)",background:"transparent",color:"#DC2626",cursor:"pointer"}}>✕</button>
                   </div>
 
-                  {/* ── En-tête email restructuré ── */}
-                  <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",marginBottom:12,overflow:"hidden"}}>
-                    <div style={{padding:"18px 20px 14px"}}>
-                      {/* Ligne expéditeur + avatar */}
-                      <div style={{display:"flex",gap:14,alignItems:"flex-start",marginBottom:12}}>
-                        <Avatar name={sel.from} size={46}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:15,fontWeight:700,color:"#1C1814",marginBottom:2}}>{sel.from||"(inconnu)"}</div>
-                          <div style={{fontSize:12,color:"#8A8178",marginBottom:1}}>{sel.fromEmail}</div>
-                          <div style={{fontSize:11,color:"#A09890"}}>
-                            À : moi · {sel.date}
-                          </div>
-                        </div>
+                  {/* ── En-tête éditorial Céleste ── */}
+                  <div style={{marginBottom:18}}>
+                    {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext&&(
+                      <div style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#B89456",marginBottom:8,fontWeight:500,display:"flex",alignItems:"center",gap:8,fontFamily:"'Inter',sans-serif"}}>
+                        {ext.statutSuggere&&<span>{ext.statutSuggere.replace(/_/g," ")}</span>}
+                        {ext.typeEvenement&&<><span style={{color:"#E6DCC9"}}>·</span><span>{ext.typeEvenement}</span></>}
+                        {ext.nombrePersonnes&&<><span style={{color:"#E6DCC9"}}>·</span><span>{ext.nombrePersonnes} personnes</span></>}
                       </div>
-                      {/* Objet */}
-                      <div style={{fontSize:17,fontWeight:700,color:"#1C1814",lineHeight:1.35,paddingTop:10,borderTop:"1px solid #F0EDE8"}}>
-                        {sel.subject||"(sans objet)"}
+                    );})()}
+                    <h1 style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:27,fontWeight:500,letterSpacing:"-0.3px",lineHeight:1.15,color:"#1B1E2B",margin:"0 0 16px"}}>{sel.subject||"(sans objet)"}</h1>
+                    <div style={{display:"flex",alignItems:"center",gap:12,paddingBottom:14,borderBottom:"1px solid #E6DCC9"}}>
+                      <div style={{width:34,height:34,borderRadius:"50%",background:"#EFE7DA",border:"1px solid #E6DCC9",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Cormorant Garamond',serif",fontSize:14,fontWeight:500,color:"#1B1E2B",flexShrink:0}}>
+                        {(sel.from||"?")[0].toUpperCase()}
                       </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:14,fontWeight:500,color:"#1B1E2B"}}>{sel.from||"(inconnu)"}</div>
+                        <div style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>{sel.fromEmail}</div>
+                      </div>
+                      <div style={{fontSize:11,color:"#6B6E7E"}}>{sel.date}</div>
                     </div>
                   </div>
 
-                  {/* ── Corps email ── */}
-                  <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",marginBottom:12,overflow:"hidden"}}>
-                    <div style={{padding:"20px"}}>
-                      {sel.bodyHtml ? (
-                        /* Rendu HTML natif via iframe sandboxée */
-                        <iframe
-                          key={sel.id}
-                          srcDoc={`<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: #fff; }
-  body {
-    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: 14px;
-    color: #3D3530;
-    line-height: 1.7;
-    word-break: break-word;
-    overflow-wrap: break-word;
-  }
-  img { max-width: 100% !important; height: auto !important; display: block; }
-  a { color: #2563EB; }
-  table { max-width: 100% !important; border-collapse: collapse; }
-  td, th { word-break: break-word; }
-  /* Centrer les emails avec table wrapper */
-  table[width="100%"] { width: 100% !important; }
-  /* Masquer les pixels de tracking */
-  img[width="1"], img[height="1"], img[width="0"], img[height="0"] { display: none !important; }
-</style>
-</head>
-<body>${sel.bodyHtml}</body>
-</html>`}
-                          sandbox="allow-same-origin allow-popups"
-                          style={{width:"100%",border:"none",display:"block",minHeight:100}}
-                          onLoad={e=>{
-                            const f = e.currentTarget;
-                            try {
-                              const h = f.contentDocument?.documentElement?.scrollHeight || f.contentDocument?.body?.scrollHeight || 400;
-                              f.style.height = (h + 20) + "px";
-                            } catch {}
-                          }}
-                        />
-                      ) : (
-                        /* Rendu texte brut enrichi */
-                        <div style={{fontSize:15,color:"#3D3530",lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:"inherit"}}>
-                          {renderPlainText(sel.body||sel.snippet||"")}
-                        </div>
-                      )}
-                    </div>
+                  {/* ── Corps email — Céleste ── */}
+                  <div style={{marginBottom:16}}>
+                    {sel.bodyHtml ? (
+                      <iframe
+                        key={sel.id}
+                        srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;}html,body{margin:0;padding:0;background:#F7F2EA;}body{font-family:'Cormorant Garamond',Georgia,serif;font-size:16px;color:#3A3F52;line-height:1.7;word-break:break-word;overflow-wrap:break-word;padding:0;}img{max-width:100%!important;height:auto!important;}a{color:#B89456;}table{max-width:100%!important;border-collapse:collapse;}td,th{word-break:break-word;}table[width="100%"]{width:100%!important;}img[width="1"],img[height="1"],img[width="0"],img[height="0"]{display:none!important;}</style></head><body>${sel.bodyHtml}</body></html>`}
+                        sandbox="allow-same-origin allow-popups"
+                        style={{width:"100%",border:"none",display:"block",minHeight:100,background:"#F7F2EA"}}
+                        onLoad={e=>{const f=e.currentTarget;try{const h=f.contentDocument?.documentElement?.scrollHeight||f.contentDocument?.body?.scrollHeight||400;f.style.height=(h+20)+"px";}catch{}}}
+                      />
+                    ) : (
+                      <div style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:16,color:"#3A3F52",lineHeight:1.7,whiteSpace:"pre-wrap"}}>
+                        {renderPlainText(sel.body||sel.snippet||"")}
+                      </div>
+                    )}
 
                     {/* Pièces jointes */}
                     {(sel.attachments||[]).length > 0 && (
-                      <div style={{padding:"14px 20px",borderTop:"1px solid #EAE6E1",background:"#FAFAF9"}}>
-                        <div style={{fontSize:11,fontWeight:600,color:"#8A8178",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>📎 Pièces jointes ({sel.attachments.length})</div>
+                      <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #E6DCC9"}}>
+                        <div style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:"#6B6E7E",marginBottom:8,fontFamily:"'Inter',sans-serif"}}>Pièces jointes · {sel.attachments.length}</div>
                         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                           {sel.attachments.map((att: any, i: number) => {
                             const ext = (att.filename||att.name||"").split(".").pop()?.toLowerCase() || "";
@@ -3142,11 +3162,11 @@ FORMAT
                             const icon = icons[ext] || "📎";
                             const size = att.size ? (att.size > 1048576 ? (att.size/1048576).toFixed(1)+" Mo" : Math.round(att.size/1024)+" Ko") : "";
                             return (
-                              <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#F5F3EF",borderRadius:8,border:"1px solid #EAE6E1",fontSize:12,color:"#3D3530",maxWidth:220}}>
-                                <span style={{fontSize:16,flexShrink:0}}>{icon}</span>
-                                <div style={{overflow:"hidden"}}>
-                                  <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{att.filename||att.name||"Fichier"}</div>
-                                  {size&&<div style={{fontSize:10,color:"#8A8178"}}>{size}</div>}
+                              <div key={i} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:"#EFE7DA",borderRadius:2,border:"1px solid #E6DCC9",cursor:"pointer"}} onClick={()=>{if(att.url)window.open(att.url,"_blank");}}>
+                                <span style={{fontSize:14}}>{icon}</span>
+                                <div>
+                                  <div style={{fontSize:11,fontWeight:500,color:"#1B1E2B",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{att.filename||att.name||"Pièce jointe"}</div>
+                                  {size&&<div style={{fontSize:9.5,color:"#6B6E7E"}}>{size}</div>}
                                 </div>
                               </div>
                             );
@@ -3156,75 +3176,44 @@ FORMAT
                     )}
                   </div>
 
-                  {/* Bannière détection réservation */}
+                  {/* ── Encart Lecture par Archange — style Céleste ── */}
                   {extracted?.isReservation && !showPlanForm && (()=>{
                     const alreadyIn = resas.find(r =>
                       emailResaLinks[sel?.id || ""] === r.id ||
                       (r.email && extracted.email && r.email.toLowerCase() === extracted.email.toLowerCase())
                     );
-                    if (alreadyIn) {
-                      const st = statuts.find(s=>s.id===(alreadyIn.statut||"nouveau"))||statuts[0];
-                      return (
-                        <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:12,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
-                          <span style={{fontSize:20}}>✅</span>
-                          <div style={{flex:1}}>
-                            <div style={{fontSize:12,fontWeight:600,color:"#065F46",marginBottom:3}}>Cet événement est déjà dans le planning</div>
-                            <div style={{fontSize:11,color:"#059669"}}>{alreadyIn.nom} · <span style={{padding:"1px 7px",borderRadius:100,background:st.bg,color:st.color,fontWeight:600}}>{st.label}</span></div>
-                          </div>
-                          <button onClick={()=>{setSelResaGeneral(alreadyIn);setView("general");}} style={{fontSize:11,padding:"6px 12px",borderRadius:8,border:"1px solid #BBF7D0",background:"#D1FAE5",color:"#065F46",cursor:"pointer",fontWeight:600,flexShrink:0}}>Voir →</button>
-                        </div>
-                      );
-                    }
-                    const confColors: Record<string,{bg:string,border:string,text:string,badge:string,badgeText:string}> = {
-                      haute:   {bg:"#EFF6FF",border:"#BFDBFE",text:"#1D4ED8",badge:"#DBEAFE",badgeText:"#1E40AF"},
-                      moyenne: {bg:"#FFFBEB",border:"#FDE68A",text:"#92400E",badge:"#FEF3C7",badgeText:"#92400E"},
-                      faible:  {bg:"#F9FAFB",border:"#E5E7EB",text:"#6B7280",badge:"#F3F4F6",badgeText:"#6B7280"},
-                    };
-                    const c = confColors[extracted.confiance || "haute"];
+                    const espace = ESPACES.find(e=>e.id===extracted.espaceDetecte);
                     return (
-                      <div style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                            <span style={{fontSize:12,fontWeight:700,color:c.text}}>📅 Demande de réservation détectée</span>
-                            {extracted.confiance && (
-                              <span style={{fontSize:10,padding:"2px 8px",borderRadius:100,background:c.badge,color:c.badgeText,fontWeight:600}}>
-                                Confiance {extracted.confiance}
-                              </span>
-                            )}
+                      <div style={{marginBottom:16,padding:"18px 20px",background:"#EFE7DA",border:"1px solid #E6DCC9",borderLeft:"3px solid #B89456",borderRadius:"0 4px 4px 0"}}>
+                        {/* En-tête Archange */}
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B89456" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B89456"/><path d="M12 9.6 L 12 18.2" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B89456"/></svg>
+                            <span style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#1B1E2B",fontWeight:500,fontFamily:"'Inter',sans-serif"}}>Lecture par Archange</span>
+                            {extracted.confiance&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:1,background:"rgba(184,148,86,0.15)",color:"#B89456",border:"1px solid rgba(184,148,86,0.3)",letterSpacing:"0.06em",textTransform:"uppercase"}}>Confiance {extracted.confiance}</span>}
                           </div>
-                          <button onClick={openPlanForm} style={{...gold,fontSize:11,padding:"7px 14px",flexShrink:0}}>+ Ajouter au planning</button>
+                          {!alreadyIn&&<button onClick={openPlanForm} style={{fontSize:10,padding:"5px 12px",borderRadius:2,border:"1px solid #E6DCC9",background:"#1B1E2B",color:"#F7F2EA",cursor:"pointer",letterSpacing:"0.04em",fontFamily:"'Inter',sans-serif"}}>+ Planning</button>}
+                          {alreadyIn&&<button onClick={()=>{setSelResaGeneral(alreadyIn);setView("general");}} style={{fontSize:10,padding:"5px 12px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#B89456",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Voir l'événement →</button>}
                         </div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                          {[
-                            ["👤", extracted.nom],
-                            ["🏢", extracted.entreprise],
-                            ["🎉", extracted.typeEvenement],
-                            ["👥", extracted.nombrePersonnes
-                              ? (extracted.nombrePersonnesMin && extracted.nombrePersonnesMin !== extracted.nombrePersonnes
-                                  ? `${extracted.nombrePersonnesMin}–${extracted.nombrePersonnes} pers.`
-                                  : `${extracted.nombrePersonnes} pers.`)
-                              : null],
-                            ["📅", extracted.dateDebut],
-                            ["🕐", extracted.heureDebut ? extracted.heureDebut + (extracted.heureFin ? "→"+extracted.heureFin : "") : null],
-                            ["📍", ESPACES.find(e=>e.id===extracted.espaceDetecte)?.nom],
-                            ["💰", extracted.budget],
-                          ].filter(([,v])=>v).map(([icon,v],i)=>(
-                            <span key={i} style={{fontSize:11,background:c.badge,color:c.badgeText,padding:"3px 9px",borderRadius:100}}>{icon} {v}</span>
-                          ))}
+                        {/* Grille infos */}
+                        <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"7px 18px",fontSize:13}}>
+                          {extracted.nom&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Client</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#1B1E2B"}}>{extracted.nom}{extracted.entreprise?` — ${extracted.entreprise}`:""}</div></>}
+                          {extracted.typeEvenement&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Événement</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#1B1E2B"}}>{extracted.typeEvenement}</div></>}
+                          {extracted.nombrePersonnes&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Convives</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#1B1E2B"}}>{extracted.nombrePersonnesMin&&extracted.nombrePersonnesMin!==extracted.nombrePersonnes?`${extracted.nombrePersonnesMin}–${extracted.nombrePersonnes}`:extracted.nombrePersonnes} personnes</div></>}
+                          {extracted.dateDebut&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Date</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#1B1E2B"}}>{extracted.dateDebut}{extracted.heureDebut?` · ${extracted.heureDebut}${extracted.heureFin?` → ${extracted.heureFin}`:""}`:"" }</div></>}
+                          {espace&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Espace suggéré</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#B89456",fontWeight:500}}>{espace.nom} · disponible</div></>}
+                          {extracted.budget&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Budget</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#1B1E2B"}}>{extracted.budget}</div></>}
                         </div>
-                        {extracted.notes && (
-                          <div style={{fontSize:11,color:c.text,marginTop:8,fontStyle:"italic",opacity:.8}}>📝 {extracted.notes}</div>
-                        )}
                       </div>
                     );
                   })()}
 
                   {/* Formulaire planning */}
                   {showPlanForm && (
-                    <div style={{background:"#FFFFFF",border:"1px solid #EAE6E1",borderRadius:14,padding:"20px",marginBottom:16}}>
+                    <div style={{background:"#FFFFFF",border:"1px solid #E6DCC9",borderRadius:14,padding:"20px",marginBottom:16}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                        <div style={{fontSize:13,fontWeight:600,color:"#1C1814",letterSpacing:"-0.01em"}}>📅 Ajouter au planning</div>
-                        <button onClick={()=>setShowPlanForm(false)} style={{background:"none",border:"none",color:"#8A8178",cursor:"pointer",fontSize:18}}>×</button>
+                        <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B",letterSpacing:"-0.01em"}}>📅 Ajouter au planning</div>
+                        <button onClick={()=>setShowPlanForm(false)} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:18}}>×</button>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                         {/* Champs obligatoires */}
@@ -3247,19 +3236,19 @@ FORMAT
                         </div>
                         {/* Champs optionnels */}
                         <div>
-                          <label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🎉 Type d'événement</label>
+                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🎉 Type d'événement</label>
                           <input value={planForm.typeEvenement||""} onChange={e=>setPlanForm({...planForm,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inp}}/>
                         </div>
                         <div>
-                          <label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>💰 Budget client</label>
+                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>💰 Budget client</label>
                           <input value={planForm.budget||""} onChange={e=>setPlanForm({...planForm,budget:e.target.value})} placeholder="Ex: 5 000€, 45€/pers…" style={{...inp}}/>
                         </div>
                         <div>
-                          <label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📍 Espace</label>
+                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📍 Espace</label>
                           <select value={planForm.espaceId||espacesDyn[0]?.id||""} onChange={e=>setPlanForm({...planForm,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select>
                         </div>
                         <div style={{gridColumn:"1/-1"}}>
-                          <label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📝 Notes</label>
+                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📝 Notes</label>
                           <input value={planForm.notes||""} onChange={e=>setPlanForm({...planForm,notes:e.target.value})} style={{...inp}}/>
                         </div>
                       </div>
@@ -3270,75 +3259,66 @@ FORMAT
                     </div>
                   )}
 
-                  {/* ── Éditeur de réponse manuelle ── */}
+                  {/* ── Séparateur ornemental Céleste ── */}
+                  <div style={{display:"flex",alignItems:"center",gap:12,margin:"20px 0 16px"}}>
+                    <div style={{flex:1,height:1,background:"#E6DCC9"}}/>
+                    <div style={{display:"flex",alignItems:"center",gap:7}}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B89456" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B89456"/><path d="M12 9.6 L 12 18.2" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B89456"/></svg>
+                      <span style={{fontSize:9,letterSpacing:"0.18em",textTransform:"uppercase",color:"#6B6E7E",fontFamily:"'Inter',sans-serif"}}>{showReplyEditor?"Votre réponse":"Réponse Archange"}</span>
+                    </div>
+                    <div style={{flex:1,height:1,background:"#E6DCC9"}}/>
+                  </div>
+
+                  {/* ── Éditeur de réponse manuelle — Céleste ── */}
                   {showReplyEditor&&(
-                    <div style={{background:"#FFFFFF",borderRadius:12,border:"2px solid #1C1814",boxShadow:"0 4px 16px rgba(0,0,0,.1)",overflow:"hidden",marginBottom:16}}>
-                      {/* En-tête */}
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"#1C1814"}}>
-                        <span style={{fontSize:11,fontWeight:700,color:"#C9A96E",letterSpacing:"0.08em",textTransform:"uppercase"}}>
+                    <div style={{background:"#EFE7DA",borderRadius:3,border:"1px solid #E6DCC9",borderTop:"2px solid #1B1E2B",overflow:"hidden",marginBottom:16}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 16px",background:"#1B1E2B"}}>
+                        <span style={{fontSize:10,fontWeight:500,color:"#B89456",letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"'Inter',sans-serif"}}>
                           {replyEditorMode==="reply"?"↩ Répondre":replyEditorMode==="replyAll"?"↩↩ Répondre à tous":"↪ Transférer"}
                         </span>
-                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer l'éditeur ? Le texte sera perdu."))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:16}}>×</button>
+                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:15}}>×</button>
                       </div>
-                      {/* Destinataire */}
-                      <div style={{padding:"10px 16px",borderBottom:"1px solid #EAE6E1",display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:11,color:"#8A8178",fontWeight:600,flexShrink:0}}>À :</span>
-                        <input
-                          value={replyEditorTo}
-                          onChange={e=>setReplyEditorTo(e.target.value)}
-                          style={{flex:1,border:"none",outline:"none",fontSize:13,color:"#1C1814",background:"transparent"}}
-                          placeholder="destinataire@exemple.com"
-                        />
+                      <div style={{padding:"8px 16px",borderBottom:"1px solid #E6DCC9",display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:9.5,color:"#6B6E7E",fontWeight:500,flexShrink:0,letterSpacing:"0.12em",textTransform:"uppercase",fontFamily:"'Inter',sans-serif"}}>À</span>
+                        <input value={replyEditorTo} onChange={e=>setReplyEditorTo(e.target.value)} style={{flex:1,border:"none",outline:"none",fontSize:13,color:"#1B1E2B",background:"transparent",fontFamily:"'Inter',sans-serif"}} placeholder="destinataire@exemple.com"/>
                       </div>
-                      {/* Corps */}
-                      <textarea
-                        value={replyEditorText}
-                        onChange={e=>setReplyEditorText(e.target.value)}
-                        style={{width:"100%",minHeight:220,padding:"14px 16px",fontSize:13,color:"#1C1814",lineHeight:1.8,border:"none",outline:"none",resize:"vertical",background:"transparent",fontFamily:"inherit"}}
-                        placeholder="Votre réponse…"
-                        autoFocus
-                      />
-                      {/* Actions */}
-                      <div style={{display:"flex",gap:8,padding:"10px 16px",borderTop:"1px solid #EAE6E1",background:"#F9F8F6"}}>
-                        <button onClick={sendReply} disabled={sending||!replyEditorTo.trim()||!replyEditorText.trim()} style={{padding:"8px 20px",borderRadius:8,border:"none",background:"#1C1814",color:"#C9A96E",fontSize:12,fontWeight:700,cursor:sending?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:sending||!replyEditorTo.trim()||!replyEditorText.trim()?0.5:1}}>
-                          {sending?<><Spin s={12}/> Envoi…</>:"✉ Envoyer"}
+                      <textarea value={replyEditorText} onChange={e=>setReplyEditorText(e.target.value)} style={{width:"100%",minHeight:200,padding:"14px 16px",fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:15,color:"#1B1E2B",lineHeight:1.75,border:"none",outline:"none",resize:"vertical",background:"transparent"}} placeholder="Votre réponse…" autoFocus/>
+                      <div style={{display:"flex",gap:7,padding:"9px 16px",borderTop:"1px solid #E6DCC9",background:"#F7F2EA"}}>
+                        <button onClick={sendReply} disabled={sending||!replyEditorTo.trim()||!replyEditorText.trim()} style={{padding:"7px 18px",borderRadius:2,border:"none",background:"#1B1E2B",color:"#B89456",fontSize:11,fontWeight:500,cursor:sending?"wait":"pointer",display:"flex",alignItems:"center",gap:5,opacity:sending||!replyEditorTo.trim()||!replyEditorText.trim()?0.5:1,letterSpacing:"0.04em",fontFamily:"'Inter',sans-serif"}}>
+                          {sending?<><Spin s={11}/> Envoi…</>:"✉ Envoyer"}
                         </button>
-                        <button onClick={saveDraft} style={{padding:"8px 16px",borderRadius:8,border:"1px solid #EAE6E1",background:"transparent",color:"#5C564F",fontSize:12,cursor:"pointer"}}>
-                          Brouillon
-                        </button>
+                        <button onClick={saveDraft} style={{padding:"7px 12px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",fontSize:11,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Brouillon</button>
                         <div style={{flex:1}}/>
-                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{padding:"8px 12px",borderRadius:8,border:"none",background:"transparent",color:"#8A8178",fontSize:12,cursor:"pointer"}}>
-                          Annuler
-                        </button>
+                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{padding:"7px 10px",borderRadius:2,border:"none",background:"transparent",color:"#6B6E7E",fontSize:11,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Annuler</button>
                       </div>
                     </div>
                   )}
 
-                  {/* Réponse Archange */}
-                  <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",overflow:"hidden"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",background:"#1C1814"}}>
+                  {/* ── Réponse Archange — Céleste ── */}
+                  <div style={{background:"#EFE7DA",borderRadius:3,border:"1px solid #E6DCC9",overflow:"hidden"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:"#1B1E2B"}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <div style={{width:6,height:6,borderRadius:"50%",background:"#C9A96E"}}/>
-                        <span style={{fontSize:11,fontWeight:700,color:"#C9A96E",letterSpacing:"0.1em",textTransform:"uppercase"}}>Réponse ARCHANGE</span>
-                        {genReply&&<Spin s={12}/>}
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B89456" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B89456"/><path d="M12 9.6 L 12 18.2" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B89456"/></svg>
+                        <span style={{fontSize:10,fontWeight:500,color:"#B89456",letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"'Inter',sans-serif"}}>Réponse Archange</span>
+                        {genReply&&<Spin s={11}/>}
                       </div>
-                      {srcActives>0&&<span style={{fontSize:11,background:"rgba(232,184,109,.15)",color:"#E8B86D",padding:"3px 8px",borderRadius:100}}>🧠 {srcActives} source{srcActives>1?"s":""}</span>}
+                      {srcActives>0&&<span style={{fontSize:10,color:"rgba(184,148,86,0.7)",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>🧠 {srcActives} source{srcActives>1?"s":""}</span>}
                     </div>
                     {genReply
-                      ? <div style={{padding:"20px",fontSize:13,color:"#8A8178",display:"flex",alignItems:"center",gap:10}}><Spin/> Rédaction en cours…</div>
+                      ? <div style={{padding:"20px",fontSize:13,color:"#6B6E7E",display:"flex",alignItems:"center",gap:10,fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}><Spin/> Archange rédige…</div>
                       : !reply
-                        ? <div style={{padding:"20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
-                            <div style={{fontSize:12,color:"#8A8178",textAlign:"center"}}>Cliquez pour demander à ARCHANGE de rédiger une réponse.</div>
-                            <button onClick={genererReponse} disabled={genReply} style={{...gold,padding:"10px 20px",fontSize:12,display:"flex",alignItems:"center",gap:8,opacity:genReply?0.7:1}}>{genReply?<><Spin s={12}/> Génération en cours…</>:"✨ Générer une réponse"}</button>
+                        ? <div style={{padding:"24px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+                            <div style={{fontSize:13,color:"#6B6E7E",textAlign:"center",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>Cliquez pour qu'Archange rédige une réponse.</div>
+                            <button onClick={genererReponse} disabled={genReply} style={{padding:"8px 20px",borderRadius:2,border:"none",background:"#1B1E2B",color:"#B89456",fontSize:11,fontWeight:500,cursor:"pointer",letterSpacing:"0.04em",display:"flex",alignItems:"center",gap:7,fontFamily:"'Inter',sans-serif"}}>{genReply?<><Spin s={11}/> Génération…</>:"✦ Générer une réponse"}</button>
                           </div>
                         : editing
-                          ? <textarea value={editReply} onChange={e=>setEditReply(e.target.value)} style={{width:"100%",padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,border:"none",outline:"none",resize:"vertical",background:"transparent",minHeight:200}}/>
-                          : <div>
-                              <div style={{padding:"16px 20px",fontSize:14,color:"#1C1814",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{reply}</div>
-                              {repliesCache[sel?.id]?.dateGen&&<div style={{padding:"0 20px 12px",fontSize:11,color:"#A09890"}}>Générée le {repliesCache[sel.id].dateGen}</div>}
+                          ? <textarea value={editReply} onChange={e=>setEditReply(e.target.value)} style={{width:"100%",padding:"16px 20px",fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:15,color:"#1B1E2B",lineHeight:1.8,border:"none",outline:"none",resize:"vertical",background:"transparent",minHeight:200}}/>
+                          : <div style={{padding:"18px 20px",fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:15,color:"#1B1E2B",lineHeight:1.8,whiteSpace:"pre-wrap"}}>
+                              {reply}
+                              {repliesCache[sel?.id]?.dateGen&&<div style={{marginTop:10,fontSize:11,color:"#6B6E7E",fontStyle:"italic",fontFamily:"'Cormorant Garamond',serif"}}>Générée le {repliesCache[sel.id].dateGen}</div>}
                             </div>
                     }
-                    <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #EAE6E1",background:"#F5F3EF",flexWrap:"wrap"}}>
+                    <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #E6DCC9",background:"#F7F2EA",flexWrap:"wrap"}}>
                       {reply && <><button onClick={()=>{
                         const replyText = editing ? editReply : reply;
                         window.sendPrompt("CREATE_DRAFT|"+sel.fromEmail+"|"+sel.subject+"|"+replyText);
@@ -3360,7 +3340,7 @@ FORMAT
                         toast("Gmail ouvert ✓");
                       }} disabled={genReply} style={{...gold,background:"#1a73e8",color:"#fff",boxShadow:"0 2px 8px rgba(26,115,232,.3)"}}>✉ Ouvrir dans Gmail</button>}
                       <button onClick={()=>{ if(editing){setReply(editReply);setEditing(false);if(sel)setRepliesCache(prev=>({...prev,[sel.id]:{...prev[sel.id],reply:editReply,editReply}}));}else{setEditing(true);setEditReply(reply);} }} disabled={genReply} style={{...out}}>{editing?"Valider":"Modifier"}</button>
-                      <button onClick={genererReponse} disabled={genReply} style={{...out,color:"#8A8178",display:"flex",alignItems:"center",gap:5}}>{genReply?<><Spin s={11}/> En cours…</>:"↻ Regénérer"}</button></>}
+                      <button onClick={genererReponse} disabled={genReply} style={{...out,color:"#6B6E7E",display:"flex",alignItems:"center",gap:5}}>{genReply?<><Spin s={11}/> En cours…</>:"↻ Regénérer"}</button></>}
                     </div>
                   </div>
                 </div>
@@ -3396,20 +3376,20 @@ FORMAT
               <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
 
                 {/* Toolbar */}
-                <div style={{padding:"14px 20px",borderBottom:"1px solid #EAE6E1",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:"#FFFFFF"}}>
+                <div style={{padding:"14px 20px",borderBottom:"1px solid #E6DCC9",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:"#FFFFFF"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <button onClick={()=>{ const n=new Date(); setCalDate(new Date(n.getFullYear(),n.getMonth(),n.getDate())); const w=new Date(n); w.setDate(w.getDate()-((w.getDay()+6)%7)); w.setHours(0,0,0,0); setCalWeekStart(w); }} style={{padding:"6px 14px",borderRadius:8,border:"1px solid #DDD8D0",background:"#FFFFFF",color:"#1C1814",fontSize:12,fontWeight:600,cursor:"pointer"}}>Aujourd'hui</button>
+                    <button onClick={()=>{ const n=new Date(); setCalDate(new Date(n.getFullYear(),n.getMonth(),n.getDate())); const w=new Date(n); w.setDate(w.getDate()-((w.getDay()+6)%7)); w.setHours(0,0,0,0); setCalWeekStart(w); }} style={{padding:"6px 14px",borderRadius:8,border:"1px solid #E6DCC9",background:"#FFFFFF",color:"#1B1E2B",fontSize:12,fontWeight:600,cursor:"pointer"}}>Aujourd'hui</button>
                     <button onClick={()=>{
                       if(calView==="mois") setCalDate(new Date(calDate.getFullYear(),calDate.getMonth()-1,1));
                       else if(calView==="semaine"){ const d=new Date(calWeekStart); d.setDate(d.getDate()-7); setCalWeekStart(d); }
                       else { const d=new Date(calDate); d.setDate(d.getDate()-1); setCalDate(d); }
-                    }} style={{width:30,height:30,borderRadius:7,border:"1px solid #DDD8D0",background:"#FFFFFF",color:"#1C1814",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+                    }} style={{width:30,height:30,borderRadius:7,border:"1px solid #E6DCC9",background:"#FFFFFF",color:"#1B1E2B",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
                     <button onClick={()=>{
                       if(calView==="mois") setCalDate(new Date(calDate.getFullYear(),calDate.getMonth()+1,1));
                       else if(calView==="semaine"){ const d=new Date(calWeekStart); d.setDate(d.getDate()+7); setCalWeekStart(d); }
                       else { const d=new Date(calDate); d.setDate(d.getDate()+1); setCalDate(d); }
-                    }} style={{width:30,height:30,borderRadius:7,border:"1px solid #DDD8D0",background:"#FFFFFF",color:"#1C1814",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
-                    <span style={{fontSize:16,fontWeight:600,color:"#1C1814",marginLeft:4}}>
+                    }} style={{width:30,height:30,borderRadius:7,border:"1px solid #E6DCC9",background:"#FFFFFF",color:"#1B1E2B",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+                    <span style={{fontSize:16,fontWeight:600,color:"#1B1E2B",marginLeft:4}}>
                       {calView==="mois" && `${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}`}
                       {calView==="semaine" && `${weekDays[0].getDate()} ${MOIS[weekDays[0].getMonth()].slice(0,3)} – ${weekDays[6].getDate()} ${MOIS[weekDays[6].getMonth()].slice(0,3)} ${weekDays[6].getFullYear()}`}
                       {calView==="jour" && `${calDate.getDate()} ${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}`}
@@ -3421,7 +3401,7 @@ FORMAT
                       <select
                         value={planFilter}
                         onChange={e=>setPlanFilter(e.target.value)}
-                        style={{padding:"5px 10px",borderRadius:8,border:`1.5px solid ${planFilter!=="all"?"#C9A96E":"#DDD8D0"}`,background:planFilter!=="all"?"#FEF9EE":"#FFFFFF",color:planFilter!=="all"?"#854F0B":"#3D3530",fontSize:12,cursor:"pointer",outline:"none",fontWeight:planFilter!=="all"?600:400}}>
+                        style={{padding:"5px 10px",borderRadius:8,border:`1.5px solid ${planFilter!=="all"?"#B89456":"#E6DCC9"}`,background:planFilter!=="all"?"#FEF9EE":"#FFFFFF",color:planFilter!=="all"?"#854F0B":"#3D3530",fontSize:12,cursor:"pointer",outline:"none",fontWeight:planFilter!=="all"?600:400}}>
                         <option value="all">Tous les statuts</option>
                         {statuts.map(s=>(
                           <option key={s.id} value={s.id}>{s.label}</option>
@@ -3429,11 +3409,11 @@ FORMAT
                         <option value="__none__">Sans statut</option>
                       </select>
                       {planFilter!=="all"&&(
-                        <button onClick={()=>setPlanFilter("all")} title="Réinitialiser le filtre" style={{width:22,height:22,borderRadius:6,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                        <button onClick={()=>setPlanFilter("all")} title="Réinitialiser le filtre" style={{width:22,height:22,borderRadius:6,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                       )}
                     </div>
                     {/* Vue toggle */}
-                    <div style={{display:"flex",background:"#F5F3EF",borderRadius:8,padding:2,border:"1px solid #EAE6E1"}}>
+                    <div style={{display:"flex",background:"#F7F2EA",borderRadius:8,padding:2,border:"1px solid #E6DCC9"}}>
                       {(["mois","semaine","jour"] as const).map(v=>(
                         <button key={v} onClick={()=>setCalView(v)} style={{padding:"5px 12px",borderRadius:6,border:"none",background:calView===v?"#FFFFFF":"transparent",color:calView===v?"#1C1814":"#8A8178",fontSize:12,fontWeight:calView===v?600:400,cursor:"pointer",textTransform:"capitalize"}}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
                       ))}
@@ -3445,12 +3425,12 @@ FORMAT
                 {/* ── VUE MOIS ── */}
                 {calView==="mois" && (
                   <div style={{flex:1,overflowY:"auto",padding:16}}>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:0,marginBottom:0,border:"1px solid #EAE6E1",borderRadius:12,overflow:"hidden"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:0,marginBottom:0,border:"1px solid #E6DCC9",borderRadius:12,overflow:"hidden"}}>
                       {["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map(d=>(
-                        <div key={d} style={{textAlign:"center",fontSize:11,color:"#8A8178",padding:"8px 0",fontWeight:600,background:"#F5F3EF",borderBottom:"1px solid #EAE6E1"}}>{d}</div>
+                        <div key={d} style={{textAlign:"center",fontSize:11,color:"#6B6E7E",padding:"8px 0",fontWeight:600,background:"#F7F2EA",borderBottom:"1px solid #E6DCC9"}}>{d}</div>
                       ))}
                       {Array.from({length:firstDay(calDate)}).map((_,i)=>(
-                        <div key={"p"+i} style={{minHeight:100,background:"#EEEAE4",borderRight:"1px solid #EAE6E1",borderBottom:"1px solid #EAE6E1"}}/>
+                        <div key={"p"+i} style={{minHeight:100,background:"#EEEAE4",borderRight:"1px solid #E6DCC9",borderBottom:"1px solid #E6DCC9"}}/>
                       ))}
                       {Array.from({length:daysInMonth(calDate)}).map((_,i)=>{
                         const day=i+1;
@@ -3459,9 +3439,9 @@ FORMAT
                         const isToday=ds===todayStr;
                         const col=(firstDay(calDate)+i)%7;
                         return (
-                          <div key={day} style={{minHeight:100,borderRight:col<6?"1px solid #EAE6E1":"none",borderBottom:"1px solid #EAE6E1",padding:"6px 6px 4px",background:isToday?"rgba(201,169,110,0.05)":"#FFFFFF",position:"relative"}}>
+                          <div key={day} style={{minHeight:100,borderRight:col<6?"1px solid #E6DCC9":"none",borderBottom:"1px solid #E6DCC9",padding:"6px 6px 4px",background:isToday?"rgba(184,148,86,0.05)":"#FFFFFF",position:"relative"}}>
                             <div style={{display:"flex",justifyContent:"center",marginBottom:4}}>
-                              <span style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:isToday?700:400,background:isToday?"#C9A96E":"transparent",color:isToday?"#FFFFFF":"#9E9890"}}>{day}</span>
+                              <span style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:isToday?700:400,background:isToday?"#B89456":"transparent",color:isToday?"#FFFFFF":"#9E9890"}}>{day}</span>
                             </div>
                             {dr.slice(0,3).map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
                               <div key={r.id} onClick={()=>setEditResa({...r})} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
@@ -3471,7 +3451,7 @@ FORMAT
                                 {(r.entreprise||espace)&&<div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",opacity:.7,fontSize:9}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
                               </div>
                             );})}
-                            {dr.length>3&&<div style={{fontSize:10,color:"#8A8178",paddingLeft:4,cursor:"pointer"}} onClick={()=>setCalView("jour")}>+{dr.length-3} autre{dr.length-3>1?"s":""}</div>}
+                            {dr.length>3&&<div style={{fontSize:10,color:"#6B6E7E",paddingLeft:4,cursor:"pointer"}} onClick={()=>setCalView("jour")}>+{dr.length-3} autre{dr.length-3>1?"s":""}</div>}
                           </div>
                         );
                       })}
@@ -3482,10 +3462,10 @@ FORMAT
                 {/* ── VUE SEMAINE ── */}
                 {calView==="semaine" && (
                   <div style={{flex:1,overflowY:"auto"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"48px repeat(7,1fr)",borderBottom:"1px solid #EAE6E1"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"48px repeat(7,1fr)",borderBottom:"1px solid #E6DCC9"}}>
                       <div/>
                       {weekDays.map(d=>{ const ds=fmtDate(d); const isTd=ds===todayStr; return (
-                        <div key={ds} style={{textAlign:"center",padding:"10px 4px",borderLeft:"1px solid #EAE6E1",background:"#FFFFFF"}}>
+                        <div key={ds} style={{textAlign:"center",padding:"10px 4px",borderLeft:"1px solid #E6DCC9",background:"#FFFFFF"}}>
                           <div style={{fontSize:11,color:isTd?"#E8B86D":"#8A8178",fontWeight:600,textTransform:"uppercase"}}>{["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"][d.getDay()===0?6:d.getDay()-1]}</div>
                           <div style={{width:28,height:28,borderRadius:"50%",background:isTd?"#E8B86D":"transparent",color:isTd?"#0F0F0F":"#1C1814",fontSize:14,fontWeight:isTd?700:500,display:"flex",alignItems:"center",justifyContent:"center",margin:"4px auto 0"}}>{d.getDate()}</div>
                         </div>
@@ -3494,7 +3474,7 @@ FORMAT
                     <div style={{display:"grid",gridTemplateColumns:"48px repeat(7,1fr)"}}>
                       <div/>
                       {weekDays.map(d=>{ const ds=fmtDate(d); const dr=resasForDate(ds); const isTd=ds===todayStr; return (
-                        <div key={ds} style={{borderLeft:"1px solid #EAE6E1",minHeight:300,padding:"6px 4px",background:isTd?"rgba(232,184,109,0.03)":"transparent"}}>
+                        <div key={ds} style={{borderLeft:"1px solid #E6DCC9",minHeight:300,padding:"6px 4px",background:isTd?"rgba(232,184,109,0.03)":"transparent"}}>
                           {dr.map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
                             <div key={r.id} onClick={()=>setEditResa({...r})} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
                               <div style={{fontWeight:600,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.nom}</div>
@@ -3512,7 +3492,7 @@ FORMAT
                 {calView==="jour" && (
                   <div style={{flex:1,overflowY:"auto",padding:20}}>
                     {dayResas.length===0?(
-                      <div style={{textAlign:"center",padding:"60px 0",color:"#8A8178"}}>
+                      <div style={{textAlign:"center",padding:"60px 0",color:"#6B6E7E"}}>
                         <div style={{fontSize:36,marginBottom:10}}>📅</div>
                         <div style={{fontSize:14}}>Aucun événement ce jour</div>
                         <button onClick={()=>setEditResa({...EMPTY_RESA,dateDebut:calDayStr})} style={{...gold,marginTop:16,fontSize:12}}>+ Ajouter un événement</button>
@@ -3520,19 +3500,19 @@ FORMAT
                     ):(
                       <div style={{display:"flex",flexDirection:"column",gap:12}}>
                         {dayResas.map(r=>{ const st=getStatut(r); return (
-                          <div key={r.id} onClick={()=>setSelResa(r)} style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
+                          <div key={r.id} onClick={()=>setSelResa(r)} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                               <div>
-                                <div style={{fontSize:15,fontWeight:600,color:"#1C1814"}}>{r.nom}</div>
-                                {r.entreprise&&<div style={{fontSize:12,color:"#8A8178",marginTop:1}}>{r.entreprise}</div>}
+                                <div style={{fontSize:15,fontWeight:600,color:"#1B1E2B"}}>{r.nom}</div>
+                                {r.entreprise&&<div style={{fontSize:12,color:"#6B6E7E",marginTop:1}}>{r.entreprise}</div>}
                               </div>
                               <span style={{fontSize:11,padding:"3px 10px",borderRadius:100,background:st.bg,color:st.color,fontWeight:600,flexShrink:0,marginLeft:8}}>{st.label}</span>
                             </div>
                             <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:8}}>
-                              {r.heureDebut&&<span style={{fontSize:12,color:"#5C564F"}}>🕐 {r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</span>}
-                              {r.typeEvenement&&<span style={{fontSize:12,color:"#5C564F"}}>🎉 {r.typeEvenement}</span>}
-                              {r.nombrePersonnes&&<span style={{fontSize:12,color:"#5C564F"}}>👥 {r.nombrePersonnes} pers.</span>}
-                              {r.espaceId&&<span style={{fontSize:12,color:"#5C564F"}}>📍 {ESPACES.find(e=>e.id===r.espaceId)?.nom}</span>}
+                              {r.heureDebut&&<span style={{fontSize:12,color:"#6B6E7E"}}>🕐 {r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</span>}
+                              {r.typeEvenement&&<span style={{fontSize:12,color:"#6B6E7E"}}>🎉 {r.typeEvenement}</span>}
+                              {r.nombrePersonnes&&<span style={{fontSize:12,color:"#6B6E7E"}}>👥 {r.nombrePersonnes} pers.</span>}
+                              {r.espaceId&&<span style={{fontSize:12,color:"#6B6E7E"}}>📍 {ESPACES.find(e=>e.id===r.espaceId)?.nom}</span>}
                             </div>
                           </div>
                         );})}
@@ -3544,26 +3524,26 @@ FORMAT
 
               {/* Panel détail */}
               {selResa && (
-                <div style={{width:340,borderLeft:"1px solid #EAE6E1",overflowY:"auto",background:"#FDFCFA",flexShrink:0}}>
-                  <div style={{padding:"18px 20px 14px",borderBottom:"1px solid #EAE6E1",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{width:340,borderLeft:"1px solid #E6DCC9",overflowY:"auto",background:"#FDFCFA",flexShrink:0}}>
+                  <div style={{padding:"18px 20px 14px",borderBottom:"1px solid #E6DCC9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <div>
-                      <div style={{fontSize:15,fontWeight:600,color:"#1C1814"}}>{selResa.nom}</div>
-                      {selResa.entreprise&&<div style={{fontSize:12,color:"#8A8178",marginTop:2}}>{selResa.entreprise}</div>}
+                      <div style={{fontSize:15,fontWeight:600,color:"#1B1E2B"}}>{selResa.nom}</div>
+                      {selResa.entreprise&&<div style={{fontSize:12,color:"#6B6E7E",marginTop:2}}>{selResa.entreprise}</div>}
                     </div>
-                    <button onClick={()=>setSelResa(null)} style={{width:28,height:28,borderRadius:6,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                    <button onClick={()=>setSelResa(null)} style={{width:28,height:28,borderRadius:6,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                   </div>
                   <div style={{padding:20}}>
                     {/* Statut pills */}
                     <div style={{display:"flex",gap:5,marginBottom:16,flexWrap:"wrap"}}>
                       {statuts.map(s=>(
-                        <button key={s.id} onClick={()=>{ const upd=resas.map(r=>r.id===selResa.id?{...r,statut:s.id}:r); saveResas(upd); setSelResa({...selResa,statut:s.id}); }} style={{padding:"4px 10px",borderRadius:100,border:"none",background:(selResa.statut||"nouveau")===s.id?s.bg:"#F0EDE8",color:(selResa.statut||"nouveau")===s.id?s.color:"#8A8178",fontSize:11,fontWeight:(selResa.statut||"nouveau")===s.id?600:400,cursor:"pointer"}}>{s.label}</button>
+                        <button key={s.id} onClick={()=>{ const upd=resas.map(r=>r.id===selResa.id?{...r,statut:s.id}:r); saveResas(upd); setSelResa({...selResa,statut:s.id}); }} style={{padding:"4px 10px",borderRadius:100,border:"none",background:(selResa.statut||"nouveau")===s.id?s.bg:"#F0EDE8",color:(selResa.statut||"nouveau")===s.id?s.color:"#6B6E7E",fontSize:11,fontWeight:(selResa.statut||"nouveau")===s.id?600:400,cursor:"pointer"}}>{s.label}</button>
                       ))}
                     </div>
                     {/* Infos */}
                     {[["🎉","Type",selResa.typeEvenement],["👥","Personnes",selResa.nombrePersonnes],["📍","Espace",ESPACES.find(e=>e.id===selResa.espaceId)?.nom],["📅","Date",fmtDateFr(selResa.dateDebut)],["🕐","Horaires",selResa.heureDebut+(selResa.heureFin?" → "+selResa.heureFin:"")],["💰","Budget",selResa.budget],["📧","Email",selResa.email],["📞","Tél",selResa.telephone],["📝","Notes",selResa.notes]].filter(([,,v])=>v).map(([icon,k,v])=>(
                       <div key={k} style={{display:"flex",gap:10,marginBottom:10,alignItems:"flex-start"}}>
                         <span style={{fontSize:14,width:20,flexShrink:0}}>{icon}</span>
-                        <div><div style={{fontSize:10,color:"#8A8178",marginBottom:1}}>{k}</div><div style={{fontSize:13,color:"#1C1814"}}>{v}</div></div>
+                        <div><div style={{fontSize:10,color:"#6B6E7E",marginBottom:1}}>{k}</div><div style={{fontSize:13,color:"#1B1E2B"}}>{v}</div></div>
                       </div>
                     ))}
                     {/* Mails liés + réponses envoyées */}
@@ -3586,7 +3566,7 @@ FORMAT
                         ))}
                       </div>
                     )}
-                    <div style={{display:"flex",gap:8,marginTop:16,paddingTop:16,borderTop:"1px solid #EAE6E1"}}>
+                    <div style={{display:"flex",gap:8,marginTop:16,paddingTop:16,borderTop:"1px solid #E6DCC9"}}>
                       <button onClick={()=>{ setEditResa({...selResa}); setSelResa(null); }} style={{flex:1,...out,fontSize:12}}>✏️ Modifier</button>
                       <button onClick={()=>{ setSelResaGeneral(selResa); setSelResa(null); setView("general"); setShowMailHistory(false); }} style={{...out,fontSize:12,padding:"7px 10px"}}>🗂</button>
                       <button onClick={()=>{ saveResas(resas.filter(r=>r.id!==selResa.id)); setSelResa(null); toast("Supprimé"); }} style={{padding:"7px 10px",borderRadius:8,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",fontSize:12,cursor:"pointer"}}>🗑</button>
@@ -3595,23 +3575,23 @@ FORMAT
                 </div>
               )}
               {editResa && (
-                <div style={{width:360,borderLeft:"1px solid #EAE6E1",overflowY:"auto",background:"#FDFCFA",flexShrink:0}}>
-                  <div style={{padding:"18px 20px 14px",borderBottom:"1px solid #EAE6E1",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div style={{fontSize:15,fontWeight:600,color:"#1C1814"}}>{editResa.id?"Modifier":"Nouvelle réservation"}</div>
-                    <button onClick={()=>setEditResa(null)} style={{width:28,height:28,borderRadius:6,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                <div style={{width:360,borderLeft:"1px solid #E6DCC9",overflowY:"auto",background:"#FDFCFA",flexShrink:0}}>
+                  <div style={{padding:"18px 20px 14px",borderBottom:"1px solid #E6DCC9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{fontSize:15,fontWeight:600,color:"#1B1E2B"}}>{editResa.id?"Modifier":"Nouvelle réservation"}</div>
+                    <button onClick={()=>setEditResa(null)} style={{width:28,height:28,borderRadius:6,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                   </div>
                   <div style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
                     {[["nom","👤 Nom *"],["email","📧 Email"],["telephone","📞 Téléphone"],["entreprise","🏢 Entreprise"],["nombrePersonnes","👥 Nb personnes"]].map(([k,l])=>(
-                      <div key={k}><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>{l}</label><input value={editResa[k]||""} onChange={e=>setEditResa({...editResa,[k]:e.target.value})} style={{...inp}}/></div>
+                      <div key={k}><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>{l}</label><input value={editResa[k]||""} onChange={e=>setEditResa({...editResa,[k]:e.target.value})} style={{...inp}}/></div>
                     ))}
-                    <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📅 Date</label><DatePicker value={editResa.dateDebut||""} onChange={v=>setEditResa({...editResa,dateDebut:v})}/></div>
-                    <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🕐 Heure début</label><TimePicker value={editResa.heureDebut||""} onChange={v=>setEditResa({...editResa,heureDebut:v})} placeholder="Heure début"/></div>
-                    <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🕕 Heure fin</label><TimePicker value={editResa.heureFin||""} onChange={v=>setEditResa({...editResa,heureFin:v})} placeholder="Heure fin"/></div>
-                    <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📍 Espace</label><select value={editResa.espaceId} onChange={e=>setEditResa({...editResa,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
-                    <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🎉 Type d'événement</label><input value={editResa.typeEvenement||""} onChange={e=>setEditResa({...editResa,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inp}}/></div>
-                    <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>💰 Budget client</label><input value={editResa.budget||""} onChange={e=>setEditResa({...editResa,budget:e.target.value})} placeholder="Ex: 5 000€…" style={{...inp}}/></div>
-                    <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>🏷 Statut</label><select value={editResa.statut||"nouveau"} onChange={e=>setEditResa({...editResa,statut:e.target.value})} style={{...inp}}>{statuts.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
-                    <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:4}}>📝 Notes</label><textarea value={editResa.notes||""} onChange={e=>setEditResa({...editResa,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
+                    <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📅 Date</label><DatePicker value={editResa.dateDebut||""} onChange={v=>setEditResa({...editResa,dateDebut:v})}/></div>
+                    <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🕐 Heure début</label><TimePicker value={editResa.heureDebut||""} onChange={v=>setEditResa({...editResa,heureDebut:v})} placeholder="Heure début"/></div>
+                    <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🕕 Heure fin</label><TimePicker value={editResa.heureFin||""} onChange={v=>setEditResa({...editResa,heureFin:v})} placeholder="Heure fin"/></div>
+                    <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📍 Espace</label><select value={editResa.espaceId} onChange={e=>setEditResa({...editResa,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
+                    <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🎉 Type d'événement</label><input value={editResa.typeEvenement||""} onChange={e=>setEditResa({...editResa,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inp}}/></div>
+                    <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>💰 Budget client</label><input value={editResa.budget||""} onChange={e=>setEditResa({...editResa,budget:e.target.value})} placeholder="Ex: 5 000€…" style={{...inp}}/></div>
+                    <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🏷 Statut</label><select value={editResa.statut||"nouveau"} onChange={e=>setEditResa({...editResa,statut:e.target.value})} style={{...inp}}>{statuts.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
+                    <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📝 Notes</label><textarea value={editResa.notes||""} onChange={e=>setEditResa({...editResa,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
                     <div style={{display:"flex",gap:8,paddingTop:4}}>
                       <button onClick={()=>{ if(!editResa.nom) return; if(editResa.id){saveResas(resas.map(r=>r.id===editResa.id?editResa:r));toast("Mis à jour");}else{saveResas([...resas,{...editResa,id:"r"+Date.now()}]);toast("Créé");} setEditResa(null); }} style={{flex:1,...gold,padding:"10px"}}>Enregistrer</button>
                       <button onClick={()=>setEditResa(null)} style={{...out}}>Annuler</button>
@@ -3626,39 +3606,39 @@ FORMAT
         {/* ══ STATS ══ */}
         {view==="stats" && (
           <div style={{flex:1,overflowY:"auto",padding:24}}>
-            <div style={{fontSize:24,fontWeight:300,color:"#1C1814",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.02em",marginBottom:24}}>Vue d'ensemble</div>
+            <div style={{fontSize:24,fontWeight:300,color:"#1B1E2B",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.02em",marginBottom:24}}>Vue d'ensemble</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:28}}>
               {[["Demandes totales",total,"#6B7280"],["Confirmées",conf,"#059669"],["En attente",att,"#D97706"],["Taux de conversion",taux+"%","#2563EB"]].map(([l,v,c])=>(
-                <div key={l} style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",padding:"16px 18px"}}>
-                  <div style={{fontSize:11,color:"#8A8178",marginBottom:8,textTransform:"uppercase",letterSpacing:".05em"}}>{l}</div>
+                <div key={l} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",boxShadow:"0 1px 4px rgba(28,24,20,.04)",padding:"16px 18px"}}>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginBottom:8,textTransform:"uppercase",letterSpacing:".05em"}}>{l}</div>
                   <div style={{fontSize:28,fontWeight:700,color:c}}>{v}</div>
                 </div>
               ))}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-              <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",padding:20}}>
-                <div style={{fontSize:13,fontWeight:600,color:"#1C1814",letterSpacing:"-0.01em",marginBottom:20}}>Par espace</div>
+              <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",boxShadow:"0 1px 4px rgba(28,24,20,.04)",padding:20}}>
+                <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B",letterSpacing:"-0.01em",marginBottom:20}}>Par espace</div>
                 {parEspace.map(e=>(
                   <div key={e.id} style={{marginBottom:16}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                      <span style={{fontSize:13,color:"#1C1814",fontWeight:500}}>{e.nom}</span>
-                      <span style={{fontSize:12,color:"#8A8178"}}>{e.c}/{e.n}</span>
+                      <span style={{fontSize:13,color:"#1B1E2B",fontWeight:500}}>{e.nom}</span>
+                      <span style={{fontSize:12,color:"#6B6E7E"}}>{e.c}/{e.n}</span>
                     </div>
-                    <div style={{height:8,background:"#F5F3EF",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{height:8,background:"#F7F2EA",borderRadius:4,overflow:"hidden"}}>
                       <div style={{height:"100%",width:Math.round(e.n/maxN*100)+"%",background:e.color,borderRadius:4}}/>
                     </div>
-                    <div style={{fontSize:11,color:"#8A8178",marginTop:4}}>{e.n>0?Math.round(e.c/e.n*100)+"% confirmés":"Aucune demande"}</div>
+                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>{e.n>0?Math.round(e.c/e.n*100)+"% confirmés":"Aucune demande"}</div>
                   </div>
                 ))}
               </div>
-              <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1",boxShadow:"0 1px 4px rgba(28,24,20,.04)",padding:20}}>
-                <div style={{fontSize:13,fontWeight:600,color:"#1C1814",letterSpacing:"-0.01em",marginBottom:16}}>Types d'événements</div>
-                {parType.length===0&&<div style={{fontSize:13,color:"#8A8178"}}>Aucune donnée</div>}
+              <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",boxShadow:"0 1px 4px rgba(28,24,20,.04)",padding:20}}>
+                <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B",letterSpacing:"-0.01em",marginBottom:16}}>Types d'événements</div>
+                {parType.length===0&&<div style={{fontSize:13,color:"#6B6E7E"}}>Aucune donnée</div>}
                 {parType.map((t,i)=>(
-                  <div key={t.t} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:i<parType.length-1?"1px solid #EAE6E1":"none"}}>
-                    <div style={{flex:1,fontSize:13,color:"#5C564F"}}>{t.t}</div>
-                    <div style={{width:60,height:6,background:"#F5F3EF",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:Math.round(t.n/parType[0].n*100)+"%",background:"#E8B86D",borderRadius:3}}/></div>
-                    <span style={{fontSize:13,fontWeight:600,color:"#1C1814",minWidth:16}}>{t.n}</span>
+                  <div key={t.t} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:i<parType.length-1?"1px solid #E6DCC9":"none"}}>
+                    <div style={{flex:1,fontSize:13,color:"#6B6E7E"}}>{t.t}</div>
+                    <div style={{width:60,height:6,background:"#F7F2EA",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:Math.round(t.n/parType[0].n*100)+"%",background:"#E8B86D",borderRadius:3}}/></div>
+                    <span style={{fontSize:13,fontWeight:600,color:"#1B1E2B",minWidth:16}}>{t.n}</span>
                   </div>
                 ))}
               </div>
@@ -3668,21 +3648,21 @@ FORMAT
 
                 {/* ══ SOURCES IA ══ */}
         {view==="sources" && (
-          <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#F5F3EF"}}>
+          <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#F7F2EA"}}>
 
             {/* ── Header fixe — titre + stats ── */}
-            <div style={{padding:"24px 28px 16px",flexShrink:0,borderBottom:"1px solid #EAE6E1",background:"#F5F3EF"}}>
-              <div style={{fontSize:22,fontWeight:300,color:"#1C1814",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.02em"}}>Sources IA</div>
-              <div style={{fontSize:12,color:"#8A8178",marginTop:4,marginBottom:14}}>Tout ce que vous écrivez ici est transmis à ARCHANGE à chaque génération.</div>
-              <div style={{display:"flex",background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",overflow:"hidden"}}>
+            <div style={{padding:"24px 28px 16px",flexShrink:0,borderBottom:"1px solid #E6DCC9",background:"#F7F2EA"}}>
+              <div style={{fontSize:22,fontWeight:300,color:"#1B1E2B",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.02em"}}>Sources IA</div>
+              <div style={{fontSize:12,color:"#6B6E7E",marginTop:4,marginBottom:14}}>Tout ce que vous écrivez ici est transmis à ARCHANGE à chaque génération.</div>
+              <div style={{display:"flex",background:"#FFFFFF",borderRadius:10,border:"1px solid #E6DCC9",overflow:"hidden"}}>
                 {[
                   ["Menus", menusCtx?"Actif":"—","🍽️"],
                   ["Conditions", conditionsCtx?"Actif":"—","📜"],
                   ["Ton & Règles", tonCtx?"Actif":"—","✏️"],
                   ["Liens web", Object.values(linksFetched).filter(Boolean).length||"—","🔗"],
                 ].map(([l,v,icon],i,arr)=>(
-                  <div key={String(l)} style={{flex:1,padding:"10px 12px",borderRight:i<arr.length-1?"1px solid #EAE6E1":"none",textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#8A8178",fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:3}}>{icon} {l}</div>
+                  <div key={String(l)} style={{flex:1,padding:"10px 12px",borderRight:i<arr.length-1?"1px solid #E6DCC9":"none",textAlign:"center"}}>
+                    <div style={{fontSize:9,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:3}}>{icon} {l}</div>
                     <div style={{fontSize:13,fontWeight:600,color:v==="—"?"#C0BAB2":"#1C1814"}}>{v}</div>
                   </div>
                 ))}
@@ -3693,35 +3673,35 @@ FORMAT
             <div style={{flex:1,overflowY:"scroll",padding:"16px 28px 28px",display:"flex",flexDirection:"column",gap:12,minHeight:0}}>
 
             {/* ── Section Établissement ── */}
-            <div style={{background:"#FFFFFF",borderRadius:12,border:"2px solid #C9A96E"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FDF8EF",borderBottom:srcSections["etablissement"]?"1px solid #EAE6E1":"none",cursor:"pointer",borderRadius:srcSections["etablissement"]?"12px 12px 0 0":"12px"}} onClick={()=>setSrcSections(s=>({...s,etablissement:!s["etablissement"]}))}>
+            <div style={{background:"#FFFFFF",borderRadius:12,border:"2px solid #B89456"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FDF8EF",borderBottom:srcSections["etablissement"]?"1px solid #E6DCC9":"none",cursor:"pointer",borderRadius:srcSections["etablissement"]?"12px 12px 0 0":"12px"}} onClick={()=>setSrcSections(s=>({...s,etablissement:!s["etablissement"]}))}>
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:16}}>🏠</span>
-                    <span style={{fontSize:13,fontWeight:700,color:"#1C1814"}}>Identité de l'établissement</span>
+                    <span style={{fontSize:13,fontWeight:700,color:"#1B1E2B"}}>Identité de l'établissement</span>
                     <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#FEF3C7",color:"#92400E",fontWeight:600}}>Multi-compte</span>
                   </div>
-                  <div style={{fontSize:11,color:"#8A8178",marginTop:3,paddingLeft:24}}>Nom, adresse, email — personnalise toute l'IA et la sidebar</div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Nom, adresse, email — personnalise toute l'IA et la sidebar</div>
                 </div>
-                <span style={{fontSize:12,color:"#8A8178"}}>{srcSections["etablissement"]?"▲":"▼"}</span>
+                <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["etablissement"]?"▲":"▼"}</span>
               </div>
               {srcSections["etablissement"]&&(
                 <div style={{padding:20,display:"flex",flexDirection:"column",gap:14}}>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:"#5C564F",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>🏷 Nom de l'établissement</label>
+                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>🏷 Nom de l'établissement</label>
                     <input value={nomEtab} onChange={e=>setNomEtab(e.target.value)} onBlur={()=>saveNomEtab(nomEtab)} placeholder="Ex : Brasserie RÊVA, Le Comptoir du Port…" style={{...inp,fontSize:14,fontWeight:600}}/>
-                    <div style={{fontSize:11,color:"#A09890",marginTop:4}}>Utilisé dans tous les prompts IA et la signature email</div>
+                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>Utilisé dans tous les prompts IA et la signature email</div>
                   </div>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:"#5C564F",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📍 Adresse</label>
+                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📍 Adresse</label>
                     <input value={adresseEtab} onChange={e=>setAdresseEtab(e.target.value)} onBlur={()=>saveAdresseEtab(adresseEtab)} placeholder="Ex : 133 avenue de France, 75013 Paris" style={{...inp}}/>
                   </div>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:"#5C564F",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📧 Email de contact</label>
+                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📧 Email de contact</label>
                     <input value={emailEtab} onChange={e=>setEmailEtab(e.target.value)} onBlur={()=>saveEmailEtab(emailEtab)} placeholder="Ex : contact@brasserie-reva.fr" style={{...inp}}/>
                   </div>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:"#5C564F",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📞 Téléphone</label>
+                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📞 Téléphone</label>
                     <input value={telEtab} onChange={e=>setTelEtab(e.target.value)} onBlur={()=>saveTelEtab(telEtab)} placeholder="Ex : +33 1 23 45 67 89" style={{...inp}}/>
                   </div>
                 </div>
@@ -3729,22 +3709,22 @@ FORMAT
             </div>
 
             {/* ── Section Espaces dynamiques ── */}
-            <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#F7F5F1",borderBottom:srcSections["espacesDyn"]?"1px solid #EAE6E1":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,espacesDyn:!s["espacesDyn"]}))}>
+            <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#EFE7DA",borderBottom:srcSections["espacesDyn"]?"1px solid #E6DCC9":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,espacesDyn:!s["espacesDyn"]}))}>
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:16}}>🏛️</span>
-                    <span style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>Espaces de l'établissement</span>
+                    <span style={{fontSize:13,fontWeight:600,color:"#1B1E2B"}}>Espaces de l'établissement</span>
                     <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#D1FAE5",color:"#065F46",fontWeight:600}}>{espacesDyn.length} espace{espacesDyn.length>1?"s":""}</span>
                   </div>
-                  <div style={{fontSize:11,color:"#8A8178",marginTop:3,paddingLeft:24}}>Salles, capacités, descriptions — remplacent les espaces codés en dur</div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Salles, capacités, descriptions — remplacent les espaces codés en dur</div>
                 </div>
-                <span style={{fontSize:12,color:"#8A8178"}}>{srcSections["espacesDyn"]?"▲":"▼"}</span>
+                <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["espacesDyn"]?"▲":"▼"}</span>
               </div>
               {srcSections["espacesDyn"]&&(
                 <div style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
                   {espacesDyn.map((esp, idx) => (
-                    <div key={esp.id} style={{padding:"14px 16px",background:"#F9F8F6",borderRadius:10,border:"1px solid #EAE6E1"}}>
+                    <div key={esp.id} style={{padding:"14px 16px",background:"#F7F2EA",borderRadius:10,border:"1px solid #E6DCC9"}}>
                       {/* Ligne 1 : couleur + nom + supprimer */}
                       <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:10}}>
                         <input type="color" value={esp.color} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],color:e.target.value}; saveEspacesDyn(u);}} style={{width:32,height:32,borderRadius:6,border:"none",cursor:"pointer",flexShrink:0}}/>
@@ -3757,13 +3737,13 @@ FORMAT
                       {/* Ligne 2 : capacités assis / debout */}
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                         {/* Assis */}
-                        <div style={{background:"#FFFFFF",borderRadius:8,padding:"10px 12px",border:"1px solid #EAE6E1"}}>
-                          <div style={{fontSize:11,fontWeight:600,color:"#5C564F",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+                        <div style={{background:"#FFFFFF",borderRadius:8,padding:"10px 12px",border:"1px solid #E6DCC9"}}>
+                          <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
                             🪑 Assis
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6}}>
                             <div style={{flex:1}}>
-                              <div style={{fontSize:10,color:"#A09890",marginBottom:3}}>Min</div>
+                              <div style={{fontSize:10,color:"#6B6E7E",marginBottom:3}}>Min</div>
                               <input
                                 type="number" min="0"
                                 value={esp.assisMin}
@@ -3775,7 +3755,7 @@ FORMAT
                             </div>
                             <span style={{color:"#C0BAB2",fontSize:13,marginTop:16}}>→</span>
                             <div style={{flex:1}}>
-                              <div style={{fontSize:10,color:"#A09890",marginBottom:3}}>Max</div>
+                              <div style={{fontSize:10,color:"#6B6E7E",marginBottom:3}}>Max</div>
                               <input
                                 type="number" min="0"
                                 value={esp.assisMax}
@@ -3785,18 +3765,18 @@ FORMAT
                                 style={{...inp,textAlign:"center",padding:"6px 8px"}}
                               />
                             </div>
-                            <span style={{fontSize:10,color:"#A09890",marginTop:16,flexShrink:0}}>pers.</span>
+                            <span style={{fontSize:10,color:"#6B6E7E",marginTop:16,flexShrink:0}}>pers.</span>
                           </div>
                         </div>
 
                         {/* Debout */}
-                        <div style={{background:"#FFFFFF",borderRadius:8,padding:"10px 12px",border:"1px solid #EAE6E1"}}>
-                          <div style={{fontSize:11,fontWeight:600,color:"#5C564F",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+                        <div style={{background:"#FFFFFF",borderRadius:8,padding:"10px 12px",border:"1px solid #E6DCC9"}}>
+                          <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
                             🥂 Debout / Cocktail
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6}}>
                             <div style={{flex:1}}>
-                              <div style={{fontSize:10,color:"#A09890",marginBottom:3}}>Min</div>
+                              <div style={{fontSize:10,color:"#6B6E7E",marginBottom:3}}>Min</div>
                               <input
                                 type="number" min="0"
                                 value={esp.deboutMin}
@@ -3808,7 +3788,7 @@ FORMAT
                             </div>
                             <span style={{color:"#C0BAB2",fontSize:13,marginTop:16}}>→</span>
                             <div style={{flex:1}}>
-                              <div style={{fontSize:10,color:"#A09890",marginBottom:3}}>Max</div>
+                              <div style={{fontSize:10,color:"#6B6E7E",marginBottom:3}}>Max</div>
                               <input
                                 type="number" min="0"
                                 value={esp.deboutMax}
@@ -3818,7 +3798,7 @@ FORMAT
                                 style={{...inp,textAlign:"center",padding:"6px 8px"}}
                               />
                             </div>
-                            <span style={{fontSize:10,color:"#A09890",marginTop:16,flexShrink:0}}>pers.</span>
+                            <span style={{fontSize:10,color:"#6B6E7E",marginTop:16,flexShrink:0}}>pers.</span>
                           </div>
                         </div>
                       </div>
@@ -3827,13 +3807,13 @@ FORMAT
                       <input value={esp.description} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],description:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Description courte (vue, surface, ambiance, équipements…)" style={{...inp,width:"100%"}}/>
                     </div>
                   ))}
-                  <button onClick={()=>saveEspacesDyn([...espacesDyn,{id:"esp_"+Date.now(),nom:"Nouvel espace",color:"#8B5CF6",assisMin:"",assisMax:"",deboutMin:"",deboutMax:"",description:""}])} style={{padding:"10px",borderRadius:8,border:"2px dashed #EAE6E1",background:"transparent",color:"#8A8178",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  <button onClick={()=>saveEspacesDyn([...espacesDyn,{id:"esp_"+Date.now(),nom:"Nouvel espace",color:"#8B5CF6",assisMin:"",assisMax:"",deboutMin:"",deboutMax:"",description:""}])} style={{padding:"10px",borderRadius:8,border:"2px dashed #E6DCC9",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                     + Ajouter un espace
                   </button>
 
                   {/* Notes complémentaires — remplace l'ancien textarea "Espaces & Capacités" */}
                   <div style={{marginTop:4}}>
-                    <div style={{fontSize:11,fontWeight:600,color:"#5C564F",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📝 Notes complémentaires sur les espaces</div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📝 Notes complémentaires sur les espaces</div>
                     <textarea
                       value={espacesCtx}
                       onChange={e=>setEspacesCtx(e.target.value)}
@@ -3842,10 +3822,10 @@ FORMAT
                       rows={5}
                       style={{...inp,lineHeight:1.75,resize:"vertical",width:"100%",fontFamily:"inherit",fontSize:12}}
                     />
-                    <div style={{fontSize:11,color:"#A09890",marginTop:4}}>Ces informations complètent les espaces ci-dessus — équipements, accès, contraintes non structurées.</div>
+                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>Ces informations complètent les espaces ci-dessus — équipements, accès, contraintes non structurées.</div>
                   </div>
 
-                  <div style={{fontSize:11,color:"#A09890",padding:"8px 12px",background:"#F5F3EF",borderRadius:8}}>
+                  <div style={{fontSize:11,color:"#6B6E7E",padding:"8px 12px",background:"#F7F2EA",borderRadius:8}}>
                     💡 Les espaces ci-dessus remplacent les salles codées en dur. L'IA les utilisera pour les attributions et les réponses.
                   </div>
                 </div>
@@ -3858,17 +3838,17 @@ FORMAT
               ["conditions", "📜", "Conditions & Politique", "Politique d'annulation, acomptes, délais de confirmation, horaires d'accès…",       conditionsCtx, saveConditionsCtx],
               ["ton",        "✏️", "Règles & Ton IA",        "Ex: Toujours proposer une visite. Ne pas mentionner les prix avant une demande de devis. Signature personnalisée…", tonCtx, saveTonCtx],
             ] as [string, string, string, string, string, (v:string)=>void][]).map(([key, icon, title, ph, val, save]) => (
-              <div key={key} style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#F7F5F1",borderBottom:srcSections[key]?"1px solid #EAE6E1":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,[key]:!s[key]}))}>
+              <div key={key} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#EFE7DA",borderBottom:srcSections[key]?"1px solid #E6DCC9":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,[key]:!s[key]}))}>
                   <div>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{fontSize:16}}>{icon}</span>
-                      <span style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>{title}</span>
+                      <span style={{fontSize:13,fontWeight:600,color:"#1B1E2B"}}>{title}</span>
                       {val&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#D1FAE5",color:"#065F46",fontWeight:600}}>Actif</span>}
                     </div>
-                    <div style={{fontSize:11,color:"#8A8178",marginTop:3,paddingLeft:24}}>{ph.slice(0,60)}…</div>
+                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>{ph.slice(0,60)}…</div>
                   </div>
-                  <span style={{fontSize:12,color:"#8A8178",flexShrink:0,marginLeft:12}}>{srcSections[key]?"▲":"▼"}</span>
+                  <span style={{fontSize:12,color:"#6B6E7E",flexShrink:0,marginLeft:12}}>{srcSections[key]?"▲":"▼"}</span>
                 </div>
                 {srcSections[key]&&(
                   <div style={{padding:20,display:"flex",flexDirection:"column",gap:10}}>
@@ -3880,7 +3860,7 @@ FORMAT
                       style={{...inp,lineHeight:1.75,resize:"vertical",width:"100%",fontFamily:"inherit"}}
                     />
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span style={{fontSize:11,color:"#A09890"}}>{val.length} caractères</span>
+                      <span style={{fontSize:11,color:"#6B6E7E"}}>{val.length} caractères</span>
                       {val&&<button onClick={()=>save("")} style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}}>Vider ×</button>}
                     </div>
                   </div>
@@ -3889,13 +3869,13 @@ FORMAT
             ))}
 
             {/* Liens web — section existante conservée */}
-            <div style={{background:"#FFFFFF",borderRadius:12,border:"1px solid #EAE6E1"}}>
-              <button onClick={()=>setSrcSections(s=>({...s,liens:!s.liens}))} style={{width:"100%",padding:"14px 20px",background:"#F7F5F1",border:"none",borderBottom:srcSections.liens?"1px solid #EAE6E1":"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left"}}>
+            <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9"}}>
+              <button onClick={()=>setSrcSections(s=>({...s,liens:!s.liens}))} style={{width:"100%",padding:"14px 20px",background:"#EFE7DA",border:"none",borderBottom:srcSections.liens?"1px solid #E6DCC9":"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left"}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:600,color:"#1C1814"}}>🔗 Liens web analysés</div>
-                  <div style={{fontSize:11,color:"#8A8178",marginTop:2}}>Site internet, Instagram, Facebook — ARCHANGE analyse le contenu.</div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B"}}>🔗 Liens web analysés</div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:2}}>Site internet, Instagram, Facebook — ARCHANGE analyse le contenu.</div>
                 </div>
-                <span style={{fontSize:12,color:"#8A8178"}}>{srcSections.liens?"▲":"▼"}</span>
+                <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections.liens?"▲":"▼"}</span>
               </button>
               {srcSections.liens&&(
                 <div style={{padding:20,display:"flex",flexDirection:"column",gap:16}}>
@@ -3904,7 +3884,7 @@ FORMAT
                       <label style={{fontSize:11,color:"#7A736A",display:"block",marginBottom:6,fontWeight:600,letterSpacing:"0.04em",textTransform:"uppercase"}}>{icon} {label}</label>
                       <div style={{display:"flex",gap:8}}>
                         <input value={links[key]||""} onChange={e=>setLinks({...links,[key]:e.target.value})} onBlur={()=>saveLinks(links)} placeholder={ph} style={{...inp,flex:1}}/>
-                        <button onClick={()=>fetchLink(links[key],key)} disabled={!links[key]||fetchingLink===key} style={{padding:"9px 16px",borderRadius:8,border:"none",background:linksFetched[key]?"#E8F5EE":!links[key]||fetchingLink===key?"#E8E4DE":"#C9A96E",color:linksFetched[key]?"#2D6A4F":!links[key]||fetchingLink===key?"#A09890":"#1C1814",fontSize:12,fontWeight:600,cursor:links[key]&&fetchingLink!==key?"pointer":"default",display:"flex",alignItems:"center",gap:6,flexShrink:0,whiteSpace:"nowrap"}}>
+                        <button onClick={()=>fetchLink(links[key],key)} disabled={!links[key]||fetchingLink===key} style={{padding:"9px 16px",borderRadius:8,border:"none",background:linksFetched[key]?"#E8F5EE":!links[key]||fetchingLink===key?"#E8E4DE":"#B89456",color:linksFetched[key]?"#2D6A4F":!links[key]||fetchingLink===key?"#A09890":"#1C1814",fontSize:12,fontWeight:600,cursor:links[key]&&fetchingLink!==key?"pointer":"default",display:"flex",alignItems:"center",gap:6,flexShrink:0,whiteSpace:"nowrap"}}>
                           {fetchingLink===key?<><Spin s={12}/> Analyse…</>:linksFetched[key]?"✓ Analysé":"Analyser"}
                         </button>
                       </div>
@@ -3932,25 +3912,25 @@ FORMAT
       {radarResaModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99998,padding:24}}>
           <div style={{background:"#FFFFFF",borderRadius:16,width:"min(540px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,.3)"}}>
-            <div style={{padding:"18px 22px",borderBottom:"1px solid #EAE6E1",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-              <div style={{fontSize:15,fontWeight:600,color:"#1C1814"}}>📅 Créer la réservation</div>
-              <button onClick={()=>setRadarResaModal(null)} style={{width:30,height:30,borderRadius:7,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+            <div style={{padding:"18px 22px",borderBottom:"1px solid #E6DCC9",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+              <div style={{fontSize:15,fontWeight:600,color:"#1B1E2B"}}>📅 Créer la réservation</div>
+              <button onClick={()=>setRadarResaModal(null)} style={{width:30,height:30,borderRadius:7,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:10}}>
               <div style={{background:"#FEF9EE",borderRadius:9,padding:"9px 13px",fontSize:12,color:"#854F0B"}}>Données pré-remplies par ARCHANGE — vérifiez avant de valider.</div>
               {[["nom","👤 Nom"],["email","📧 Email"],["telephone","📞 Téléphone"],["entreprise","🏢 Entreprise"],["nombrePersonnes","👥 Nb personnes"],["budget","💰 Budget"]].map(([k,l])=>(
-                <div key={k}><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>{l}</label><input value={radarResaModal[k]||""} onChange={e=>setRadarResaModal({...radarResaModal,[k]:e.target.value})} style={{...inp}}/></div>
+                <div key={k}><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>{l}</label><input value={radarResaModal[k]||""} onChange={e=>setRadarResaModal({...radarResaModal,[k]:e.target.value})} style={{...inp}}/></div>
               ))}
-              <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>📅 Date</label><DatePicker value={radarResaModal.dateDebut||""} onChange={v=>setRadarResaModal({...radarResaModal,dateDebut:v})}/></div>
+              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>📅 Date</label><DatePicker value={radarResaModal.dateDebut||""} onChange={v=>setRadarResaModal({...radarResaModal,dateDebut:v})}/></div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>🕐 Heure début</label><TimePicker value={radarResaModal.heureDebut||""} onChange={v=>setRadarResaModal({...radarResaModal,heureDebut:v})} placeholder="Heure début"/></div>
-                <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>🕕 Heure fin</label><TimePicker value={radarResaModal.heureFin||""} onChange={v=>setRadarResaModal({...radarResaModal,heureFin:v})} placeholder="Heure fin"/></div>
+                <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>🕐 Heure début</label><TimePicker value={radarResaModal.heureDebut||""} onChange={v=>setRadarResaModal({...radarResaModal,heureDebut:v})} placeholder="Heure début"/></div>
+                <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>🕕 Heure fin</label><TimePicker value={radarResaModal.heureFin||""} onChange={v=>setRadarResaModal({...radarResaModal,heureFin:v})} placeholder="Heure fin"/></div>
               </div>
-              <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>🎉 Type d'événement</label><input value={radarResaModal.typeEvenement||""} onChange={e=>setRadarResaModal({...radarResaModal,typeEvenement:e.target.value})} style={{...inp}}/></div>
-              <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>📍 Espace</label><select value={radarResaModal.espaceId||espacesDyn[0]?.id||""} onChange={e=>setRadarResaModal({...radarResaModal,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
-              <div><label style={{fontSize:11,color:"#8A8178",display:"block",marginBottom:3,fontWeight:500}}>📝 Notes</label><textarea value={radarResaModal.notes||""} onChange={e=>setRadarResaModal({...radarResaModal,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
+              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>🎉 Type d'événement</label><input value={radarResaModal.typeEvenement||""} onChange={e=>setRadarResaModal({...radarResaModal,typeEvenement:e.target.value})} style={{...inp}}/></div>
+              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>📍 Espace</label><select value={radarResaModal.espaceId||espacesDyn[0]?.id||""} onChange={e=>setRadarResaModal({...radarResaModal,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
+              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>📝 Notes</label><textarea value={radarResaModal.notes||""} onChange={e=>setRadarResaModal({...radarResaModal,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
             </div>
-            <div style={{padding:"14px 20px",borderTop:"1px solid #EAE6E1",display:"flex",gap:8,flexShrink:0}}>
+            <div style={{padding:"14px 20px",borderTop:"1px solid #E6DCC9",display:"flex",gap:8,flexShrink:0}}>
               <button onClick={()=>{
                 if(!radarResaModal.nom?.trim()){toast("Le nom est requis","err");return;}
                 const newResa={...EMPTY_RESA,...radarResaModal,id:Date.now()};
@@ -3969,22 +3949,22 @@ FORMAT
       {radarReplyModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99998,padding:24}}>
           <div style={{background:"#FFFFFF",borderRadius:16,width:"min(600px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,.3)"}}>
-            <div style={{padding:"18px 22px",borderBottom:"1px solid #EAE6E1",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+            <div style={{padding:"18px 22px",borderBottom:"1px solid #E6DCC9",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
               <div>
-                <div style={{fontSize:15,fontWeight:600,color:"#1C1814"}}>✨ Réponse ARCHANGE</div>
-                <div style={{fontSize:12,color:"#8A8178",marginTop:2}}>{radarReplyModal.m?.from}</div>
+                <div style={{fontSize:15,fontWeight:600,color:"#1B1E2B"}}>✨ Réponse ARCHANGE</div>
+                <div style={{fontSize:12,color:"#6B6E7E",marginTop:2}}>{radarReplyModal.m?.from}</div>
               </div>
-              <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} style={{width:30,height:30,borderRadius:7,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} style={{width:30,height:30,borderRadius:7,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:20}}>
               {radarReplyLoading
-                ? <div style={{display:"flex",alignItems:"center",gap:10,color:"#8A8178",padding:"40px 0",justifyContent:"center"}}><Spin s={16}/> Génération en cours…</div>
+                ? <div style={{display:"flex",alignItems:"center",gap:10,color:"#6B6E7E",padding:"40px 0",justifyContent:"center"}}><Spin s={16}/> Génération en cours…</div>
                 : radarReplyText
                   ? <textarea value={radarReplyText} onChange={e=>setRadarReplyText(e.target.value)} rows={14} style={{...inp,lineHeight:1.75,resize:"vertical",fontFamily:"inherit"}}/>
-                  : <div style={{color:"#A09890",textAlign:"center",padding:"40px 0",fontSize:13}}>La réponse apparaîtra ici…</div>
+                  : <div style={{color:"#6B6E7E",textAlign:"center",padding:"40px 0",fontSize:13}}>La réponse apparaîtra ici…</div>
               }
             </div>
-            <div style={{padding:"14px 20px",borderTop:"1px solid #EAE6E1",display:"flex",gap:8,flexShrink:0}}>
+            <div style={{padding:"14px 20px",borderTop:"1px solid #E6DCC9",display:"flex",gap:8,flexShrink:0}}>
               <button onClick={()=>{navigator.clipboard.writeText(radarReplyText);toast("Copié !");}} disabled={!radarReplyText||radarReplyLoading} style={{flex:1,...out,padding:"10px",opacity:!radarReplyText||radarReplyLoading?0.5:1}}>Copier</button>
               <button onClick={()=>{if(radarReplyModal?.m) {setDrafted(prev=>new Set([...prev,radarReplyModal.m.id]));} setRadarReplyModal(null);setRadarReplyText("");toast("Brouillon marqué !");}} disabled={!radarReplyText||radarReplyLoading} style={{flex:1,...gold,padding:"10px",opacity:!radarReplyText||radarReplyLoading?0.5:1}}>Marquer brouillon</button>
               <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} style={{...out}}>Fermer</button>
@@ -4007,7 +3987,7 @@ FORMAT
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div style={{gridColumn:"1/-1"}}>
                   <label style={{fontSize:11,color:newEventErrors.nom?"#DC2626":"#8A8178",display:"block",marginBottom:4,fontWeight:600}}>👤 Prénom / Nom *</label>
-                  <input value={newEvent.nom||""} onChange={e=>setNewEvent({...newEvent,nom:e.target.value})} style={{...inpLight,borderColor:newEventErrors.nom?"#FCA5A5":"#DDD8D0"}} placeholder="Ex: Jean Dupont"/>
+                  <input value={newEvent.nom||""} onChange={e=>setNewEvent({...newEvent,nom:e.target.value})} style={{...inpLight,borderColor:newEventErrors.nom?"#FCA5A5":"#E6DCC9"}} placeholder="Ex: Jean Dupont"/>
                   {newEventErrors.nom&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {newEventErrors.nom}</div>}
                 </div>
                 <div>
@@ -4035,7 +4015,7 @@ FORMAT
                 <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>📝 Notes</label><textarea value={newEvent.notes||""} onChange={e=>setNewEvent({...newEvent,notes:e.target.value})} rows={3} style={{...inpLight,resize:"none",lineHeight:1.6}}/></div>
               </div>
             </div>
-            <div style={{padding:"16px 24px",borderTop:"1px solid #EAE6E1",display:"flex",gap:8,flexShrink:0}}>
+            <div style={{padding:"16px 24px",borderTop:"1px solid #E6DCC9",display:"flex",gap:8,flexShrink:0}}>
               <button onClick={()=>{
                 const errs:any={};
                 if(!newEvent.nom?.trim()) errs.nom="Le prénom/nom est obligatoire";
@@ -4060,12 +4040,12 @@ FORMAT
           <div style={{position:"fixed",inset:0,background:"rgba(28,24,20,0.6)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
             <div style={{background:"#FFFFFF",borderRadius:16,width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,.25)"}}>
               {/* Header */}
-              <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #EAE6E1"}}>
+              <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #E6DCC9"}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
                   <span style={{fontSize:20}}>⚡</span>
-                  <div style={{fontSize:15,fontWeight:700,color:"#1C1814"}}>Modifications détectées</div>
+                  <div style={{fontSize:15,fontWeight:700,color:"#1B1E2B"}}>Modifications détectées</div>
                 </div>
-                <div style={{fontSize:12,color:"#8A8178"}}>
+                <div style={{fontSize:12,color:"#6B6E7E"}}>
                   ARCHANGE a détecté des changements dans l'email de <strong>{resa.nom || "ce contact"}</strong>. Validez les modifications à appliquer.
                 </div>
               </div>
@@ -4077,31 +4057,31 @@ FORMAT
                     ...prev,
                     suggestions: prev.suggestions.map((x,j) => j===i ? {...x, selectionnee:!x.selectionnee} : x)
                   } : null)}
-                  style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",borderRadius:10,border:`1.5px solid ${s.selectionnee?"#C9A96E":"#E8E4DF"}`,background:s.selectionnee?"#FFFBF0":"#F9F8F6",cursor:"pointer",transition:"all .15s"}}>
+                  style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",borderRadius:10,border:`1.5px solid ${s.selectionnee?"#B89456":"#E8E4DF"}`,background:s.selectionnee?"#FFFBF0":"#F9F8F6",cursor:"pointer",transition:"all .15s"}}>
                     {/* Checkbox */}
-                    <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${s.selectionnee?"#C9A96E":"#C8C0B4"}`,background:s.selectionnee?"#C9A96E":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
+                    <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${s.selectionnee?"#B89456":"#C8C0B4"}`,background:s.selectionnee?"#B89456":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
                       {s.selectionnee&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}
                     </div>
                     {/* Contenu */}
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:"#1C1814",marginBottom:4}}>{s.label}</div>
+                      <div style={{fontSize:12,fontWeight:600,color:"#1B1E2B",marginBottom:4}}>{s.label}</div>
                       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                        <span style={{fontSize:12,color:"#8A8178",background:"#F0EDE8",padding:"2px 8px",borderRadius:6,textDecoration:"line-through"}}>
+                        <span style={{fontSize:12,color:"#6B6E7E",background:"#EFE7DA",padding:"2px 8px",borderRadius:6,textDecoration:"line-through"}}>
                           {s.ancienne !== null && s.ancienne !== "" ? String(s.ancienne) : "(vide)"}
                         </span>
-                        <span style={{fontSize:12,color:"#8A8178"}}>→</span>
-                        <span style={{fontSize:12,color:"#1C1814",fontWeight:600,background:s.selectionnee?"#FEF3C7":"#F0EDE8",padding:"2px 8px",borderRadius:6}}>
+                        <span style={{fontSize:12,color:"#6B6E7E"}}>→</span>
+                        <span style={{fontSize:12,color:"#1B1E2B",fontWeight:600,background:s.selectionnee?"#FEF3C7":"#F0EDE8",padding:"2px 8px",borderRadius:6}}>
                           {s.nouvelle !== null && s.nouvelle !== "" ? String(s.nouvelle) : "(vide)"}
                         </span>
                       </div>
-                      <div style={{fontSize:11,color:"#A09890",marginTop:4,fontStyle:"italic"}}>{s.raison}</div>
+                      <div style={{fontSize:11,color:"#6B6E7E",marginTop:4,fontStyle:"italic"}}>{s.raison}</div>
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Actions */}
-              <div style={{padding:"16px 24px",borderTop:"1px solid #EAE6E1",display:"flex",gap:10}}>
+              <div style={{padding:"16px 24px",borderTop:"1px solid #E6DCC9",display:"flex",gap:10}}>
                 <button
                   disabled={nbSel===0}
                   onClick={()=>{
@@ -4117,10 +4097,10 @@ FORMAT
                     setPendingSuggestions(null);
                     toast(`${selected.length} modification${selected.length>1?"s":""} appliquée${selected.length>1?"s":""}  ✓`);
                   }}
-                  style={{flex:2,padding:"11px",borderRadius:8,border:"none",background:nbSel>0?"#C9A96E":"#E8E4DF",color:nbSel>0?"#1C1814":"#A09890",fontSize:13,fontWeight:600,cursor:nbSel>0?"pointer":"not-allowed",transition:"all .15s"}}>
+                  style={{flex:2,padding:"11px",borderRadius:8,border:"none",background:nbSel>0?"#B89456":"#E8E4DF",color:nbSel>0?"#1C1814":"#A09890",fontSize:13,fontWeight:600,cursor:nbSel>0?"pointer":"not-allowed",transition:"all .15s"}}>
                   Appliquer {nbSel>0?`(${nbSel})`:""}
                 </button>
-                <button onClick={()=>setPendingSuggestions(null)} style={{flex:1,padding:"11px",borderRadius:8,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",fontSize:13,cursor:"pointer"}}>
+                <button onClick={()=>setPendingSuggestions(null)} style={{flex:1,padding:"11px",borderRadius:8,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",fontSize:13,cursor:"pointer"}}>
                   Ignorer tout
                 </button>
               </div>
@@ -4134,31 +4114,31 @@ FORMAT
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:9980,display:"flex",alignItems:"flex-end",justifyContent:"flex-end",padding:"0 24px 24px"}}>
           <div style={{background:"#FFFFFF",borderRadius:16,boxShadow:"0 24px 80px rgba(0,0,0,.25)",width:540,maxHeight:"80vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
             {/* En-tête */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",background:"#1C1814",borderRadius:"16px 16px 0 0"}}>
-              <span style={{fontSize:13,fontWeight:700,color:"#C9A96E",letterSpacing:"0.06em"}}>✏ Nouveau message</span>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",background:"#1B1E2B",borderRadius:"16px 16px 0 0"}}>
+              <span style={{fontSize:13,fontWeight:700,color:"#B89456",letterSpacing:"0.06em"}}>✏ Nouveau message</span>
               <button onClick={()=>{if((composeBody.trim()||composeTo.trim())&&!window.confirm("Fermer sans sauvegarder ?"))return;setShowCompose(false);}} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:18}}>×</button>
             </div>
             {/* Champs */}
-            <div style={{padding:"12px 16px",borderBottom:"1px solid #EAE6E1"}}>
-              <input value={composeTo} onChange={e=>setComposeTo(e.target.value)} placeholder="À : destinataire@exemple.com" style={{width:"100%",border:"none",borderBottom:"1px solid #EAE6E1",outline:"none",fontSize:13,color:"#1C1814",padding:"6px 0",marginBottom:8,background:"transparent"}}/>
-              <input value={composeSubject} onChange={e=>setComposeSubject(e.target.value)} placeholder="Objet" style={{width:"100%",border:"none",borderBottom:"1px solid #EAE6E1",outline:"none",fontSize:13,color:"#1C1814",padding:"6px 0",background:"transparent"}}/>
+            <div style={{padding:"12px 16px",borderBottom:"1px solid #E6DCC9"}}>
+              <input value={composeTo} onChange={e=>setComposeTo(e.target.value)} placeholder="À : destinataire@exemple.com" style={{width:"100%",border:"none",borderBottom:"1px solid #E6DCC9",outline:"none",fontSize:13,color:"#1B1E2B",padding:"6px 0",marginBottom:8,background:"transparent"}}/>
+              <input value={composeSubject} onChange={e=>setComposeSubject(e.target.value)} placeholder="Objet" style={{width:"100%",border:"none",borderBottom:"1px solid #E6DCC9",outline:"none",fontSize:13,color:"#1B1E2B",padding:"6px 0",background:"transparent"}}/>
             </div>
             {/* Corps */}
             <textarea
               value={composeBody}
               onChange={e=>setComposeBody(e.target.value)}
               placeholder="Rédigez votre message…"
-              style={{flex:1,padding:"14px 16px",fontSize:13,color:"#1C1814",lineHeight:1.8,border:"none",outline:"none",resize:"none",fontFamily:"inherit",minHeight:220}}
+              style={{flex:1,padding:"14px 16px",fontSize:13,color:"#1B1E2B",lineHeight:1.8,border:"none",outline:"none",resize:"none",fontFamily:"inherit",minHeight:220}}
               autoFocus
             />
             {/* Actions */}
-            <div style={{display:"flex",gap:8,padding:"10px 16px",borderTop:"1px solid #EAE6E1",background:"#F9F8F6"}}>
-              <button onClick={sendNewMail} disabled={composeSending||!composeTo.trim()||!composeSubject.trim()||!composeBody.trim()} style={{padding:"9px 22px",borderRadius:8,border:"none",background:"#1C1814",color:"#C9A96E",fontSize:13,fontWeight:700,cursor:composeSending?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:composeSending||!composeTo.trim()||!composeSubject.trim()||!composeBody.trim()?0.5:1}}>
+            <div style={{display:"flex",gap:8,padding:"10px 16px",borderTop:"1px solid #E6DCC9",background:"#F7F2EA"}}>
+              <button onClick={sendNewMail} disabled={composeSending||!composeTo.trim()||!composeSubject.trim()||!composeBody.trim()} style={{padding:"9px 22px",borderRadius:8,border:"none",background:"#1B1E2B",color:"#B89456",fontSize:13,fontWeight:700,cursor:composeSending?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:composeSending||!composeTo.trim()||!composeSubject.trim()||!composeBody.trim()?0.5:1}}>
                 {composeSending?<><Spin s={12}/> Envoi…</>:"✉ Envoyer"}
               </button>
-              <button onClick={saveDraft} style={{padding:"9px 16px",borderRadius:8,border:"1px solid #EAE6E1",background:"transparent",color:"#5C564F",fontSize:12,cursor:"pointer"}}>Brouillon</button>
+              <button onClick={saveDraft} style={{padding:"9px 16px",borderRadius:8,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer"}}>Brouillon</button>
               <div style={{flex:1}}/>
-              <button onClick={()=>setShowCompose(false)} style={{padding:"9px 12px",borderRadius:8,border:"none",background:"transparent",color:"#8A8178",fontSize:12,cursor:"pointer"}}>Annuler</button>
+              <button onClick={()=>setShowCompose(false)} style={{padding:"9px 12px",borderRadius:8,border:"none",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer"}}>Annuler</button>
             </div>
           </div>
         </div>
@@ -4178,26 +4158,26 @@ FORMAT
             </div>
 
             {/* Sélecteur de motif */}
-            <div style={{padding:"14px 24px",borderBottom:"1px solid #EAE6E1",flexShrink:0,background:"#FAFAFA"}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#8A8178",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:9}}>Motif de la relance</div>
+            <div style={{padding:"14px 24px",borderBottom:"1px solid #E6DCC9",flexShrink:0,background:"#FAFAFA"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:9}}>Motif de la relance</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
                 {motifsRelance.map((m, i) => (
-                  <div key={i} style={{display:"flex",alignItems:"center",borderRadius:100,border:`1.5px solid ${motifSelectionne===m?"#C9A96E":"#DDD8D0"}`,background:motifSelectionne===m?"#FEF3C7":"#FFFFFF",overflow:"hidden"}}>
+                  <div key={i} style={{display:"flex",alignItems:"center",borderRadius:100,border:`1.5px solid ${motifSelectionne===m?"#B89456":"#E6DCC9"}`,background:motifSelectionne===m?"#FEF3C7":"#FFFFFF",overflow:"hidden"}}>
                     <button onClick={()=>setMotifSelectionne(motifSelectionne===m?"":m)} style={{padding:"5px 10px",fontSize:11,fontWeight:motifSelectionne===m?600:400,color:motifSelectionne===m?"#92400E":"#5C564F",background:"transparent",border:"none",cursor:"pointer"}}>{m}</button>
                     <button onClick={()=>{const upd=motifsRelance.filter((_,j)=>j!==i);saveMotifsRelance(upd);if(motifSelectionne===m)setMotifSelectionne("");}} title="Supprimer" style={{padding:"5px 8px 5px 0",fontSize:10,color:"#C0BAB2",background:"transparent",border:"none",cursor:"pointer"}} onMouseEnter={e=>(e.currentTarget.style.color="#DC2626")} onMouseLeave={e=>(e.currentTarget.style.color="#C0BAB2")}>×</button>
                   </div>
                 ))}
                 {showAddMotif?(
                   <div style={{display:"flex",alignItems:"center",gap:5}}>
-                    <input autoFocus value={newMotifLabel} onChange={e=>setNewMotifLabel(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newMotifLabel.trim()){const upd=[...motifsRelance,newMotifLabel.trim()];saveMotifsRelance(upd);setNewMotifLabel("");setShowAddMotif(false);}if(e.key==="Escape"){setShowAddMotif(false);setNewMotifLabel("");}}} placeholder="Nouveau motif…" style={{padding:"5px 10px",fontSize:11,borderRadius:100,border:"1.5px solid #C9A96E",outline:"none",width:150}}/>
-                    <button onClick={()=>{if(newMotifLabel.trim()){const upd=[...motifsRelance,newMotifLabel.trim()];saveMotifsRelance(upd);setNewMotifLabel("");setShowAddMotif(false);}}} style={{padding:"5px 10px",fontSize:11,borderRadius:100,border:"none",background:"#C9A96E",color:"#1C1814",cursor:"pointer",fontWeight:600}}>+</button>
-                    <button onClick={()=>{setShowAddMotif(false);setNewMotifLabel("");}} style={{padding:"5px 8px",fontSize:11,borderRadius:100,border:"1px solid #DDD8D0",background:"transparent",color:"#8A8178",cursor:"pointer"}}>✕</button>
+                    <input autoFocus value={newMotifLabel} onChange={e=>setNewMotifLabel(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newMotifLabel.trim()){const upd=[...motifsRelance,newMotifLabel.trim()];saveMotifsRelance(upd);setNewMotifLabel("");setShowAddMotif(false);}if(e.key==="Escape"){setShowAddMotif(false);setNewMotifLabel("");}}} placeholder="Nouveau motif…" style={{padding:"5px 10px",fontSize:11,borderRadius:100,border:"1.5px solid #B89456",outline:"none",width:150}}/>
+                    <button onClick={()=>{if(newMotifLabel.trim()){const upd=[...motifsRelance,newMotifLabel.trim()];saveMotifsRelance(upd);setNewMotifLabel("");setShowAddMotif(false);}}} style={{padding:"5px 10px",fontSize:11,borderRadius:100,border:"none",background:"#B89456",color:"#1B1E2B",cursor:"pointer",fontWeight:600}}>+</button>
+                    <button onClick={()=>{setShowAddMotif(false);setNewMotifLabel("");}} style={{padding:"5px 8px",fontSize:11,borderRadius:100,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer"}}>✕</button>
                   </div>
                 ):(
-                  <button onClick={()=>setShowAddMotif(true)} style={{padding:"5px 12px",fontSize:11,borderRadius:100,border:"1.5px dashed #C9A96E",background:"transparent",color:"#C9A96E",cursor:"pointer",fontWeight:500}}>+ Ajouter</button>
+                  <button onClick={()=>setShowAddMotif(true)} style={{padding:"5px 12px",fontSize:11,borderRadius:100,border:"1.5px dashed #B89456",background:"transparent",color:"#B89456",cursor:"pointer",fontWeight:500}}>+ Ajouter</button>
                 )}
               </div>
-              {motifSelectionne==="Autre"&&<input value={motifPersonnalise} onChange={e=>setMotifPersonnalise(e.target.value)} placeholder="Précisez le motif…" style={{width:"100%",padding:"7px 12px",fontSize:12,borderRadius:8,border:"1px solid #C9A96E",outline:"none",marginTop:4}}/>}
+              {motifSelectionne==="Autre"&&<input value={motifPersonnalise} onChange={e=>setMotifPersonnalise(e.target.value)} placeholder="Précisez le motif…" style={{width:"100%",padding:"7px 12px",fontSize:12,borderRadius:8,border:"1px solid #B89456",outline:"none",marginTop:4}}/>}
               {!motifSelectionne&&<div style={{fontSize:11,color:"#B0AAA2",fontStyle:"italic",marginTop:2}}>Optionnel — guide la rédaction</div>}
             </div>
 
@@ -4221,7 +4201,7 @@ FORMAT
             </div>
 
             {/* Footer */}
-            <div style={{padding:"16px 24px",borderTop:"1px solid #EAE6E1",display:"flex",gap:8,flexShrink:0}}>
+            <div style={{padding:"16px 24px",borderTop:"1px solid #E6DCC9",display:"flex",gap:8,flexShrink:0}}>
               <button onClick={()=>{if(!relanceIAText) return;window.sendPrompt("CREATE_DRAFT|"+showRelanceIA.email+"|Relance — "+showRelanceIA.nom+"|"+relanceIAText);toast("Brouillon créé !");setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} disabled={!relanceIAText||genRelanceIA} style={{...gold,flex:1,padding:"11px",fontSize:13,opacity:(!relanceIAText||genRelanceIA)?0.4:1,cursor:(!relanceIAText||genRelanceIA)?"not-allowed":"pointer"}}>📧 Créer le brouillon</button>
               <button onClick={()=>genRelanceIAFn(showRelanceIA)} disabled={genRelanceIA} style={{...out,padding:"11px 18px",fontSize:13,opacity:genRelanceIA?0.4:1,display:"flex",alignItems:"center",gap:6}}>{genRelanceIA?<Spin s={12}/>:"↻"} {relanceIAText?"Regénérer":"Générer"}</button>
               <button onClick={()=>{setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} style={{...out,padding:"11px 18px",fontSize:13}}>Fermer</button>
@@ -4255,7 +4235,7 @@ FORMAT
                 <textarea value={sendMailBody} onChange={e=>setSendMailBody(e.target.value)} placeholder="Rédigez votre message…" rows={9} style={{...inpLight,resize:"none",lineHeight:1.8,flex:1,fontFamily:"inherit"}}/>
               </div>
             </div>
-            <div style={{padding:"16px 24px",borderTop:"1px solid #EAE6E1",display:"flex",gap:8,flexShrink:0,background:"#F3F4F6"}}>
+            <div style={{padding:"16px 24px",borderTop:"1px solid #E6DCC9",display:"flex",gap:8,flexShrink:0,background:"#F3F4F6"}}>
               <button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+showSendMail.email+"|"+sendMailSubject+"|"+sendMailBody); toast("Brouillon créé !"); setShowSendMail(null); }} disabled={!sendMailBody||!sendMailSubject} style={{...gold,flex:1,padding:"11px",fontSize:13,opacity:!sendMailBody||!sendMailSubject?0.4:1,cursor:!sendMailBody||!sendMailSubject?"not-allowed":"pointer"}}>📧 Créer le brouillon Gmail</button>
               <button onClick={()=>setShowSendMail(null)} style={{...out,fontSize:12,padding:"11px 16px"}}>Annuler</button>
             </div>
