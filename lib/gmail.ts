@@ -4,7 +4,6 @@ import type { Email } from '@/types'
 
 // ─── Créer un client Gmail authentifié pour un utilisateur ───────
 export async function getGmailClient(userId: string) {
-  // Récupérer les tokens OAuth depuis Supabase
   const { data: account } = await supabaseAdmin
     .from('accounts')
     .select('access_token, refresh_token')
@@ -35,7 +34,7 @@ export async function getGmailClient(userId: string) {
   return google.gmail({ version: 'v1', auth })
 }
 
-// ─── Parser un message Gmail brut en objet Email ─────────────────
+// ─── Parser un message Gmail brut en objet Email Supabase ────────
 export function parseGmailMessage(msg: any): Omit<Email, 'id' | 'created_at'> {
   const headers = msg.payload?.headers || []
   const get = (name: string) =>
@@ -46,8 +45,16 @@ export function parseGmailMessage(msg: any): Omit<Email, 'id' | 'created_at'> {
   const fromName = fromMatch ? fromMatch[1].trim().replace(/"/g, '') : from
   const fromEmail = fromMatch ? fromMatch[2] : from
 
-  // Extraire le corps du mail (text/plain en priorité)
   const body = extractBody(msg.payload)
+
+  // Fix #5 — gestion date robuste
+  let dateIso = ''
+  try {
+    const rawDate = get('Date')
+    dateIso = rawDate ? new Date(rawDate).toISOString() : new Date(Number(msg.internalDate)).toISOString()
+  } catch {
+    dateIso = msg.internalDate ? new Date(Number(msg.internalDate)).toISOString() : new Date().toISOString()
+  }
 
   return {
     gmail_id: msg.id,
@@ -58,7 +65,7 @@ export function parseGmailMessage(msg: any): Omit<Email, 'id' | 'created_at'> {
     snippet: msg.snippet || '',
     body,
     date: formatDate(get('Date')),
-    date_iso: new Date(get('Date')).toISOString(),
+    date_iso: dateIso,
     is_unread: (msg.labelIds || []).includes('UNREAD'),
     is_starred: (msg.labelIds || []).includes('STARRED'),
     flags: [],
@@ -69,46 +76,42 @@ export function parseGmailMessage(msg: any): Omit<Email, 'id' | 'created_at'> {
 function extractBody(payload: any): string {
   if (!payload) return ''
 
-  // Corps direct
   if (payload.body?.data) {
     return Buffer.from(payload.body.data, 'base64').toString('utf-8')
   }
 
-  // Multipart — chercher text/plain en priorité
   if (payload.parts) {
     const plain = payload.parts.find((p: any) => p.mimeType === 'text/plain')
     if (plain?.body?.data) {
       return Buffer.from(plain.body.data, 'base64').toString('utf-8')
     }
-    // Fallback text/html
     const html = payload.parts.find((p: any) => p.mimeType === 'text/html')
     if (html?.body?.data) {
       const raw = Buffer.from(html.body.data, 'base64').toString('utf-8')
       return raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
     }
-    // Récursion sur les parties imbriquées
+    // Multipart imbriqué
     for (const part of payload.parts) {
-      const result = extractBody(part)
-      if (result) return result
+      const nested = extractBody(part)
+      if (nested) return nested
     }
   }
+
   return ''
 }
 
 function formatDate(dateStr: string): string {
   try {
-    const d = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - d.getTime()
-    const days = Math.floor(diff / 86400000)
-    if (days === 0) return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-    if (days === 1) return 'Hier'
-    if (days < 7) return d.toLocaleDateString('fr-FR', { weekday: 'short' })
-    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-  } catch { return dateStr }
+    return new Date(dateStr).toLocaleDateString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    })
+  } catch {
+    return dateStr || ''
+  }
 }
 
-// ─── Activer le push Gmail (webhook Pub/Sub) ─────────────────────
+// ─── Webhook Gmail (optionnel, nécessite GMAIL_PUBSUB_TOPIC) ─────
 export async function watchGmailInbox(userId: string) {
   const gmail = await getGmailClient(userId)
   await gmail.users.watch({
@@ -120,35 +123,63 @@ export async function watchGmailInbox(userId: string) {
   })
 }
 
-// ─── Synchroniser les N derniers emails ──────────────────────────
+// ─── Fix #2 — Synchroniser INBOX + SENT ──────────────────────────
 export async function syncRecentEmails(userId: string, maxResults = 50) {
   const gmail = await getGmailClient(userId)
+  const allEmails: any[] = []
 
-  const listRes = await gmail.users.messages.list({
-    userId: 'me',
-    maxResults,
-    labelIds: ['INBOX'],
-  })
+  // Fix #5 — wrapper avec détection d'erreur auth
+  const fetchLabel = async (labelIds: string[]) => {
+    try {
+      const listRes = await gmail.users.messages.list({
+        userId: 'me',
+        maxResults,
+        labelIds,
+      })
 
-  const messages = listRes.data.messages || []
-  const emails: any[] = []
+      const messages = listRes.data.messages || []
+      if (!messages.length) return
 
-  // Charger en parallèle (par batch de 10)
-  for (let i = 0; i < messages.length; i += 10) {
-    const batch = messages.slice(i, i + 10)
-    const fetched = await Promise.all(
-      batch.map(m =>
-        gmail.users.messages.get({ userId: 'me', id: m.id!, format: 'full' })
+      const details = await Promise.all(
+        messages.map(m => gmail.users.messages.get({ userId: 'me', id: m.id!, format: 'full' }))
       )
-    )
-    emails.push(...fetched.map(r => parseGmailMessage(r.data)))
+
+      for (const detail of details) {
+        if (detail.data) {
+          allEmails.push(parseGmailMessage(detail.data))
+        }
+      }
+    } catch (err: any) {
+      // Fix #5 — remonter les erreurs auth
+      if (err?.code === 401 || err?.code === 403 || err?.message?.includes('invalid_grant')) {
+        throw new Error('GMAIL_AUTH_EXPIRED')
+      }
+      // Erreur non-auth : ignorer silencieusement pour ne pas bloquer
+      console.error(`syncRecentEmails error for ${labelIds}:`, err?.message)
+    }
   }
 
-  // Upsert dans Supabase
+  // Récupérer INBOX + SENT en parallèle
+  await Promise.all([
+    fetchLabel(['INBOX']),
+    fetchLabel(['SENT']),
+  ])
+
+  if (!allEmails.length) return 0
+
+  // Dédupliquer par gmail_id (un email peut apparaître dans INBOX et SENT)
+  const seen = new Set<string>()
+  const unique = allEmails.filter(e => {
+    if (seen.has(e.gmail_id)) return false
+    seen.add(e.gmail_id)
+    return true
+  })
+
+  // Upsert dans table emails (source de vérité)
   await supabaseAdmin.from('emails').upsert(
-    emails.map(e => ({ ...e, user_id: userId })),
+    unique.map(e => ({ ...e, user_id: userId })),
     { onConflict: 'gmail_id' }
   )
 
-  return emails.length
+  return unique.length
 }
