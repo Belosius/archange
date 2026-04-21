@@ -1602,6 +1602,24 @@ export default function App() {
       // ── Construire le contexte complet — sections structurées ─────────────
       const linkCtx = Object.values(linksFetched).filter(Boolean)
         .map((l: any) => (l.summary || "").slice(0, 500)).join("\n\n");
+
+      // ── Historique échanges avec cet expéditeur (emails envoyés) ─────────
+      const emailsEnvoyesAuClient = Object.entries(sentReplies)
+        .filter(([eId]: [string, any]) => {
+          const emailSrc = emails.find(m => m.id === eId);
+          return emailSrc?.fromEmail?.toLowerCase() === sel.fromEmail?.toLowerCase();
+        })
+        .map(([, sr]: [string, any]) => sr)
+        .sort((a: any, b: any) => b.date.localeCompare(a.date))
+        .slice(0, 5);
+
+      const historiqueCtx = emailsEnvoyesAuClient.length > 0
+        ? "\n\n=== HISTORIQUE DES ÉCHANGES PRÉCÉDENTS ===\n" +
+          emailsEnvoyesAuClient.map((sr: any) =>
+            `[${sr.date}] Réponse envoyée (${sr.subject}):\n${(sr.text || "").slice(0, 800)}`
+          ).join("\n\n---\n\n")
+        : "";
+
       const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, telEtab, espacesDyn})
         + (menusCtx      ? "\n\n=== MENUS & TARIFS ===\n"          + menusCtx.slice(0, 3000)      : "")
         + (conditionsCtx ? "\n\n=== CONDITIONS & POLITIQUE ===\n"  + conditionsCtx.slice(0, 2000) : "")
@@ -1611,24 +1629,6 @@ export default function App() {
         + (linkCtx       ? "\n\n=== INFOS WEB ANALYSÉES ===\n"     + linkCtx                      : "")
         + planningCtx
         + historiqueCtx;
-
-      // ── Historique échanges avec cet expéditeur (emails envoyés) ─────────
-      const emailsEnvoyesAuClient = Object.entries(sentReplies)
-        .filter(([emailId, sr]: [string, any]) => {
-          // Trouver l'email correspondant pour récupérer le fromEmail
-          const emailSrc = emails.find(m => m.id === emailId);
-          return emailSrc?.fromEmail?.toLowerCase() === sel.fromEmail?.toLowerCase();
-        })
-        .map(([, sr]: [string, any]) => sr)
-        .sort((a: any, b: any) => b.date.localeCompare(a.date))
-        .slice(0, 5); // Max 5 derniers échanges
-
-      const historiqueCtx = emailsEnvoyesAuClient.length > 0
-        ? "\n\n=== HISTORIQUE DES ÉCHANGES PRÉCÉDENTS ===\n" +
-          emailsEnvoyesAuClient.map((sr: any) =>
-            `[${sr.date}] Réponse envoyée (${sr.subject}):\n${(sr.text || "").slice(0, 800)}`
-          ).join("\n\n---\n\n")
-        : "";
 
       // ── Prompt email — corps tronqué à 3000 chars ─────────────────────────
       const bodyTronque = (sel.body || sel.snippet || "").slice(0, 3000);
