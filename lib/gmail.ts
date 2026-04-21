@@ -1,185 +1,158 @@
 import { google } from 'googleapis'
 import { supabaseAdmin } from './supabase'
-import type { Email } from '@/types'
 
-// ─── Créer un client Gmail authentifié pour un utilisateur ───────
-export async function getGmailClient(userId: string) {
-  const { data: account } = await supabaseAdmin
-    .from('accounts')
-    .select('access_token, refresh_token')
-    .eq('user_id', userId)
-    .single()
+const BATCH_SIZE = 10
+const BACKOFF_BASE = 1000
 
-  if (!account) throw new Error('Compte Google non trouvé')
-
-  const auth = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET
-  )
-  auth.setCredentials({
-    access_token: account.access_token,
-    refresh_token: account.refresh_token,
-  })
-
-  // Rafraîchir le token si expiré
-  auth.on('tokens', async (tokens) => {
-    if (tokens.access_token) {
-      await supabaseAdmin
-        .from('accounts')
-        .update({ access_token: tokens.access_token })
-        .eq('user_id', userId)
+async function withBackoff(fn, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try { return await fn() }
+    catch (e) {
+      if (e?.code === 429 && i < retries - 1) { await new Promise(r => setTimeout(r, BACKOFF_BASE * Math.pow(2, i))); continue }
+      if (e?.code === 401 || e?.code === 403 || e?.message?.includes('invalid_grant')) throw new Error('GMAIL_AUTH_EXPIRED')
+      throw e
     }
-  })
+  }
+  throw new Error('Max retries exceeded')
+}
 
+export async function getGmailClient(userId) {
+  const { data: account } = await supabaseAdmin.from('accounts').select('access_token, refresh_token').eq('user_id', userId).single()
+  if (!account) throw new Error('Compte Google non trouve')
+  const auth = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET)
+  auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token })
+  auth.on('tokens', async (tokens) => { if (tokens.access_token) await supabaseAdmin.from('accounts').update({ access_token: tokens.access_token }).eq('user_id', userId) })
   return google.gmail({ version: 'v1', auth })
 }
 
-// ─── Parser un message Gmail brut en objet Email Supabase ────────
-export function parseGmailMessage(msg: any): Omit<Email, 'id' | 'created_at'> {
+function getHeader(headers, name) {
+  return headers?.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || ''
+}
+
+export function extractEmailParts(payload) {
+  let html = '', text = ''
+  const attachments = []
+  function walk(part) {
+    if (!part) return
+    const mime = part.mimeType || '', body = part.body || {}
+    if (body.attachmentId && part.filename) { attachments.push({ id: body.attachmentId, filename: part.filename, mimeType: mime, size: body.size || 0 }); return }
+    if (body.data) {
+      const decoded = Buffer.from(body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8')
+      if (mime === 'text/html' && !html) html = decoded
+      else if (mime === 'text/plain' && !text) text = decoded
+    }
+    if (part.parts) part.parts.forEach(walk)
+  }
+  walk(payload)
+  return { html, text, attachments }
+}
+
+export function parseMetadataMessage(msg, userId) {
   const headers = msg.payload?.headers || []
-  const get = (name: string) =>
-    headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || ''
-
-  const from = get('From')
+  const from = getHeader(headers, 'from')
   const fromMatch = from.match(/^(.*?)\s*<(.+?)>$/)
-  const fromName = fromMatch ? fromMatch[1].trim().replace(/"/g, '') : from
-  const fromEmail = fromMatch ? fromMatch[2] : from
-
-  const body = extractBody(msg.payload)
-
-  // Fix #5 — gestion date robuste
-  let dateIso = ''
-  try {
-    const rawDate = get('Date')
-    dateIso = rawDate ? new Date(rawDate).toISOString() : new Date(Number(msg.internalDate)).toISOString()
-  } catch {
-    dateIso = msg.internalDate ? new Date(Number(msg.internalDate)).toISOString() : new Date().toISOString()
-  }
-
+  const labels = msg.labelIds || []
+  let dateIso = new Date().toISOString()
+  try { dateIso = new Date(Number(msg.internalDate)).toISOString() } catch {}
   return {
-    gmail_id: msg.id,
-    thread_id: msg.threadId,
-    from_name: fromName,
-    from_email: fromEmail,
-    subject: get('Subject'),
-    snippet: msg.snippet || '',
-    body,
-    date: formatDate(get('Date')),
-    date_iso: dateIso,
-    is_unread: (msg.labelIds || []).includes('UNREAD'),
-    is_starred: (msg.labelIds || []).includes('STARRED'),
-    flags: [],
-    labels: msg.labelIds || [],
+    user_id: userId, gmail_id: msg.id, thread_id: msg.threadId,
+    history_id: Number(msg.historyId) || null,
+    from_name: fromMatch ? fromMatch[1].trim().replace(/"/g, '') : from,
+    from_email: fromMatch ? fromMatch[2] : from,
+    to_addresses: getHeader(headers, 'to').split(',').map(s => s.trim()).filter(Boolean),
+    cc_addresses: getHeader(headers, 'cc').split(',').map(s => s.trim()).filter(Boolean),
+    subject: getHeader(headers, 'subject') || '(sans objet)',
+    snippet: msg.snippet || '', date_iso: dateIso, labels,
+    is_unread: labels.includes('UNREAD'), is_starred: labels.includes('STARRED'),
+    is_archived: !labels.includes('INBOX'), direction: labels.includes('SENT') ? 'sent' : 'received',
   }
 }
 
-function extractBody(payload: any): string {
-  if (!payload) return ''
-
-  if (payload.body?.data) {
-    return Buffer.from(payload.body.data, 'base64').toString('utf-8')
-  }
-
-  if (payload.parts) {
-    const plain = payload.parts.find((p: any) => p.mimeType === 'text/plain')
-    if (plain?.body?.data) {
-      return Buffer.from(plain.body.data, 'base64').toString('utf-8')
-    }
-    const html = payload.parts.find((p: any) => p.mimeType === 'text/html')
-    if (html?.body?.data) {
-      const raw = Buffer.from(html.body.data, 'base64').toString('utf-8')
-      return raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-    }
-    // Multipart imbriqué
-    for (const part of payload.parts) {
-      const nested = extractBody(part)
-      if (nested) return nested
-    }
-  }
-
-  return ''
+export async function upsertEmails(rows) {
+  if (!rows.length) return
+  const { error } = await supabaseAdmin.from('emails_cache').upsert(rows, { onConflict: 'gmail_id,user_id', ignoreDuplicates: false })
+  if (error) console.error('upsertEmails error:', error.message)
 }
 
-function formatDate(dateStr: string): string {
-  try {
-    return new Date(dateStr).toLocaleDateString('fr-FR', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    })
-  } catch {
-    return dateStr || ''
-  }
-}
-
-// ─── Webhook Gmail (optionnel, nécessite GMAIL_PUBSUB_TOPIC) ─────
-export async function watchGmailInbox(userId: string) {
+export async function syncFullMailbox(userId, onProgress) {
   const gmail = await getGmailClient(userId)
-  await gmail.users.watch({
-    userId: 'me',
-    requestBody: {
-      topicName: process.env.GMAIL_PUBSUB_TOPIC!,
-      labelIds: ['INBOX'],
-    },
-  })
-}
-
-// ─── Fix #2 — Synchroniser INBOX + SENT ──────────────────────────
-export async function syncRecentEmails(userId: string, maxResults = 50) {
-  const gmail = await getGmailClient(userId)
-  const allEmails: any[] = []
-
-  // Fix #5 — wrapper avec détection d'erreur auth
-  const fetchLabel = async (labelIds: string[]) => {
-    try {
-      const listRes = await gmail.users.messages.list({
-        userId: 'me',
-        maxResults,
-        labelIds,
-      })
-
+  let totalSynced = 0
+  const firstPage = await withBackoff(() => gmail.users.messages.list({ userId: 'me', maxResults: 1 }))
+  const estimated = firstPage.data.resultSizeEstimate || 0
+  for (const labelIds of [['INBOX'], ['SENT']]) {
+    let pageToken
+    do {
+      const listRes = await withBackoff(() => gmail.users.messages.list({ userId: 'me', maxResults: 500, labelIds, pageToken }))
       const messages = listRes.data.messages || []
-      if (!messages.length) return
-
-      const details = await Promise.all(
-        messages.map(m => gmail.users.messages.get({ userId: 'me', id: m.id!, format: 'full' }))
-      )
-
-      for (const detail of details) {
-        if (detail.data) {
-          allEmails.push(parseGmailMessage(detail.data))
-        }
+      pageToken = listRes.data.nextPageToken
+      for (let i = 0; i < messages.length; i += BATCH_SIZE) {
+        const batch = messages.slice(i, i + BATCH_SIZE)
+        const details = await Promise.all(batch.map(m => withBackoff(() => gmail.users.messages.get({ userId: 'me', id: m.id, format: 'metadata', metadataHeaders: ['From', 'To', 'Cc', 'Subject', 'Date'] }))))
+        const rows = details.filter(d => d.data).map(d => parseMetadataMessage(d.data, userId))
+        await upsertEmails(rows)
+        totalSynced += rows.length
+        onProgress?.(totalSynced, estimated)
       }
-    } catch (err: any) {
-      // Fix #5 — remonter les erreurs auth
-      if (err?.code === 401 || err?.code === 403 || err?.message?.includes('invalid_grant')) {
-        throw new Error('GMAIL_AUTH_EXPIRED')
-      }
-      // Erreur non-auth : ignorer silencieusement pour ne pas bloquer
-      console.error(`syncRecentEmails error for ${labelIds}:`, err?.message)
+    } while (pageToken)
+  }
+  const profileRes = await withBackoff(() => gmail.users.getProfile({ userId: 'me' }))
+  const historyId = Number(profileRes.data.historyId)
+  await supabaseAdmin.from('user_settings').upsert({ user_id: userId, last_history_id: historyId, sync_completed: true, updated_at: new Date().toISOString() })
+  return { synced: totalSynced, historyId }
+}
+
+export async function fetchEmailBody(userId, gmailId) {
+  const { data: cached } = await supabaseAdmin.from('emails_cache').select('body_html, body_text, attachments').eq('gmail_id', gmailId).eq('user_id', userId).single()
+  if (cached?.body_html || cached?.body_text) return cached
+  const gmail = await getGmailClient(userId)
+  const res = await withBackoff(() => gmail.users.messages.get({ userId: 'me', id: gmailId, format: 'full' }))
+  const { html, text, attachments } = extractEmailParts(res.data.payload)
+  await supabaseAdmin.from('emails_cache').update({ body_html: html || null, body_text: text || null, attachments, has_attachments: attachments.length > 0 }).eq('gmail_id', gmailId).eq('user_id', userId)
+  return { body_html: html, body_text: text, attachments }
+}
+
+export async function syncFromHistory(userId, startHistoryId) {
+  const gmail = await getGmailClient(userId)
+  const histRes = await withBackoff(() => gmail.users.history.list({ userId: 'me', startHistoryId, historyTypes: ['messageAdded', 'messageDeleted', 'labelAdded', 'labelRemoved'] }))
+  const history = histRes.data.history || []
+  const newHistoryId = histRes.data.historyId
+  for (const record of history) {
+    if (record.messagesAdded) for (const a of record.messagesAdded) if (a.message?.id) {
+      const d = await withBackoff(() => gmail.users.messages.get({ userId: 'me', id: a.message.id, format: 'metadata', metadataHeaders: ['From', 'To', 'Cc', 'Subject', 'Date'] }))
+      if (d.data) await upsertEmails([parseMetadataMessage(d.data, userId)])
+    }
+    if (record.messagesDeleted) for (const del of record.messagesDeleted) await supabaseAdmin.from('emails_cache').delete().eq('gmail_id', del.message?.id).eq('user_id', userId)
+    const lchanges = [...(record.labelsAdded || []), ...(record.labelsRemoved || [])]
+    for (const c of lchanges) if (c.message?.id) {
+      const d = await withBackoff(() => gmail.users.messages.get({ userId: 'me', id: c.message.id, format: 'minimal' }))
+      if (d.data) { const labels = d.data.labelIds || []; await supabaseAdmin.from('emails_cache').update({ labels, is_unread: labels.includes('UNREAD'), is_starred: labels.includes('STARRED'), is_archived: !labels.includes('INBOX') }).eq('gmail_id', c.message.id).eq('user_id', userId) }
     }
   }
+  if (newHistoryId) await supabaseAdmin.from('user_settings').upsert({ user_id: userId, last_history_id: Number(newHistoryId), updated_at: new Date().toISOString() })
+  return { processed: history.length, newHistoryId }
+}
 
-  // Récupérer INBOX + SENT en parallèle
-  await Promise.all([
-    fetchLabel(['INBOX']),
-    fetchLabel(['SENT']),
-  ])
+export async function modifyLabels(userId, gmailId, add, remove) {
+  const gmail = await getGmailClient(userId)
+  await withBackoff(() => gmail.users.messages.modify({ userId: 'me', id: gmailId, requestBody: { addLabelIds: add, removeLabelIds: remove } }))
+}
 
-  if (!allEmails.length) return 0
+export async function trashEmail(userId, gmailId) {
+  const gmail = await getGmailClient(userId)
+  await withBackoff(() => gmail.users.messages.trash({ userId: 'me', id: gmailId }))
+}
 
-  // Dédupliquer par gmail_id (un email peut apparaître dans INBOX et SENT)
-  const seen = new Set<string>()
-  const unique = allEmails.filter(e => {
-    if (seen.has(e.gmail_id)) return false
-    seen.add(e.gmail_id)
-    return true
-  })
+export async function setupGmailWatch(userId) {
+  if (!process.env.GMAIL_PUBSUB_TOPIC) return null
+  const gmail = await getGmailClient(userId)
+  const res = await withBackoff(() => gmail.users.watch({ userId: 'me', requestBody: { topicName: process.env.GMAIL_PUBSUB_TOPIC, labelIds: ['INBOX', 'SENT'] } }))
+  const expiry = res.data.expiration ? new Date(Number(res.data.expiration)).toISOString() : new Date(Date.now() + 7 * 86400000).toISOString()
+  await supabaseAdmin.from('user_settings').upsert({ user_id: userId, watch_expiry: expiry, last_history_id: Number(res.data.historyId) || null, updated_at: new Date().toISOString() })
+  return { expiry, historyId: res.data.historyId }
+}
 
-  // Upsert dans table emails (source de vérité)
-  await supabaseAdmin.from('emails').upsert(
-    unique.map(e => ({ ...e, user_id: userId })),
-    { onConflict: 'gmail_id' }
-  )
-
-  return unique.length
+export async function downloadAttachment(userId, gmailId, attachmentId) {
+  const gmail = await getGmailClient(userId)
+  const res = await withBackoff(() => gmail.users.messages.attachments.get({ userId: 'me', messageId: gmailId, id: attachmentId }))
+  return res.data.data
 }
