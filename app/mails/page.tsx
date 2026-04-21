@@ -529,6 +529,10 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showArchived, setShowArchived] = useState(false);
 
+  // Ref pour accéder à la liste filtrée depuis les event handlers sans TDZ
+  // (filtered est déclaré plus bas via useMemo — on ne peut pas le mettre directement dans les deps)
+  const filteredRef = useRef<any[]>([]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
@@ -552,14 +556,14 @@ export default function App() {
       // J / K — email suivant/précédent
       if (e.key === "j" || e.key === "J") {
         e.preventDefault();
-        const idx = filtered.findIndex(m => m.id === sel.id);
-        if (idx < filtered.length - 1) handleSel(filtered[idx + 1]);
+        const idx = filteredRef.current.findIndex(m => m.id === sel.id);
+        if (idx < filteredRef.current.length - 1) handleSel(filteredRef.current[idx + 1]);
         return;
       }
       if (e.key === "k" || e.key === "K") {
         e.preventDefault();
-        const idx = filtered.findIndex(m => m.id === sel.id);
-        if (idx > 0) handleSel(filtered[idx - 1]);
+        const idx = filteredRef.current.findIndex(m => m.id === sel.id);
+        if (idx > 0) handleSel(filteredRef.current[idx - 1]);
         return;
       }
       // E — archiver
@@ -601,7 +605,7 @@ export default function App() {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [sel, emails, filtered]);
+  }, [sel, emails]);
   const [loadingMail, setLoadingMail] = useState(false);
   const [analysing, setAnalysing] = useState(false);
   const [analysingProgress, setAnalysingProgress] = useState("");
@@ -1314,6 +1318,9 @@ export default function App() {
     return res;
   }, [emails, search, mailFilter, sortOrder, showArchived]);
 
+  // Synchroniser le ref à chaque render (avant les effects)
+  filteredRef.current = filtered;
+
   const handleSel = async (emailArg: any) => {
     let email = emailArg;
     if(email.unread) {
@@ -1856,6 +1863,14 @@ FORMAT
       )}
 
       {notif && <div style={{position:"fixed",bottom:32,left:"50%",transform:"translateX(-50%)",zIndex:9999,padding:"12px 24px",borderRadius:12,background:notif.type==="err"?"#2D0A0A":notif.type==="undo"?"#1C1814":"#0A1F0E",color:notif.type==="err"?"#FCA5A5":notif.type==="undo"?"#D1C4B2":"#6EE7B7",fontSize:13,fontWeight:500,whiteSpace:"nowrap",boxShadow:"0 8px 32px rgba(0,0,0,.25)",letterSpacing:"0.01em",border:notif.type==="err"?"1px solid rgba(239,68,68,.2)":notif.type==="undo"?"1px solid rgba(209,196,178,.2)":"1px solid rgba(52,211,153,.2)",display:"flex",alignItems:"center",gap:12}}>
+        <span>{notif.msg}</span>
+        {notif.type==="undo"&&undoDelete&&<button onClick={()=>{
+          if(undoDelete.timer) clearTimeout(undoDelete.timer);
+          saveEmails([undoDelete.email,...emails]);
+          setUndoDelete(null); setNotif(null);
+          toast("Email restauré ✓");
+        }} style={{fontSize:12,fontWeight:700,color:"#C9A96E",background:"none",border:"1px solid rgba(201,169,110,.4)",borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Annuler</button>}
+      </div>}
 
       {/* ── Modal raccourcis clavier ── */}
       {showKeyHelp&&(
@@ -1879,14 +1894,6 @@ FORMAT
           </div>
         </div>
       )}
-        <span>{notif.msg}</span>
-        {notif.type==="undo"&&undoDelete&&<button onClick={()=>{
-          if(undoDelete.timer) clearTimeout(undoDelete.timer);
-          saveEmails([undoDelete.email,...emails]);
-          setUndoDelete(null); setNotif(null);
-          toast("Email restauré ✓");
-        }} style={{fontSize:12,fontWeight:700,color:"#C9A96E",background:"none",border:"1px solid rgba(201,169,110,.4)",borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Annuler</button>}
-      </div>}
 
       {/* ── Indicateur de sauvegarde ── */}
       {saveIndicator&&<div style={{position:"fixed",top:12,right:16,zIndex:9998,padding:"5px 12px",borderRadius:20,background:"#0A1F0E",color:"#6EE7B7",fontSize:11,fontWeight:600,letterSpacing:"0.04em",border:"1px solid rgba(52,211,153,.2)",pointerEvents:"none"}}>✓ Sauvegardé</div>}
