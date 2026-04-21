@@ -508,6 +508,24 @@ export default function App() {
   const [sentReplies, setSentReplies] = useState<Record<string,{text:string,date:string,subject:string,toEmail:string}>>({});
   const [editing, setEditing] = useState(false);
   const [editReply, setEditReply] = useState("");
+
+  // ─── Éditeur de réponse manuelle (distinct de l'IA) ─────────────────────────
+  const [showReplyEditor, setShowReplyEditor] = useState(false);
+  const [replyEditorText, setReplyEditorText] = useState("");
+  const [replyEditorMode, setReplyEditorMode] = useState<"reply"|"replyAll"|"forward">("reply");
+  const [replyEditorTo, setReplyEditorTo] = useState("");
+  const [sending, setSending] = useState(false);
+
+  // ─── Composer nouveau mail ────────────────────────────────────────────────────
+  const [showCompose, setShowCompose] = useState(false);
+  const [composeTo, setComposeTo] = useState("");
+  const [composeSubject, setComposeSubject] = useState("");
+  const [composeBody, setComposeBody] = useState("");
+  const [composeSending, setComposeSending] = useState(false);
+
+  // ─── Brouillons persistés ─────────────────────────────────────────────────────
+  type DraftItem = {id:string, to:string, subject:string, body:string, date:string, emailId?:string};
+  const [localDrafts, setLocalDrafts] = useState<DraftItem[]>([]);
   const [notif, setNotif] = useState<{msg:string,type:string}|null>(null);
   const notifTimer = useRef<any>(null);
   const toast = (msg: string, type = "ok") => {
@@ -584,16 +602,22 @@ export default function App() {
         toggleFlag(sel.id, "star");
         return;
       }
-      // F — toggle flag
-      if (e.key === "f" || e.key === "F") {
-        e.preventDefault();
-        toggleFlag(sel.id, "flag");
-        return;
-      }
-      // R — transfert (ouvrir Gmail)
+      // R — répondre
       if (e.key === "r" || e.key === "R") {
         e.preventDefault();
-        forwardEmail(sel);
+        openReplyEditor("reply");
+        return;
+      }
+      // F — transférer (forward)
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        openReplyEditor("forward");
+        return;
+      }
+      // # — supprimer
+      if (e.key === "#") {
+        e.preventDefault();
+        deleteEmailWithUndo(sel);
         return;
       }
       // Delete / Backspace — supprimer
@@ -928,6 +952,9 @@ export default function App() {
       subject:     m.subject    || "(sans objet)",
       date:        m.date       || "",
       rawDate:     m.date_iso   || m.created_at || "", // ISO pour tri chronologique exact
+      threadId:    m.thread_id  || null,
+      gmailId:     m.gmail_id   || null,
+      cc:          Array.isArray(m.cc) ? m.cc : (m.cc ? [m.cc] : []),
       snippet:     stripHtml(rawSnippet),            // toujours texte propre
       body:        stripHtml(rawBody),               // texte propre pour IA
       bodyHtml:    isHtml ? sanitizeHtmlForDisplay(rawBody) : null, // HTML pour iframe
@@ -1239,6 +1266,95 @@ export default function App() {
     window.open(`https://mail.google.com/mail/?view=cm&su=${subject}&body=${body}`, "_blank");
   };
 
+  // ─── Ouvrir l'éditeur de réponse manuelle ───────────────────────────────────
+  const openReplyEditor = (mode: "reply"|"replyAll"|"forward" = "reply") => {
+    if (!sel) return;
+    setReplyEditorMode(mode);
+    if (mode === "reply") {
+      setReplyEditorTo(sel.fromEmail || "");
+    } else if (mode === "replyAll") {
+      const all = [sel.fromEmail, ...(sel.cc || [])].filter(Boolean).join(", ");
+      setReplyEditorTo(all);
+    } else {
+      setReplyEditorTo("");
+    }
+    // Pré-remplir avec la citation de l'email original
+    const sig = `\n\n--\nCordialement,\nL'équipe ${nomEtab}${adresseEtab ? "\n" + adresseEtab : ""}${emailEtab ? "\n" + emailEtab : ""}`;
+    const citation = `\n\n\n─── Message original ───\nDe : ${sel.from} <${sel.fromEmail}>\nDate : ${sel.date}\nObjet : ${sel.subject}\n\n${sel.body?.slice(0, 2000) || sel.snippet || ""}`;
+    setReplyEditorText(sig + citation);
+    setShowReplyEditor(true);
+  };
+
+  // ─── Envoi réel via /api/gmail/send ─────────────────────────────────────────
+  const sendReply = async () => {
+    if (!sel || !replyEditorTo.trim() || !replyEditorText.trim()) return;
+    setSending(true);
+    try {
+      const subject = replyEditorMode === "forward"
+        ? `Tr: ${sel.subject || ""}`
+        : sel.subject?.startsWith("Re:") ? sel.subject : `Re: ${sel.subject || ""}`;
+      const r = await fetch("/api/gmail/send", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          to: replyEditorTo,
+          subject,
+          body: replyEditorText,
+          threadId: replyEditorMode !== "forward" ? (sel.threadId || null) : null,
+        }),
+      });
+      if (!r.ok) throw new Error(`Erreur ${r.status}`);
+      // Sauvegarder dans l'historique
+      const upd = { ...sentReplies, [sel.id]: { text: replyEditorText, date: new Date().toLocaleDateString("fr-FR"), subject, toEmail: replyEditorTo }};
+      saveSentReplies(upd);
+      setShowReplyEditor(false);
+      setReplyEditorText("");
+      toast("Email envoyé ✓");
+    } catch (e: any) {
+      toast("Erreur envoi : " + (e.message || "réessayez"), "err");
+    }
+    setSending(false);
+  };
+
+  // ─── Envoi nouveau mail ──────────────────────────────────────────────────────
+  const sendNewMail = async () => {
+    if (!composeTo.trim() || !composeSubject.trim() || !composeBody.trim()) return;
+    setComposeSending(true);
+    try {
+      const r = await fetch("/api/gmail/send", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ to: composeTo, subject: composeSubject, body: composeBody, threadId: null }),
+      });
+      if (!r.ok) throw new Error(`Erreur ${r.status}`);
+      setShowCompose(false);
+      setComposeTo(""); setComposeSubject(""); setComposeBody("");
+      toast("Email envoyé ✓");
+    } catch (e: any) {
+      toast("Erreur envoi : " + (e.message || "réessayez"), "err");
+    }
+    setComposeSending(false);
+  };
+
+  // ─── Sauvegarde brouillon local ──────────────────────────────────────────────
+  const saveDraft = () => {
+    if (!replyEditorText.trim() && !composeBody.trim()) return;
+    const draft: DraftItem = {
+      id: "draft_" + Date.now(),
+      to: showCompose ? composeTo : replyEditorTo,
+      subject: showCompose ? composeSubject : (sel ? `Re: ${sel.subject}` : ""),
+      body: showCompose ? composeBody : replyEditorText,
+      date: new Date().toLocaleDateString("fr-FR"),
+      emailId: showReplyEditor ? sel?.id : undefined,
+    };
+    const updated = [...localDrafts, draft];
+    setLocalDrafts(updated);
+    saveToSupabase({ replies_cache: JSON.stringify(updated) }); // réutilise la colonne
+    setShowReplyEditor(false);
+    setShowCompose(false);
+    toast("Brouillon sauvegardé ✓");
+  };
+
   // ─── Snooze ─────────────────────────────────────────────────────────────────
   const snoozeEmail = (id: string, until: string) => {
     const upd = emails.map(m => m.id === id ? { ...m, snoozedUntil: until } : m);
@@ -1321,6 +1437,19 @@ export default function App() {
 
   // Synchroniser le ref à chaque render (avant les effects)
   filteredRef.current = filtered;
+
+  // ─── Vue Envoyés ─────────────────────────────────────────────────────────────
+  const sentList = React.useMemo(() => {
+    return Object.entries(sentReplies)
+      .map(([emailId, s]) => ({ _sentId: emailId, from: "Moi", fromEmail: "", subject: s.subject, date: s.date, body: s.text, snippet: s.text.slice(0,120), unread: false, flags: [], attachments: [], id: "sent_"+emailId, rawDate: s.date }))
+      .sort((a,b) => b.rawDate.localeCompare(a.rawDate));
+  }, [sentReplies]);
+
+  // ─── Vue Brouillons ───────────────────────────────────────────────────────────
+  const draftList = React.useMemo(() => {
+    return localDrafts.map(d => ({...d, from: "Brouillon", fromEmail: d.to, snippet: d.body.slice(0,120), unread: false, flags: [], attachments: [], id: d.id, rawDate: d.date}))
+      .sort((a,b) => b.rawDate.localeCompare(a.rawDate));
+  }, [localDrafts]);
 
   const handleSel = async (emailArg: any) => {
     let email = emailArg;
@@ -1882,9 +2011,9 @@ FORMAT
               <button onClick={()=>setShowKeyHelp(false)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"#8A8178"}}>×</button>
             </div>
             {[
-              ["/","Rechercher"],["J / K","Email suivant / précédent"],["E","Archiver"],
-              ["U","Marquer lu / non lu"],["S","Étoile"],["F","Flaggé"],
-              ["R","Transférer dans Gmail"],["Del","Supprimer"],["?","Afficher cette aide"],
+              ["/","Rechercher"],["J / K","Email suivant / précédent"],["R","Répondre"],
+              ["F","Transférer"],["E","Archiver"],["U","Marquer lu / non lu"],
+              ["S","Étoile"],["#","Supprimer"],["Del","Supprimer"],["?","Afficher cette aide"],
             ].map(([k,v])=>(
               <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #F0EDE8"}}>
                 <span style={{fontSize:12,color:"#5C564F"}}>{v}</span>
@@ -2466,11 +2595,17 @@ FORMAT
           <>
             {/* Sidebar catégories mails — collapsible */}
             <div style={{width:subCollapsed?44:160,background:"#221E19",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid rgba(209,196,178,0.06)",transition:"width .2s ease",overflow:"hidden"}}>
-              <div style={{padding:subCollapsed?"10px 6px":"14px 10px 10px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0}}>
-                {!subCollapsed&&<button onClick={()=>loadEmailsFromApi(true)} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
-                  {loadingMail?<Spin s={11}/>:"↺"} Actualiser
-                </button>}
-                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"rgba(209,196,178,0.07)",color:"rgba(209,196,178,0.35)",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:subCollapsed?0:6}}>
+              <div style={{padding:subCollapsed?"10px 6px":"10px 10px 8px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0,gap:6}}>
+                {!subCollapsed&&<>
+                  <button onClick={()=>{setShowCompose(true);setComposeTo("");setComposeSubject("");setComposeBody(`\n\n--\nCordialement,\nL'équipe ${nomEtab}`);}} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
+                    ✏ Nouveau mail
+                  </button>
+                  <button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:28,height:28,borderRadius:6,border:"1px solid rgba(209,196,178,0.2)",background:"rgba(232,184,109,0.08)",color:"#E8B86D",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    {loadingMail?<Spin s={10}/>:"↺"}
+                  </button>
+                </>}
+                {subCollapsed&&<button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(232,184,109,0.1)",color:"#E8B86D",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>{loadingMail?<Spin s={10}/>:"↺"}</button>}
+                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"rgba(209,196,178,0.07)",color:"rgba(209,196,178,0.35)",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   {subCollapsed?"›":"‹"}
                 </button>
               </div>
@@ -2525,6 +2660,18 @@ FORMAT
                     <span style={{fontSize:12}}>📦</span>
                     <span style={{flex:1}}>Archivés</span>
                     <span style={{fontSize:10,color:"rgba(209,196,178,0.4)"}}>{emails.filter(m=>m.archived).length||""}</span>
+                  </button>
+                  {/* Envoyés */}
+                  <button onClick={()=>{setMailFilter("envoyes");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="envoyes"&&!showArchived?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="envoyes"&&!showArchived?"#D1C4B2":"rgba(209,196,178,0.5)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                    <span style={{fontSize:12}}>📤</span>
+                    <span style={{flex:1}}>Envoyés</span>
+                    <span style={{fontSize:10,color:"rgba(209,196,178,0.4)"}}>{Object.keys(sentReplies).length||""}</span>
+                  </button>
+                  {/* Brouillons */}
+                  <button onClick={()=>{setMailFilter("brouillons");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"8px 9px",borderRadius:8,border:"none",background:mailFilter==="brouillons"&&!showArchived?"rgba(209,196,178,0.1)":"transparent",color:mailFilter==="brouillons"&&!showArchived?"#D1C4B2":"rgba(209,196,178,0.5)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",marginBottom:2}}>
+                    <span style={{fontSize:12}}>📝</span>
+                    <span style={{flex:1}}>Brouillons</span>
+                    <span style={{fontSize:10,color:localDrafts.length>0?"#C9A96E":"rgba(209,196,178,0.4)"}}>{localDrafts.length||""}</span>
                   </button>
                   {/* Aide raccourcis */}
                   <div style={{marginTop:"auto",paddingTop:8}}>
@@ -2702,6 +2849,36 @@ FORMAT
             {/* Liste emails standard */}
             {mailFilter!=="priorites" && (
             <div style={{width:320,borderRight:"1px solid #EAE6E1",background:"#FFFFFF",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
+
+              {/* ── Vues Envoyés / Brouillons ── */}
+              {(mailFilter==="envoyes"||mailFilter==="brouillons")&&(
+                <div style={{flex:1,overflowY:"auto"}}>
+                  <div style={{padding:"12px 14px 6px",borderBottom:"1px solid #EAE6E1",fontSize:12,fontWeight:600,color:"#5C564F"}}>
+                    {mailFilter==="envoyes"?"📤 Emails envoyés":"📝 Brouillons"}
+                  </div>
+                  {(mailFilter==="envoyes"?sentList:draftList).length===0&&(
+                    <div style={{padding:"40px 16px",textAlign:"center",color:"#A09890",fontSize:12}}>
+                      {mailFilter==="envoyes"?"Aucun email envoyé depuis ARCHANGE":"Aucun brouillon sauvegardé"}
+                    </div>
+                  )}
+                  {(mailFilter==="envoyes"?sentList:draftList).map(em=>(
+                    <div key={em.id} onClick={()=>setSel(em as any)} style={{padding:"10px 14px",borderBottom:"1px solid #EAE6E1",cursor:"pointer",background:sel?.id===em.id?"#F0EDE8":"transparent"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                        <span style={{fontSize:12,fontWeight:600,color:"#3D3530",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>{mailFilter==="envoyes"?(em as any).toEmail||"Moi":em.fromEmail}</span>
+                        <span style={{fontSize:10,color:"#A09890",flexShrink:0}}>{em.date}</span>
+                      </div>
+                      <div style={{fontSize:12,color:"#1C1814",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:2}}>{em.subject}</div>
+                      <div style={{fontSize:11,color:"#8A8178",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{em.snippet}</div>
+                      {mailFilter==="brouillons"&&(
+                        <button onClick={e=>{e.stopPropagation();const d=em as any;setComposeTo(d.to);setComposeSubject(d.subject);setComposeBody(d.body);setShowCompose(true);setLocalDrafts(prev=>prev.filter(x=>x.id!==d.id));}} style={{marginTop:6,fontSize:10,padding:"3px 10px",borderRadius:6,border:"1px solid #C9A96E",background:"transparent",color:"#C9A96E",cursor:"pointer"}}>Reprendre →</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Vue standard (tous, filtres, archivés) ── */}
+              {mailFilter!=="envoyes"&&mailFilter!=="brouillons"&&<>
               {/* ── Barre recherche ── */}
               <div style={{padding:"8px 10px 0",borderBottom:"1px solid #EAE6E1",flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:7,background:"#F5F3EF",borderRadius:8,padding:"6px 10px",border:"1px solid #EAE6E1",marginBottom:7}}>
@@ -2822,6 +2999,7 @@ FORMAT
                   </div>
                 );})}
               </div>
+            </>}
             </div>
             )}
 
@@ -2836,24 +3014,22 @@ FORMAT
                 <div style={{maxWidth:720,margin:"0 auto",padding:"16px 20px 60px"}}>
 
                   {/* ── Barre d'actions compacte ── */}
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12,padding:"6px 12px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",boxShadow:"0 1px 3px rgba(28,24,20,.04)"}}>
-                    <button onClick={()=>toggleFlag(sel.id,"star")} title="Favori (S)" style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(sel.flags||[]).includes("star")?1:0.3,padding:"3px 6px",borderRadius:6}}>⭐</button>
-                    <button onClick={()=>toggleFlag(sel.id,"flag")} title="Flaggé (F)" style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(sel.flags||[]).includes("flag")?1:0.3,padding:"3px 6px",borderRadius:6}}>🚩</button>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12,padding:"6px 12px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EAE6E1",boxShadow:"0 1px 3px rgba(28,24,20,.04)",flexWrap:"wrap"}}>
+                    {/* Répondre — bouton principal */}
+                    <button onClick={()=>openReplyEditor("reply")} title="Répondre (R)" style={{fontSize:11,padding:"5px 12px",borderRadius:100,border:"none",background:"#1C1814",color:"#FFFFFF",cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",gap:5}}>↩ Répondre</button>
+                    {sel.cc?.length>0&&<button onClick={()=>openReplyEditor("replyAll")} title="Répondre à tous" style={{fontSize:11,padding:"5px 12px",borderRadius:100,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>↩↩ À tous</button>}
+                    <button onClick={()=>openReplyEditor("forward")} title="Transférer (F)" style={{fontSize:11,padding:"5px 12px",borderRadius:100,border:"1px solid #EAE6E1",background:"#F5F3EF",color:"#3D3530",cursor:"pointer"}}>↪ Transférer</button>
                     <div style={{width:1,height:16,background:"#EAE6E1",margin:"0 2px"}}/>
-                    <button onClick={()=>toggleUnread(sel.id)} title="Lu/Non lu (U)" style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.unread?"#EFF6FF":"#F5F3EF",color:sel.unread?"#1D4ED8":"#5C564F",cursor:"pointer",fontWeight:sel.unread?600:400}}>
-                      {sel.unread?"● Non lu":"○ Marquer non lu"}
+                    <button onClick={()=>toggleFlag(sel.id,"star")} title="Favori (S)" style={{background:"none",border:"none",cursor:"pointer",fontSize:15,opacity:(sel.flags||[]).includes("star")?1:0.3,padding:"3px 5px",borderRadius:6}}>⭐</button>
+                    <button onClick={()=>toggleFlag(sel.id,"flag")} title="Flaggé" style={{background:"none",border:"none",cursor:"pointer",fontSize:15,opacity:(sel.flags||[]).includes("flag")?1:0.3,padding:"3px 5px",borderRadius:6}}>🚩</button>
+                    <button onClick={()=>toggleUnread(sel.id)} title="Lu/Non lu (U)" style={{fontSize:11,padding:"4px 9px",borderRadius:100,border:"none",background:sel.unread?"#EFF6FF":"#F5F3EF",color:sel.unread?"#1D4ED8":"#5C564F",cursor:"pointer"}}>
+                      {sel.unread?"● Non lu":"○ Non lu"}
                     </button>
-                    <button onClick={()=>toggleATraiter(sel.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.aTraiter?"#DBEAFE":"#F5F3EF",color:sel.aTraiter?"#2563EB":"#5C564F",cursor:"pointer",fontWeight:sel.aTraiter?600:400}}>
-                      📋 {sel.aTraiter?"À traiter":"Traiter"}
-                    </button>
-                    <button onClick={()=>archiveEmail(sel.id)} title="Archiver (E)" style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:sel.archived?"#FDF8EF":"#F5F3EF",color:sel.archived?"#C9A96E":"#5C564F",cursor:"pointer"}}>
-                      {sel.archived ? "📦 Archivé" : "📦 Archiver"}
-                    </button>
-                    <button onClick={()=>forwardEmail(sel)} title="Transférer (R)" style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"none",background:"#F5F3EF",color:"#5C564F",cursor:"pointer"}}>
-                      ↪ Transférer
+                    <button onClick={()=>archiveEmail(sel.id)} title="Archiver (E)" style={{fontSize:11,padding:"4px 9px",borderRadius:100,border:"none",background:sel.archived?"#FDF8EF":"#F5F3EF",color:sel.archived?"#C9A96E":"#5C564F",cursor:"pointer"}}>
+                      {sel.archived ? "📦 Archivé" : "📦"}
                     </button>
                     <div style={{flex:1}}/>
-                    <button onClick={()=>{ deleteEmailWithUndo(sel); }} style={{fontSize:11,padding:"4px 10px",borderRadius:100,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer"}}>🗑 Supprimer</button>
+                    <button onClick={()=>{ deleteEmailWithUndo(sel); }} style={{fontSize:11,padding:"4px 9px",borderRadius:100,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer"}}>🗑</button>
                   </div>
 
                   {/* ── En-tête email restructuré ── */}
@@ -3065,6 +3241,50 @@ FORMAT
                       <div style={{display:"flex",gap:8,marginTop:16}}>
                         <button onClick={submitPlanForm} style={{...gold,flex:1,padding:"10px"}}>Confirmer et ajouter</button>
                         <button onClick={()=>setShowPlanForm(false)} style={{...out}}>Annuler</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Éditeur de réponse manuelle ── */}
+                  {showReplyEditor&&(
+                    <div style={{background:"#FFFFFF",borderRadius:12,border:"2px solid #1C1814",boxShadow:"0 4px 16px rgba(0,0,0,.1)",overflow:"hidden",marginBottom:16}}>
+                      {/* En-tête */}
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"#1C1814"}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"#C9A96E",letterSpacing:"0.08em",textTransform:"uppercase"}}>
+                          {replyEditorMode==="reply"?"↩ Répondre":replyEditorMode==="replyAll"?"↩↩ Répondre à tous":"↪ Transférer"}
+                        </span>
+                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer l'éditeur ? Le texte sera perdu."))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:16}}>×</button>
+                      </div>
+                      {/* Destinataire */}
+                      <div style={{padding:"10px 16px",borderBottom:"1px solid #EAE6E1",display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:11,color:"#8A8178",fontWeight:600,flexShrink:0}}>À :</span>
+                        <input
+                          value={replyEditorTo}
+                          onChange={e=>setReplyEditorTo(e.target.value)}
+                          style={{flex:1,border:"none",outline:"none",fontSize:13,color:"#1C1814",background:"transparent"}}
+                          placeholder="destinataire@exemple.com"
+                        />
+                      </div>
+                      {/* Corps */}
+                      <textarea
+                        value={replyEditorText}
+                        onChange={e=>setReplyEditorText(e.target.value)}
+                        style={{width:"100%",minHeight:220,padding:"14px 16px",fontSize:13,color:"#1C1814",lineHeight:1.8,border:"none",outline:"none",resize:"vertical",background:"transparent",fontFamily:"inherit"}}
+                        placeholder="Votre réponse…"
+                        autoFocus
+                      />
+                      {/* Actions */}
+                      <div style={{display:"flex",gap:8,padding:"10px 16px",borderTop:"1px solid #EAE6E1",background:"#F9F8F6"}}>
+                        <button onClick={sendReply} disabled={sending||!replyEditorTo.trim()||!replyEditorText.trim()} style={{padding:"8px 20px",borderRadius:8,border:"none",background:"#1C1814",color:"#C9A96E",fontSize:12,fontWeight:700,cursor:sending?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:sending||!replyEditorTo.trim()||!replyEditorText.trim()?0.5:1}}>
+                          {sending?<><Spin s={12}/> Envoi…</>:"✉ Envoyer"}
+                        </button>
+                        <button onClick={saveDraft} style={{padding:"8px 16px",borderRadius:8,border:"1px solid #EAE6E1",background:"transparent",color:"#5C564F",fontSize:12,cursor:"pointer"}}>
+                          Brouillon
+                        </button>
+                        <div style={{flex:1}}/>
+                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{padding:"8px 12px",borderRadius:8,border:"none",background:"transparent",color:"#8A8178",fontSize:12,cursor:"pointer"}}>
+                          Annuler
+                        </button>
                       </div>
                     </div>
                   )}
@@ -3883,6 +4103,41 @@ FORMAT
           </div>
         );
       })()}
+
+      {/* ── Modal Composer — Nouveau mail ── */}
+      {showCompose&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:9980,display:"flex",alignItems:"flex-end",justifyContent:"flex-end",padding:"0 24px 24px"}}>
+          <div style={{background:"#FFFFFF",borderRadius:16,boxShadow:"0 24px 80px rgba(0,0,0,.25)",width:540,maxHeight:"80vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            {/* En-tête */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",background:"#1C1814",borderRadius:"16px 16px 0 0"}}>
+              <span style={{fontSize:13,fontWeight:700,color:"#C9A96E",letterSpacing:"0.06em"}}>✏ Nouveau message</span>
+              <button onClick={()=>{if((composeBody.trim()||composeTo.trim())&&!window.confirm("Fermer sans sauvegarder ?"))return;setShowCompose(false);}} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:18}}>×</button>
+            </div>
+            {/* Champs */}
+            <div style={{padding:"12px 16px",borderBottom:"1px solid #EAE6E1"}}>
+              <input value={composeTo} onChange={e=>setComposeTo(e.target.value)} placeholder="À : destinataire@exemple.com" style={{width:"100%",border:"none",borderBottom:"1px solid #EAE6E1",outline:"none",fontSize:13,color:"#1C1814",padding:"6px 0",marginBottom:8,background:"transparent"}}/>
+              <input value={composeSubject} onChange={e=>setComposeSubject(e.target.value)} placeholder="Objet" style={{width:"100%",border:"none",borderBottom:"1px solid #EAE6E1",outline:"none",fontSize:13,color:"#1C1814",padding:"6px 0",background:"transparent"}}/>
+            </div>
+            {/* Corps */}
+            <textarea
+              value={composeBody}
+              onChange={e=>setComposeBody(e.target.value)}
+              placeholder="Rédigez votre message…"
+              style={{flex:1,padding:"14px 16px",fontSize:13,color:"#1C1814",lineHeight:1.8,border:"none",outline:"none",resize:"none",fontFamily:"inherit",minHeight:220}}
+              autoFocus
+            />
+            {/* Actions */}
+            <div style={{display:"flex",gap:8,padding:"10px 16px",borderTop:"1px solid #EAE6E1",background:"#F9F8F6"}}>
+              <button onClick={sendNewMail} disabled={composeSending||!composeTo.trim()||!composeSubject.trim()||!composeBody.trim()} style={{padding:"9px 22px",borderRadius:8,border:"none",background:"#1C1814",color:"#C9A96E",fontSize:13,fontWeight:700,cursor:composeSending?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:composeSending||!composeTo.trim()||!composeSubject.trim()||!composeBody.trim()?0.5:1}}>
+                {composeSending?<><Spin s={12}/> Envoi…</>:"✉ Envoyer"}
+              </button>
+              <button onClick={saveDraft} style={{padding:"9px 16px",borderRadius:8,border:"1px solid #EAE6E1",background:"transparent",color:"#5C564F",fontSize:12,cursor:"pointer"}}>Brouillon</button>
+              <div style={{flex:1}}/>
+              <button onClick={()=>setShowCompose(false)} style={{padding:"9px 12px",borderRadius:8,border:"none",background:"transparent",color:"#8A8178",fontSize:12,cursor:"pointer"}}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showRelanceIA&&(
         <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(17,17,17,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99999,padding:16}}>
