@@ -335,7 +335,7 @@ function sanitizeHtmlForDisplay(raw: string): string {
   if (!raw) return "";
   return raw
     .replace(/<script[\s\S]*?<\/script>/gi, "")           // scripts
-    .replace(/<head[\s\S]*?<\/head>/gi, "")               // head complet (évite les CSS globaux)
+    // head conservé — l'iframe est sandboxée, les styles sont nécessaires pour le rendu
     .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, "")        // event handlers inline
     .replace(/\son\w+\s*=\s*[^\s>]*/gi, "")               // event handlers sans guillemets
     .replace(/javascript\s*:/gi, "void:")                  // js: dans href
@@ -999,7 +999,9 @@ export default function App() {
   const mapEmail = (m: any) => {
     const rawBody = m.body || m.snippet || "";
     const rawSnippet = m.snippet || "";
-    const isHtml = rawBody.trim().startsWith("<");
+    // Détection HTML robuste — certains emails commencent par un espace, BOM, ou attribut avant <
+    const isHtml = rawBody.trim().startsWith("<") ||
+      /<(html|head|body|div|table|td|tr|p|style)\b/i.test(rawBody.slice(0, 1000));
     return {
       id:          m.id,
       from:        m.from_name  || "",
