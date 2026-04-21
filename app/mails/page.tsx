@@ -941,6 +941,31 @@ export default function App() {
   };
 
   // Fonction partagée de mapping email API → état React
+  // ─── Formate date_iso en heure locale (comme Gmail) ─────────────────────────
+  const fmtEmailDate = (isoStr: string): string => {
+    if (!isoStr) return "";
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return "";
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+      const weekStart = new Date(todayStart.getTime() - 6 * 86400000);
+      if (d >= todayStart) {
+        // Aujourd'hui → heure locale HH:MM
+        return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      } else if (d >= yesterdayStart) {
+        return "Hier";
+      } else if (d >= weekStart) {
+        // Cette semaine → nom du jour
+        return d.toLocaleDateString("fr-FR", { weekday: "long" });
+      } else {
+        // Plus ancien → JJ/MM/AAAA
+        return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      }
+    } catch { return ""; }
+  };
+
   const mapEmail = (m: any) => {
     const rawBody = m.body || m.snippet || "";
     const rawSnippet = m.snippet || "";
@@ -950,7 +975,7 @@ export default function App() {
       from:        m.from_name  || "",
       fromEmail:   m.from_email || "",
       subject:     m.subject    || "(sans objet)",
-      date:        m.date       || "",
+      date:        fmtEmailDate(m.date_iso || m.created_at) || m.date || "",
       rawDate:     m.date_iso   || m.created_at || "", // ISO pour tri chronologique exact
       threadId:    m.thread_id  || null,
       gmailId:     m.gmail_id   || null,
