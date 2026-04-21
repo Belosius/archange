@@ -927,6 +927,7 @@ export default function App() {
       fromEmail:   m.from_email || "",
       subject:     m.subject    || "(sans objet)",
       date:        m.date       || "",
+      rawDate:     m.date_iso   || m.created_at || "", // ISO pour tri chronologique exact
       snippet:     stripHtml(rawSnippet),            // toujours texte propre
       body:        stripHtml(rawBody),               // texte propre pour IA
       bodyHtml:    isHtml ? sanitizeHtmlForDisplay(rawBody) : null, // HTML pour iframe
@@ -1308,12 +1309,12 @@ export default function App() {
       if (mailFilter === "atraiter") return !!m.aTraiter;
       return true;
     });
-    // Tri
+    // Tri — utilise rawDate (ISO) pour un ordre chronologique exact
     res = [...res].sort((a, b) => {
-      if (sortOrder === "date_asc")  return (a.date||"").localeCompare(b.date||"");
+      if (sortOrder === "date_asc")  return (a.rawDate||a.date||"").localeCompare(b.rawDate||b.date||"");
       if (sortOrder === "from")      return (a.from||"").localeCompare(b.from||"");
       if (sortOrder === "subject")   return (a.subject||"").localeCompare(b.subject||"");
-      return (b.date||"").localeCompare(a.date||""); // date_desc par défaut
+      return (b.rawDate||b.date||"").localeCompare(a.rawDate||a.date||""); // date_desc par défaut
     });
     return res;
   }, [emails, search, mailFilter, sortOrder, showArchived]);
