@@ -793,6 +793,11 @@ export default function App() {
 
   // Ref pour tracker l'email en cours de génération IA (évite les race conditions)
   const genReplyForEmailId = React.useRef<string|null>(null);
+  // Fix C2 — Sémaphore pour éviter deux analyses simultanées
+  const analysingRef = React.useRef(false);
+  // Ref pour pointer toujours vers la version courante de loadEmailsFromApi
+  // Évite le bug de closure stale dans le setInterval du polling
+  const loadEmailsFromApiRef = React.useRef<(withSync?: boolean) => Promise<void>>(async () => {});
 
   // ─── Priorités ARCHANGE — calcul JS pur, zéro appel API ─────────────────
   const prioritesArchange = React.useMemo(() => {
@@ -1111,11 +1116,17 @@ export default function App() {
   };
 
   // Analyse IA en arrière-plan — uniquement les emails sans extraction
-  const analyserEmailsEnArrierePlan = async (emailsList: any[]) => {
-    const aAnalyser = emailsList.filter(m => !repliesCache[m.id]?.extracted);
+  const analyserEmailsEnArrierePlan = async (emailsList: any[], cacheSnapshot: typeof repliesCache) => {
+    // Fix C2 — Garde-fou : une seule analyse à la fois (évite les appels Anthropic en double)
+    if (analysingRef.current) return;
+    // Fix C3 — Utiliser le cacheSnapshot passé en paramètre, pas la closure
+    // (la closure pouvait pointer vers repliesCache = {} si appelée depuis un contexte stale)
+    const aAnalyser = emailsList.filter(m => !cacheSnapshot[m.id]?.extracted);
     if (aAnalyser.length === 0) return;
+    analysingRef.current = true;
     setAnalysing(true);
     const nouvellesExtractions: Record<string,any> = {};
+    try {
     for (let i = 0; i < aAnalyser.length; i++) {
       const m = aAnalyser[i];
       setAnalysingProgress(`${i + 1}/${aAnalyser.length}`);
@@ -1143,15 +1154,19 @@ export default function App() {
         Object.entries(prev).forEach(([id, v]: [string, any]) => {
           if (v.extracted) allExtractions[id] = v.extracted;
         });
-        // Limiter à 200 entrées
+        // Limiter à 500 entrées (200 était trop bas — évinçait des analyses valides → re-analyses inutiles)
         const keys = Object.keys(allExtractions);
-        if (keys.length > 200) keys.slice(0, keys.length - 200).forEach(k => delete allExtractions[k]);
+        if (keys.length > 500) keys.slice(0, keys.length - 500).forEach(k => delete allExtractions[k]);
         saveExtractions(allExtractions);
         return prev;
       });
     }
-    setAnalysing(false);
-    setAnalysingProgress("");
+    } finally {
+      // Fix C2 — Toujours libérer le sémaphore, même en cas d'erreur inattendue
+      analysingRef.current = false;
+      setAnalysing(false);
+      setAnalysingProgress("");
+    }
   };
 
   // Chargement/synchronisation des emails — déclenche d'abord une sync Gmail, puis relit Supabase
@@ -1198,7 +1213,7 @@ export default function App() {
         const mapped = data.map((m: any) => mapEmail(m));
         setEmails(mapped);
         toast(mapped.length + " emails chargés");
-        if (withSync) setTimeout(() => analyserEmailsEnArrierePlan(mapped), 500);
+        if (withSync) setTimeout(() => analyserEmailsEnArrierePlan(mapped, repliesCache), 500);
       } else {
         setEmails([]);
         toast("Aucun email — vérifiez la connexion Gmail", "err");
@@ -1380,10 +1395,13 @@ export default function App() {
     return () => { window.removeEventListener("online", flushQueue); clearInterval(interval); };
   }, []);
 
-  // Fix #3 — Polling automatique toutes les 2 minutes pour détecter les nouveaux emails
+  // Fix C1 — Polling automatique toutes les 2 minutes pour détecter les nouveaux emails
+  // Utilise un ref pour éviter le bug de closure stale (le setInterval capturait
+  // loadEmailsFromApi du premier render, avec repliesCache = {} vide → re-analysait tout)
+  useEffect(() => { loadEmailsFromApiRef.current = loadEmailsFromApi; });
   useEffect(() => {
     const pollingInterval = setInterval(() => {
-      loadEmailsFromApi(true);
+      loadEmailsFromApiRef.current(true);
     }, 2 * 60 * 1000);
     return () => clearInterval(pollingInterval);
   }, []);
