@@ -513,8 +513,8 @@ export default function App() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [resas, setResas] = useState<any[]>([]);
   const [sel, setSel] = useState(null);
-  // Origine du mail ouvert — pour le fil d'Ariane "← Retour à l'événement"
-  const [mailOrigine, setMailOrigine] = useState<{type:'evenement',resaId:string,nom:string}|null>(null);
+  // Origine du mail ouvert — pour le fil d'Ariane "← Retour à l'événement" ou "← Retour au Radar"
+  const [mailOrigine, setMailOrigine] = useState<{type:'evenement'|'radar',resaId:string,nom:string}|null>(null);
 
   // Ouvrir un mail depuis une fiche événement
   const ouvrirMailDepuisEvenement = (email: any, resa: any) => {
@@ -731,6 +731,17 @@ export default function App() {
   const [subCollapsed, setSubCollapsed] = useState(false);
   // Relances
   const [relances, setRelances] = useState<any[]>([]);
+  // Tags personnalisés — persistés en Supabase
+  type CustomTag = { id: string; label: string; color: string };
+  const TAG_PALETTE = ["#EF4444","#F97316","#EAB308","#22C55E","#3B82F6","#8B5CF6","#EC4899","#14B8A6","#6B7280","#B89456"];
+  const [customTags, setCustomTags] = useState<CustomTag[]>([]);
+  const [emailTags, setEmailTags] = useState<Record<string,string[]>>({}); // emailId → tagIds
+  const [showTagMenu, setShowTagMenu] = useState<string|null>(null); // emailId ou null
+  const [newTagLabel, setNewTagLabel] = useState("");
+  const [newTagColor, setNewTagColor] = useState(TAG_PALETTE[0]);
+  const [tagFilter, setTagFilter] = useState<string|null>(null); // tagId filtré ou null
+  const saveCustomTags = (t: CustomTag[]) => { setCustomTags(t); saveToSupabase({custom_tags:JSON.stringify(t)}); };
+  const saveEmailTags = (t: Record<string,string[]>) => { setEmailTags(t); saveToSupabase({email_tags:JSON.stringify(t)}); };
   // Liens email ↔ événement — persistés en Supabase
   // Structure : { [emailId]: resaId }
   const [emailResaLinks, setEmailResaLinks] = useState<Record<string,string>>({});
@@ -1299,6 +1310,8 @@ export default function App() {
         } } catch {}
         try { if (d.radar_traites) { const t = JSON.parse(d.radar_traites); setRadarTraites(new Set(t)); } } catch {}
         try { if (d.sent_replies) setSentReplies(JSON.parse(d.sent_replies)); } catch {}
+        try { if (d.custom_tags) setCustomTags(JSON.parse(d.custom_tags)); } catch {}
+        try { if (d.email_tags) setEmailTags(JSON.parse(d.email_tags)); } catch {}
         // P1 — Charger les réponses IA persistées → restaure les replies après F5
         try { if (d.replies_cache) {
           const replies = JSON.parse(d.replies_cache);
@@ -1730,6 +1743,8 @@ export default function App() {
       if (m.snoozedUntil && m.snoozedUntil > new Date().toISOString()) return false;
       if (showArchived) return !!m.archived;
       if (m.archived) return false;
+      // 3 — Filtre par tag personnalisé
+      if (tagFilter && !(emailTags[m.id]||[]).includes(tagFilter)) return false;
       // Recherche full-text (from + subject + body + snippet)
       const matchesSearch = !q
         || m.from?.toLowerCase().includes(q)
@@ -1796,6 +1811,23 @@ export default function App() {
   const handleSel = async (emailArg: any) => {
     let email = emailArg;
     setMailOrigine(null);
+
+    // Fix 5 — Sauvegarder le brouillon de réponse en cours avant de changer d'email
+    if (sel && sel.id !== email.id && showReplyEditor && replyEditorText.trim()) {
+      // Sauvegarder comme brouillon lié à l'email précédent
+      const draftKey = `draft_reply_${sel.id}`;
+      try { localStorage.setItem(draftKey, replyEditorText); } catch {}
+    }
+    // Réinitialiser l'éditeur de réponse (isolation par email)
+    setShowReplyEditor(false);
+    setReplyEditorText("");
+    // Restaurer un brouillon éventuel pour le nouvel email
+    if (email.id) {
+      try {
+        const saved = localStorage.getItem(`draft_reply_${email.id}`);
+        if (saved) { setReplyEditorText(saved); setShowReplyEditor(true); }
+      } catch {}
+    }
 
     // Marquer comme lu — optimiste puis sync Gmail via PATCH
     if (email.unread) {
@@ -2374,9 +2406,10 @@ FORMAT
     () => Object.values(linksFetched).filter(Boolean).length
       + (menusCtx ? 1 : 0)
       + (conditionsCtx ? 1 : 0)
+      + (espacesCtx ? 1 : 0)
       + (tonCtx ? 1 : 0)
       + (customCtx ? 1 : 0),
-    [linksFetched, menusCtx, conditionsCtx, tonCtx, customCtx]
+    [linksFetched, menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx]
   );
 
   // ─── Icônes SVG Céleste pour la navigation ──────────────────────────────────
@@ -2519,18 +2552,7 @@ FORMAT
           ))}
         </div>
         {!navCollapsed&&<div style={{padding:"12px 14px",borderTop:"1px solid #E6DCC9",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-            <div style={{flex:1,height:1,background:"#E6DCC9"}}/>
-            <svg width="7" height="7" viewBox="0 0 10 10"><path d="M5 0L6 4L10 5L6 6L5 10L4 6L0 5L4 4Z" fill="#B89456"/></svg>
-            <div style={{flex:1,height:1,background:"#E6DCC9"}}/>
-          </div>
-          {espacesDyn.slice(0,3).map(e=>(
-            <div key={e.id} style={{display:"flex",alignItems:"center",gap:7,padding:"3px 2px"}}>
-              <div style={{width:5,height:5,borderRadius:"50%",background:e.color,flexShrink:0}}/>
-              <span style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontStyle:"italic",fontSize:12,color:"#3A3F52",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.nom}</span>
-            </div>
-          ))}
-          <div style={{marginTop:10,display:"flex",alignItems:"center",gap:7}}>
+          <div style={{display:"flex",alignItems:"center",gap:7}}>
             <div style={{width:22,height:22,borderRadius:"50%",background:"#1B1E2B",color:"#F7F2EA",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:500,flexShrink:0}}>
               {(session?.user?.name||"?")[0].toUpperCase()}
             </div>
@@ -3142,7 +3164,7 @@ FORMAT
                   </div>
                   {/* Catégories standard — Céleste */}
                   {[
-                    {id:"all", label:"Tous les mails", count:emails.filter(m=>!m.archived).length,
+                    {id:"all", label:"Tous les mails", count:emails.filter(m=>m.unread&&!m.archived).length||null,
                       icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="9" rx="1" stroke="currentColor" strokeWidth="1.1"/><path d="M1 4l6 4.5L13 4" stroke="currentColor" strokeWidth="1.1"/></svg>},
                   ].map(item=>(
                     <button key={item.id} onClick={()=>{setMailFilter("all");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 9px",borderRadius:3,border:"none",background:mailFilter==="all"&&!showArchived?"#F7F2EA":"transparent",color:mailFilter==="all"&&!showArchived?"#1B1E2B":"#3A3F52",fontSize:12,textAlign:"left",cursor:"pointer",marginBottom:1}}>
@@ -3169,11 +3191,10 @@ FORMAT
                     <span style={{flex:1}}>Archivés</span>
                     <span style={{fontSize:10,color:showArchived?"#B89456":"#6B6E7E"}}>{emails.filter(m=>m.archived).length||""}</span>
                   </button>
-                  {/* Envoyés */}
+                  {/* Envoyés — correction 6 : pas de compteur */}
                   <button onClick={()=>{setMailFilter("envoyes");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 9px",borderRadius:3,border:"none",background:mailFilter==="envoyes"&&!showArchived?"#F7F2EA":"transparent",color:mailFilter==="envoyes"&&!showArchived?"#1B1E2B":"#3A3F52",fontSize:12,textAlign:"left",cursor:"pointer",marginBottom:1}}>
                     <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{color:mailFilter==="envoyes"&&!showArchived?"#1B1E2B":"#6B6E7E"}}><path d="M1 7L13 1L9.5 13L7 8L1 7z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/></svg>
                     <span style={{flex:1}}>Envoyés</span>
-                    <span style={{fontSize:10,color:mailFilter==="envoyes"&&!showArchived?"#B89456":"#6B6E7E"}}>{Object.keys(sentReplies).length||""}</span>
                   </button>
                   {/* Brouillons */}
                   <button onClick={()=>{setMailFilter("brouillons");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 9px",borderRadius:3,border:"none",background:mailFilter==="brouillons"&&!showArchived?"#F7F2EA":"transparent",color:mailFilter==="brouillons"&&!showArchived?"#1B1E2B":"#3A3F52",fontSize:12,textAlign:"left",cursor:"pointer",marginBottom:1}}>
@@ -3181,6 +3202,20 @@ FORMAT
                     <span style={{flex:1}}>Brouillons</span>
                     <span style={{fontSize:10,color:localDrafts.length>0?"#B89456":"#6B6E7E"}}>{localDrafts.length||""}</span>
                   </button>
+                  {/* 3 — Filtres par tag personnalisé */}
+                  {customTags.length>0&&<>
+                    <div style={{height:1,background:"#E6DCC9",margin:"8px 4px"}}/>
+                    <div style={{fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",color:"#9CA3AF",padding:"2px 9px 4px",fontFamily:"'Inter',sans-serif"}}>Tags</div>
+                    {customTags.map(t=>{
+                      const cnt = Object.values(emailTags).filter(ids=>(ids as string[]).includes(t.id)).length;
+                      const isActive = tagFilter===t.id;
+                      return <button key={t.id} onClick={()=>{setTagFilter(isActive?null:t.id);setMailFilter("all");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"6px 9px",borderRadius:3,border:"none",background:isActive?"#F7F2EA":"transparent",color:isActive?"#1B1E2B":"#3A3F52",fontSize:12,textAlign:"left",cursor:"pointer",marginBottom:1}}>
+                        <span style={{width:8,height:8,borderRadius:"50%",background:t.color,flexShrink:0}}/>
+                        <span style={{flex:1}}>{t.label}</span>
+                        {cnt>0&&<span style={{fontSize:10,color:isActive?t.color:"#6B6E7E"}}>{cnt}</span>}
+                      </button>;
+                    })}
+                  </>}
                   {/* Aide raccourcis */}
                   <div style={{marginTop:"auto",paddingTop:8}}>
                     <button onClick={()=>setShowKeyHelp(true)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"7px 9px",borderRadius:3,border:"none",background:"transparent",color:"#6B6E7E",fontSize:10,cursor:"pointer",textAlign:"left"}}>
@@ -3270,7 +3305,14 @@ FORMAT
                         <div key={m.id}>
                           {showSection&&<div style={{fontSize:10,fontWeight:500,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",margin:idx===0?"0 0 10px":"20px 0 10px"}}>{sectionLabels[type]}</div>}
                           <div
-                            onClick={()=>setRadarSelEmail(isSelected ? null : m)}
+                            onClick={()=>{
+                              // Fix 8 — Ouvrir le lecteur de mail standard (pas le panel Radar)
+                              setMailOrigine({type:'radar', resaId: resa?.id||'', nom: 'Radar ARCHANGE'});
+                              handleSel(m);
+                              setView("mails");
+                              setMailFilter("all");
+                              setRadarSelEmail(null);
+                            }}
                             style={{background:"#FFFFFF",borderRadius:12,border:`1.5px solid ${borderCol}`,overflow:"hidden",marginBottom:8,boxShadow:isSelected?"0 0 0 3px rgba(184,148,86,0.2)":isHovered?"0 4px 16px rgba(0,0,0,.08)":"none",transition:"box-shadow .15s, border-color .15s",cursor:"pointer"}}
                             onMouseEnter={()=>setRadarHoverId(m.id)}
                             onMouseLeave={()=>setRadarHoverId(null)}>
@@ -3513,6 +3555,10 @@ FORMAT
                         {em.aTraiter&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:1,background:"#EFE7DA",color:"#B89456",border:"1px solid #E6DCC9",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600}}>À traiter</span>}
                         {(em.flags||[]).includes("star")&&<span style={{fontSize:11,color:"#B89456"}}>✦</span>}
                         {em.snoozedUntil&&<span style={{fontSize:10,color:"#7C3AED",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>⏰</span>}
+                        {/* 5 — Indicateur brouillon de réponse en cours */}
+                        {(()=>{try{return localStorage.getItem(`draft_reply_${em.id}`);}catch{return null;}})()&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:1,background:"#EFF6FF",color:"#3B82F6",border:"1px solid #BFDBFE",letterSpacing:"0.05em",textTransform:"uppercase",fontWeight:600}}>Brouillon</span>}
+                        {/* 3 — Badges tags personnalisés */}
+                        {(emailTags[em.id]||[]).map((tid:string)=>{const t=customTags.find(x=>x.id===tid);return t?<span key={tid} style={{fontSize:9,padding:"1px 5px",borderRadius:10,background:t.color+"22",color:t.color,border:`1px solid ${t.color}44`,fontWeight:600,letterSpacing:"0.04em"}}>{t.label}</span>:null;})}
                       </div>
                     </div>
                     {/* Barre d'actions au survol */}
@@ -3594,16 +3640,20 @@ FORMAT
               ) : (
                 <div style={{maxWidth:720,margin:"0 auto",padding:"20px 28px 80px"}}>
 
-                  {/* ── Fil d'Ariane retour événement ── */}
-                  {mailOrigine?.type==="evenement"&&(
+                  {/* ── Fil d'Ariane retour événement ou Radar ── */}
+                  {mailOrigine&&(
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"6px 10px",background:"rgba(184,148,86,0.08)",borderRadius:2,border:"1px solid rgba(184,148,86,0.2)"}}>
                       <button onClick={()=>{
-                        const resa = resas.find(r=>r.id===mailOrigine.resaId);
-                        if(resa){ setSelResaGeneral(resa); setView("general"); }
+                        if (mailOrigine.type==="evenement") {
+                          const resa = resas.find(r=>r.id===mailOrigine.resaId);
+                          if(resa){ setSelResaGeneral(resa); setView("general"); }
+                        } else if (mailOrigine.type==="radar") {
+                          setMailFilter("priorites");
+                        }
                         setMailOrigine(null);
                       }} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:"#B89456",fontSize:11,fontWeight:500,padding:0,fontFamily:"'Inter',sans-serif",letterSpacing:"0.02em"}}>
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="#B89456" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                        Retour à {mailOrigine.nom}
+                        {mailOrigine.type==="radar" ? "← Retour au Radar" : `Retour à ${mailOrigine.nom}`}
                       </button>
                     </div>
                   )}
@@ -3625,11 +3675,27 @@ FORMAT
                       {sel.archived?"📦 Archivé":"📦"}
                     </button>
                     <div style={{flex:1}}/>
+                    {/* 3 — Bouton tag personnalisé */}
+                    <div style={{position:"relative"}}>
+                      <button onClick={()=>setShowTagMenu(showTagMenu===sel.id?null:sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>🏷️</button>
+                      {showTagMenu===sel.id&&(
+                        <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:300,background:"#FFF",border:"1px solid #E6DCC9",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,.12)",minWidth:190,padding:8}}>
+                          {customTags.length===0&&<div style={{fontSize:11,color:"#9CA3AF",padding:"4px 8px",fontStyle:"italic"}}>Aucun tag — créez-en dans Sources IA</div>}
+                          {customTags.map(t=>{const applied=(emailTags[sel.id]||[]).includes(t.id);return(
+                            <div key={t.id} onClick={()=>{const cur=emailTags[sel.id]||[];saveEmailTags({...emailTags,[sel.id]:applied?cur.filter((x:string)=>x!==t.id):[...cur,t.id]});}} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",borderRadius:4,cursor:"pointer",background:applied?"rgba(184,148,86,0.08)":"transparent"}}>
+                              <span style={{width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0,boxShadow:applied?"0 0 0 2px #1B1E2B":undefined}}/>
+                              <span style={{fontSize:12,flex:1,color:"#1B1E2B"}}>{t.label}</span>
+                              {applied&&<span style={{fontSize:10,color:"#B89456"}}>✓</span>}
+                            </div>);
+                          })}
+                        </div>
+                      )}
+                    </div>
                     <button onClick={()=>deleteEmailWithUndo(sel)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"1px solid rgba(220,38,38,0.3)",background:"transparent",color:"#DC2626",cursor:"pointer"}}>✕</button>
                   </div>
 
                   {/* ── En-tête éditorial Céleste ── */}
-                  <div style={{marginBottom:18}}>
+                  <div style={{marginBottom:16}}>
                     {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext&&(
                       <div style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#B89456",marginBottom:8,fontWeight:500,display:"flex",alignItems:"center",gap:8,fontFamily:"'Inter',sans-serif"}}>
                         {ext.statutSuggere&&<span>{ext.statutSuggere.replace(/_/g," ")}</span>}
@@ -3637,20 +3703,31 @@ FORMAT
                         {ext.nombrePersonnes&&<><span style={{color:"#E6DCC9"}}>·</span><span>{ext.nombrePersonnes} personnes</span></>}
                       </div>
                     );})()}
-                    <h1 style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:27,fontWeight:500,letterSpacing:"-0.3px",lineHeight:1.15,color:"#1B1E2B",margin:"0 0 16px"}}>{sel.subject||"(sans objet)"}</h1>
-                    <div style={{display:"flex",alignItems:"center",gap:12,paddingBottom:14,borderBottom:"1px solid #E6DCC9"}}>
-                      <div style={{width:34,height:34,borderRadius:"50%",background:"#EFE7DA",border:"1px solid #E6DCC9",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Cormorant Garamond',serif",fontSize:14,fontWeight:500,color:"#1B1E2B",flexShrink:0}}>
+                    {/* Sujet en grand + ligne expéditeur */}
+                    <div style={{display:"flex",alignItems:"flex-start",gap:12,paddingBottom:14,borderBottom:"1px solid #E6DCC9"}}>
+                      <div style={{width:38,height:38,borderRadius:"50%",background:"#EFE7DA",border:"1px solid #E6DCC9",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Cormorant Garamond',serif",fontSize:15,fontWeight:500,color:"#1B1E2B",flexShrink:0,marginTop:2}}>
                         {(sel.from||"?")[0].toUpperCase()}
                       </div>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:14,fontWeight:500,color:"#1B1E2B"}}>{sel.from||"(inconnu)"}</div>
-                        <div style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>{sel.fromEmail}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <h1 style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:22,fontWeight:600,letterSpacing:"-0.2px",lineHeight:1.2,color:"#1B1E2B",margin:"0 0 4px",wordBreak:"break-word"}}>{sel.subject||"(sans objet)"}</h1>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                          <span style={{fontSize:13,fontWeight:500,color:"#1B1E2B"}}>{sel.from||"(inconnu)"}</span>
+                          <span style={{fontSize:11,color:"#9CA3AF"}}>·</span>
+                          <span style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>{sel.fromEmail}</span>
+                          <span style={{fontSize:11,color:"#9CA3AF",marginLeft:"auto"}}>{sel.date}</span>
+                        </div>
                       </div>
-                      <div style={{fontSize:11,color:"#6B6E7E"}}>{sel.date}</div>
                     </div>
                   </div>
 
                   {/* ── Corps email — Céleste ── */}
+                  {/* 1a — Bandeau résumé IA ARCHANGE (si extraction dispo et isReservation) */}
+                  {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext?.isReservation&&ext?.resume&&(
+                    <div style={{margin:"0 0 14px",padding:"10px 14px",background:"rgba(232,184,109,0.08)",border:"1px solid rgba(232,184,109,0.25)",borderRadius:6,display:"flex",gap:8,alignItems:"flex-start"}}>
+                      <span style={{fontSize:14,flexShrink:0,marginTop:1}}>✨</span>
+                      <span style={{fontSize:13,color:"#92400E",fontStyle:"italic",lineHeight:1.5,fontFamily:"'Cormorant Garamond',Georgia,serif"}}>{ext.resume}</span>
+                    </div>
+                  );})()}
                   <div style={{marginBottom:16}}>
                     {sel.bodyHtml ? (
                       <iframe
@@ -3970,7 +4047,7 @@ FORMAT
                               <span style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:isToday?700:400,background:isToday?"#B89456":"transparent",color:isToday?"#FFFFFF":"#9E9890"}}>{day}</span>
                             </div>
                             {dr.slice(0,3).map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                              <div key={r.id} onClick={()=>setEditResa({...r})} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
+                              <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setView("general"); }} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
                                 <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                                   {r.heureDebut&&<span style={{opacity:.7,marginRight:3}}>{r.heureDebut}{r.heureFin&&`→${r.heureFin}`}</span>}{r.nom}
                                 </div>
@@ -4002,7 +4079,7 @@ FORMAT
                       {weekDays.map(d=>{ const ds=fmtDate(d); const dr=resasForDate(ds); const isTd=ds===todayStr; return (
                         <div key={ds} style={{borderLeft:"1px solid #E6DCC9",minHeight:300,padding:"6px 4px",background:isTd?"rgba(232,184,109,0.03)":"transparent"}}>
                           {dr.map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                            <div key={r.id} onClick={()=>setEditResa({...r})} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
+                            <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setView("general"); }} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
                               <div style={{fontWeight:600,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.nom}</div>
                               {r.heureDebut&&<div style={{fontSize:10,color:st.color,opacity:.8}}>{r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</div>}
                               {(r.entreprise||espace)&&<div style={{fontSize:9,color:st.color,opacity:.65,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
@@ -4026,7 +4103,7 @@ FORMAT
                     ):(
                       <div style={{display:"flex",flexDirection:"column",gap:12}}>
                         {dayResas.map(r=>{ const st=getStatut(r); return (
-                          <div key={r.id} onClick={()=>setSelResa(r)} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
+                          <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setView("general"); }} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                               <div>
                                 <div style={{fontSize:15,fontWeight:600,color:"#1B1E2B"}}>{r.nom}</div>
@@ -4427,6 +4504,63 @@ FORMAT
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* 3 — Tags personnalisés */}
+            <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9"}}>
+              <div style={{padding:"14px 20px",background:"#EFE7DA",borderBottom:"1px solid #E6DCC9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B"}}>🏷️ Tags personnalisés</div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:2}}>Créez des tags pour classifier vos emails et filtrer rapidement.</div>
+                </div>
+                <span style={{fontSize:11,color:"#B89456",padding:"2px 8px",borderRadius:100,background:"rgba(184,148,86,0.1)"}}>{customTags.length} tag{customTags.length!==1?"s":""}</span>
+              </div>
+              <div style={{padding:20,display:"flex",flexDirection:"column",gap:14}}>
+                {/* Liste des tags existants */}
+                {customTags.length>0&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {customTags.map(t=>(
+                      <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"#F7F2EA",borderRadius:6,border:"1px solid #E6DCC9"}}>
+                        <span style={{width:14,height:14,borderRadius:"50%",background:t.color,flexShrink:0}}/>
+                        <span style={{flex:1,fontSize:13,color:"#1B1E2B",fontWeight:500}}>{t.label}</span>
+                        <span style={{fontSize:11,color:"#9CA3AF"}}>{Object.values(emailTags).filter(ids=>(ids as string[]).includes(t.id)).length} email{Object.values(emailTags).filter(ids=>(ids as string[]).includes(t.id)).length!==1?"s":""}</span>
+                        <button onClick={()=>{
+                          if (!window.confirm(`Supprimer le tag "${t.label}" ? Il sera retiré de tous les emails.`)) return;
+                          const newTags = customTags.filter(x=>x.id!==t.id);
+                          saveCustomTags(newTags);
+                          // Retirer le tag de tous les emails
+                          const newEmailTags: Record<string,string[]> = {};
+                          Object.entries(emailTags).forEach(([eid,ids])=>{
+                            const filtered = (ids as string[]).filter(x=>x!==t.id);
+                            if (filtered.length>0) newEmailTags[eid]=filtered;
+                          });
+                          saveEmailTags(newEmailTags);
+                          toast("Tag supprimé");
+                        }} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"2px 4px",borderRadius:4,lineHeight:1}}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Créer un nouveau tag */}
+                <div style={{display:"flex",flexDirection:"column",gap:10,padding:"12px",background:"#F9F8F6",borderRadius:6,border:"1px dashed #E6DCC9"}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.06em",textTransform:"uppercase"}}>Créer un tag</div>
+                  <input value={newTagLabel} onChange={e=>setNewTagLabel(e.target.value)} placeholder="Nom du tag…" style={{padding:"8px 10px",borderRadius:6,border:"1px solid #E6DCC9",fontSize:13,background:"#FFF",color:"#1B1E2B",outline:"none"}}/>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {TAG_PALETTE.map(c=>(
+                      <button key={c} onClick={()=>setNewTagColor(c)} style={{width:22,height:22,borderRadius:"50%",background:c,border:newTagColor===c?"3px solid #1B1E2B":"2px solid transparent",cursor:"pointer",flexShrink:0}}/>
+                    ))}
+                  </div>
+                  <button onClick={()=>{
+                    if (!newTagLabel.trim()) return;
+                    const tag: CustomTag = {id:`tag_${Date.now()}`,label:newTagLabel.trim(),color:newTagColor};
+                    saveCustomTags([...customTags,tag]);
+                    setNewTagLabel("");
+                    toast("Tag créé !");
+                  }} disabled={!newTagLabel.trim()} style={{padding:"8px 16px",borderRadius:6,border:"none",background:newTagLabel.trim()?"#1B1E2B":"#E6DCC9",color:newTagLabel.trim()?"#F7F2EA":"#9CA3AF",fontSize:12,fontWeight:600,cursor:newTagLabel.trim()?"pointer":"default",textAlign:"center"}}>
+                    + Créer ce tag
+                  </button>
+                </div>
+              </div>
             </div>
 
             </div>
