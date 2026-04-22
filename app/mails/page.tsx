@@ -3306,12 +3306,10 @@ FORMAT
                           {showSection&&<div style={{fontSize:10,fontWeight:500,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",margin:idx===0?"0 0 10px":"20px 0 10px"}}>{sectionLabels[type]}</div>}
                           <div
                             onClick={()=>{
-                              // Fix 8 — Ouvrir le lecteur de mail standard (pas le panel Radar)
-                              setMailOrigine({type:'radar', resaId: resa?.id||'', nom: 'Radar ARCHANGE'});
+                              // Fix 8 — Ouvrir le lecteur complet à droite du Radar (split view)
+                              // handleSel charge le corps et marque lu, sans naviguer ailleurs
                               handleSel(m);
-                              setView("mails");
-                              setMailFilter("all");
-                              setRadarSelEmail(null);
+                              setRadarSelEmail(m);
                             }}
                             style={{background:"#FFFFFF",borderRadius:12,border:`1.5px solid ${borderCol}`,overflow:"hidden",marginBottom:8,boxShadow:isSelected?"0 0 0 3px rgba(184,148,86,0.2)":isHovered?"0 4px 16px rgba(0,0,0,.08)":"none",transition:"box-shadow .15s, border-color .15s",cursor:"pointer"}}
                             onMouseEnter={()=>setRadarHoverId(m.id)}
@@ -3367,30 +3365,120 @@ FORMAT
                   })()}
                 </div>
 
-                {/* ── Panel droit — mail sélectionné (uniquement si sélection) ── */}
-                {radarSelEmail && (
-                <div style={{flex:1,overflowY:"auto",background:"#EEEAE4"}}>
-                    <div style={{maxWidth:720,margin:"0 auto",padding:"24px 24px 60px"}}>
-                      <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",overflow:"hidden"}}>
-                        <div style={{padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:"1px solid #E6DCC9"}}>
-                          <div style={{display:"flex",gap:12,alignItems:"center"}}>
-                            <Avatar name={radarSelEmail.from} size={42}/>
-                            <div>
-                              <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B"}}>{radarSelEmail.from}</div>
-                              <div style={{fontSize:12,color:"#6B6E7E"}}>{radarSelEmail.fromEmail} · {radarSelEmail.date}</div>
-                            </div>
-                          </div>
-                          <button onClick={()=>setRadarSelEmail(null)} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:20,lineHeight:1}}>×</button>
+                {/* ── Panel droit — lecteur de mail COMPLET (même composant que la vue Mails) ── */}
+                {sel && radarSelEmail && (
+                <div style={{flex:1,overflowY:"auto",background:"#F7F2EA",borderLeft:"1px solid #E6DCC9",display:"flex",flexDirection:"column"}}>
+                  <div style={{flex:1,overflowY:"auto",padding:"20px 24px 60px"}}>
+
+                    {/* Bouton fermer le panel */}
+                    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+                      <button onClick={()=>{setRadarSelEmail(null);setSel(null);}} style={{background:"none",border:"none",color:"#9CA3AF",cursor:"pointer",fontSize:18,lineHeight:1,padding:"2px 4px"}}>×</button>
+                    </div>
+
+                    {/* ── Barre d'actions ── */}
+                    <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:14,padding:"7px 12px",background:"#EFE7DA",borderRadius:2,border:"1px solid #E6DCC9",flexWrap:"wrap"}}>
+                      <button onClick={()=>openReplyEditor("reply")} style={{fontSize:11,padding:"5px 12px",borderRadius:2,border:"none",background:"#1B1E2B",color:"#F7F2EA",cursor:"pointer",fontWeight:500,fontFamily:"'Inter',sans-serif"}}>↩ Répondre</button>
+                      {sel.cc?.length>0&&<button onClick={()=>openReplyEditor("replyAll")} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#3A3F52",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↩↩ À tous</button>}
+                      <button onClick={()=>openReplyEditor("forward")} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#3A3F52",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↪ Transférer</button>
+                      <div style={{width:1,height:14,background:"#E6DCC9",margin:"0 2px"}}/>
+                      <button onClick={()=>toggleFlag(sel.id,"star")} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(sel.flags||[]).includes("star")?1:0.25,padding:"3px 4px",color:"#B89456"}}>✦</button>
+                      <button onClick={()=>archiveEmail(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>📦</button>
+                      <div style={{flex:1}}/>
+                      <button onClick={()=>deleteEmailWithUndo(sel)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"1px solid rgba(220,38,38,0.3)",background:"transparent",color:"#DC2626",cursor:"pointer"}}>✕</button>
+                    </div>
+
+                    {/* ── En-tête ── */}
+                    <div style={{marginBottom:14}}>
+                      {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext&&(
+                        <div style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#B89456",marginBottom:6,fontWeight:500,display:"flex",alignItems:"center",gap:8,fontFamily:"'Inter',sans-serif"}}>
+                          {ext.statutSuggere&&<span>{ext.statutSuggere.replace(/_/g," ")}</span>}
+                          {ext.typeEvenement&&<><span style={{color:"#E6DCC9"}}>·</span><span>{ext.typeEvenement}</span></>}
+                          {ext.nombrePersonnes&&<><span style={{color:"#E6DCC9"}}>·</span><span>{ext.nombrePersonnes} pers.</span></>}
                         </div>
-                        <div style={{padding:"16px 20px"}}>
-                          <div style={{fontSize:16,fontWeight:600,color:"#1B1E2B",marginBottom:14}}>{radarSelEmail.subject}</div>
-                          {radarSelEmail.bodyHtml
-                            ? <iframe srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'DM Sans',sans-serif;font-size:14px;color:#3D3530;line-height:1.7;padding:0;margin:0;}img{max-width:100%!important;height:auto!important;}a{color:#B89456;}*{box-sizing:border-box;}</style></head><body>${radarSelEmail.bodyHtml}</body></html>`} sandbox="allow-same-origin" style={{width:"100%",border:"none",minHeight:300,display:"block"}} onLoad={e=>{const f=e.currentTarget;try{f.style.height=f.contentDocument?.body?.scrollHeight+"px";}catch{}}}/>
-                            : <div style={{fontSize:14,color:"#6B6E7E",lineHeight:1.85,whiteSpace:"pre-wrap"}}>{radarSelEmail.body||radarSelEmail.snippet}</div>
-                          }
+                      );})()}
+                      <div style={{display:"flex",alignItems:"flex-start",gap:10,paddingBottom:12,borderBottom:"1px solid #E6DCC9"}}>
+                        <div style={{width:36,height:36,borderRadius:"50%",background:"#EFE7DA",border:"1px solid #E6DCC9",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Cormorant Garamond',serif",fontSize:14,fontWeight:500,color:"#1B1E2B",flexShrink:0}}>
+                          {(sel.from||"?")[0].toUpperCase()}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <h2 style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:18,fontWeight:600,lineHeight:1.2,color:"#1B1E2B",margin:"0 0 3px",wordBreak:"break-word"}}>{sel.subject||"(sans objet)"}</h2>
+                          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                            <span style={{fontSize:12,fontWeight:500,color:"#1B1E2B"}}>{sel.from||"(inconnu)"}</span>
+                            <span style={{fontSize:11,color:"#9CA3AF"}}>·</span>
+                            <span style={{fontSize:11,color:"#6B6E7E",fontStyle:"italic"}}>{sel.fromEmail}</span>
+                            <span style={{fontSize:11,color:"#9CA3AF",marginLeft:"auto"}}>{sel.date}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
+
+                    {/* ── Résumé IA ── */}
+                    {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext?.isReservation&&ext?.resume&&(
+                      <div style={{margin:"0 0 12px",padding:"8px 12px",background:"rgba(232,184,109,0.08)",border:"1px solid rgba(232,184,109,0.25)",borderRadius:6,display:"flex",gap:8,alignItems:"flex-start"}}>
+                        <span style={{fontSize:13,flexShrink:0}}>✨</span>
+                        <span style={{fontSize:12,color:"#92400E",fontStyle:"italic",lineHeight:1.5,fontFamily:"'Cormorant Garamond',Georgia,serif"}}>{ext.resume}</span>
+                      </div>
+                    );})()}
+
+                    {/* ── Pièces jointes ── */}
+                    {(sel.attachments||[]).length>0&&(
+                      <div style={{marginBottom:12,paddingBottom:12,borderBottom:"1px solid #E6DCC9"}}>
+                        <div style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:"#6B6E7E",marginBottom:6,fontFamily:"'Inter',sans-serif"}}>Pièces jointes · {sel.attachments.length}</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                          {sel.attachments.map((att:any,i:number)=>{
+                            const ext2=(att.filename||att.name||"").split(".").pop()?.toLowerCase()||"";
+                            const icons:Record<string,string>={pdf:"📄",doc:"📝",docx:"📝",xls:"📊",xlsx:"📊",jpg:"🖼",jpeg:"🖼",png:"🖼",zip:"🗜"};
+                            return <div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 8px",background:"#EFE7DA",borderRadius:2,border:"1px solid #E6DCC9",cursor:"pointer",fontSize:11}} onClick={async()=>{if(att.id&&sel?.gmailId){try{const url=`/api/gmail/attachment?gmailId=${encodeURIComponent(sel.gmailId)}&attachmentId=${encodeURIComponent(att.id)}&filename=${encodeURIComponent(att.filename||att.name||"attachment")}`;const a=document.createElement("a");a.href=url;a.download=att.filename||att.name||"attachment";document.body.appendChild(a);a.click();document.body.removeChild(a);}catch{toast("Erreur téléchargement","err");}}}}>
+                              <span>{icons[ext2]||"📎"}</span>
+                              <span style={{maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{att.filename||att.name||"Pièce jointe"}</span>
+                            </div>;
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Corps ── */}
+                    <div style={{marginBottom:16}}>
+                      {sel.bodyHtml
+                        ? <iframe key={sel.id} srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;}html,body{margin:0;padding:0;background:#F7F2EA;}body{font-family:'Cormorant Garamond',Georgia,serif;font-size:15px;color:#3A3F52;line-height:1.7;word-break:break-word;padding:0;}img{max-width:100%!important;height:auto!important;}a{color:#B89456;}</style></head><body>${sel.bodyHtml}</body></html>`} sandbox="allow-same-origin allow-popups" style={{width:"100%",border:"none",display:"block",minHeight:100,background:"#F7F2EA"}} onLoad={e=>{const f=e.currentTarget;try{const h=f.contentDocument?.documentElement?.scrollHeight||f.contentDocument?.body?.scrollHeight||300;f.style.height=(h+16)+"px";}catch{}}}/>
+                        : <div style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:15,color:"#3A3F52",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{renderPlainText(sel.body||sel.snippet||"")}</div>
+                      }
+                    </div>
+
+                    {/* ── Zone réponse IA ── */}
+                    <div style={{borderTop:"1px solid #E6DCC9",paddingTop:14}}>
+                      {!reply&&!genReply&&(
+                        <button onClick={genererReponse} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 18px",borderRadius:2,border:"1px solid #E6DCC9",background:"#1B1E2B",color:"#F7F2EA",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>
+                          {genReply?<><Spin s={12}/> Génération…</>:<>✨ Générer une réponse</>}
+                        </button>
+                      )}
+                      {reply&&(
+                        <div style={{background:"#FFF",borderRadius:2,border:"1px solid #E6DCC9",padding:14}}>
+                          <div style={{fontSize:11,color:"#B89456",fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,fontFamily:"'Inter',sans-serif"}}>✨ Réponse ARCHANGE</div>
+                          <div style={{fontSize:13,color:"#1B1E2B",lineHeight:1.75,whiteSpace:"pre-wrap",fontFamily:"'Cormorant Garamond',Georgia,serif"}}>{reply}</div>
+                          <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
+                            <button onClick={()=>openReplyEditor("reply")} style={{fontSize:11,padding:"5px 12px",borderRadius:2,border:"none",background:"#1B1E2B",color:"#F7F2EA",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↩ Utiliser cette réponse</button>
+                            <button onClick={genererReponse} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↺ Regénérer</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Éditeur de réponse ── */}
+                    {showReplyEditor&&(
+                      <div style={{marginTop:14,background:"#FFF",borderRadius:2,border:"1px solid #E6DCC9",padding:14}}>
+                        <div style={{fontSize:11,color:"#6B6E7E",marginBottom:6,fontFamily:"'Inter',sans-serif"}}>
+                          {replyEditorMode==="reply"?"↩ Répondre à":replyEditorMode==="replyAll"?"↩↩ Répondre à tous:":"↪ Transférer à:"} <strong>{replyEditorTo}</strong>
+                        </div>
+                        <textarea value={replyEditorText} onChange={e=>setReplyEditorText(e.target.value)} rows={8} style={{width:"100%",padding:"10px 12px",borderRadius:2,border:"1px solid #E6DCC9",fontSize:13,fontFamily:"'Cormorant Garamond',Georgia,serif",lineHeight:1.75,resize:"vertical",background:"#FAFAFA",color:"#1B1E2B",boxSizing:"border-box"}}/>
+                        <div style={{display:"flex",gap:6,marginTop:8}}>
+                          <button onClick={sendReplyEmail} disabled={sending} style={{fontSize:11,padding:"6px 14px",borderRadius:2,border:"none",background:"#1B1E2B",color:"#F7F2EA",cursor:sending?"wait":"pointer",fontFamily:"'Inter',sans-serif",display:"flex",alignItems:"center",gap:6}}>{sending?<><Spin s={10}/> Envoi…</>:"Envoyer"}</button>
+                          <button onClick={()=>{setShowReplyEditor(false);setReplyEditorText("");}} style={{fontSize:11,padding:"6px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Annuler</button>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
                 </div>
                 )}
 
