@@ -682,6 +682,8 @@ export default function App() {
   const [calDate, setCalDate] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [selResa, setSelResa] = useState(null);
   const [editResa, setEditResa] = useState(null);
+  // Modal fiche événement depuis le Planning (sans quitter la vue)
+  const [planningResaModal, setPlanningResaModal] = useState(false);
   const [links, setLinks] = useState({website:"",instagram:"",facebook:"",other:""});
   const [linksFetched, setLinksFetched] = useState({});
   const [fetchingLink, setFetchingLink] = useState(null);
@@ -2845,7 +2847,7 @@ FORMAT
             </div>
 
             {/* Panel détail réservation (général) — XL */}
-            {selResaGeneral&&!editResaPanel&&(
+            {selResaGeneral&&!editResaPanel&&!planningResaModal&&(
               <div style={{flex:1,minWidth:380,borderLeft:"1px solid #E6DCC9",background:"#FDFCFA",display:"flex",flexDirection:"column",overflowY:"auto"}}>
 
                 {/* Header avec avatar */}
@@ -4187,7 +4189,7 @@ FORMAT
                               <span style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:isToday?700:400,background:isToday?"#B89456":"transparent",color:isToday?"#FFFFFF":"#9E9890"}}>{day}</span>
                             </div>
                             {dr.slice(0,3).map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                              <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setView("general"); }} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
+                              <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setPlanningResaModal(true); }} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
                                 <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                                   {r.heureDebut&&<span style={{opacity:.7,marginRight:3}}>{r.heureDebut}{r.heureFin&&`→${r.heureFin}`}</span>}{r.nom}
                                 </div>
@@ -4219,7 +4221,7 @@ FORMAT
                       {weekDays.map(d=>{ const ds=fmtDate(d); const dr=resasForDate(ds); const isTd=ds===todayStr; return (
                         <div key={ds} style={{borderLeft:"1px solid #E6DCC9",minHeight:300,padding:"6px 4px",background:isTd?"rgba(232,184,109,0.03)":"transparent"}}>
                           {dr.map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                            <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setView("general"); }} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
+                            <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setPlanningResaModal(true); }} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
                               <div style={{fontWeight:600,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.nom}</div>
                               {r.heureDebut&&<div style={{fontSize:10,color:st.color,opacity:.8}}>{r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</div>}
                               {(r.entreprise||espace)&&<div style={{fontSize:9,color:st.color,opacity:.65,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
@@ -4243,7 +4245,7 @@ FORMAT
                     ):(
                       <div style={{display:"flex",flexDirection:"column",gap:12}}>
                         {dayResas.map(r=>{ const st=getStatut(r); return (
-                          <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setView("general"); }} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
+                          <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setPlanningResaModal(true); }} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                               <div>
                                 <div style={{fontSize:15,fontWeight:600,color:"#1B1E2B"}}>{r.nom}</div>
@@ -4707,6 +4709,150 @@ FORMAT
           </div>
         )}
       </main>
+
+      {/* ══ MODAL FICHE ÉVÉNEMENT depuis le Planning ══ */}
+      {/* Affiche la fiche complète en overlay sans quitter la vue Planning */}
+      {planningResaModal && selResaGeneral && !editResaPanel && (
+        <div style={{position:"fixed",inset:0,zIndex:600,display:"flex",alignItems:"stretch",justifyContent:"flex-end"}} onClick={e=>{if(e.target===e.currentTarget){setPlanningResaModal(false);setSelResaGeneral(null);setShowMailHistory(false);}}}>
+          {/* Fond semi-transparent */}
+          <div style={{position:"absolute",inset:0,background:"rgba(27,30,43,0.45)"}}/>
+          {/* Panneau fiche — identique à la vue Événements */}
+          <div style={{position:"relative",width:560,maxWidth:"90vw",height:"100vh",background:"#FDFCFA",display:"flex",flexDirection:"column",overflowY:"auto",boxShadow:"-8px 0 40px rgba(0,0,0,0.15)",borderLeft:"1px solid #E6DCC9"}}>
+
+            {/* Header */}
+            <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #E6DCC9",flexShrink:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14}}>
+                <div style={{display:"flex",gap:14,alignItems:"flex-start",flex:1,minWidth:0}}>
+                  <Avatar name={selResaGeneral.nom||"?"} size={48}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:18,fontWeight:600,color:"#1B1E2B",letterSpacing:"-0.01em",marginBottom:5}}>{selResaGeneral.nom}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+                      {selResaGeneral.entreprise&&<span style={{fontSize:12,color:"#6B6E7E"}}>🏢 {selResaGeneral.entreprise}</span>}
+                      {selResaGeneral.email&&<span style={{fontSize:12,color:"#6B6E7E"}}>📧 {selResaGeneral.email}</span>}
+                      {selResaGeneral.telephone&&<span style={{fontSize:12,color:"#6B6E7E"}}>📞 {selResaGeneral.telephone}</span>}
+                    </div>
+                  </div>
+                </div>
+                <button onClick={()=>{setPlanningResaModal(false);setSelResaGeneral(null);setShowMailHistory(false);}} style={{width:26,height:26,borderRadius:6,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+              </div>
+            </div>
+
+            {/* Onglets — réutilise generalFilter */}
+            <div style={{display:"flex",borderBottom:"1px solid #E6DCC9",flexShrink:0}}>
+              {[["infos","📋 Infos"],["mails","📧 Mails"],["noteIA","✨ Note IA"],["relances","⏰ Relances"]].map(([tab,label])=>(
+                <button key={tab} onClick={()=>setGeneralFilter(tab as any)} style={{padding:"10px 16px",fontSize:12,fontWeight:generalFilter===tab?600:400,color:generalFilter===tab?"#1B1E2B":"#6B6E7E",borderBottom:`2px solid ${generalFilter===tab?"#1B1E2B":"transparent"}`,background:"none",border:"none",borderBottom:`2px solid ${generalFilter===tab?"#1B1E2B":"transparent"}`,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  {label}{tab==="mails"&&getLinkedEmails(selResaGeneral).length>0&&<span style={{marginLeft:4,fontSize:10,background:"#E6DCC9",borderRadius:10,padding:"1px 5px"}}>{getLinkedEmails(selResaGeneral).length}</span>}
+                </button>
+              ))}
+            </div>
+
+            {/* Corps onglet */}
+            <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+              {/* Onglet Infos */}
+              {generalFilter==="infos"&&(()=>{
+                const st = getStatut(selResaGeneral);
+                const espace = ESPACES.find(e=>e.id===selResaGeneral.espaceId);
+                return (
+                  <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                    {/* Statuts */}
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {statuts.map(s=>(
+                        <button key={s.id} onClick={()=>{const upd=resas.map(r=>r.id===selResaGeneral.id?{...r,statut:s.id}:r);saveResas(upd);setSelResaGeneral({...selResaGeneral,statut:s.id});}} style={{padding:"5px 12px",borderRadius:100,border:"none",background:(selResaGeneral.statut||"nouveau")===s.id?s.bg:"#F0EDE8",color:(selResaGeneral.statut||"nouveau")===s.id?s.color:"#6B6E7E",fontSize:11,fontWeight:(selResaGeneral.statut||"nouveau")===s.id?600:400,cursor:"pointer"}}>{s.label}</button>
+                      ))}
+                    </div>
+                    {/* Grille infos */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                      {[["📅 Date",selResaGeneral.dateDebut],["🕐 Horaires",[selResaGeneral.heureDebut,selResaGeneral.heureFin].filter(Boolean).join(" → ")||null],["👥 Personnes",selResaGeneral.nombrePersonnes?`${selResaGeneral.nombrePersonnes} pers.`:null],["📍 Espace",espace?.nom],["🎉 Type",selResaGeneral.typeEvenement],["💰 Budget",selResaGeneral.budget]].map(([label,value])=>value?(
+                        <div key={label} style={{background:"#F7F2EA",borderRadius:8,padding:"10px 12px"}}>
+                          <div style={{fontSize:10,color:"#9CA3AF",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{label}</div>
+                          <div style={{fontSize:13,color:"#1B1E2B",fontWeight:500}}>{value}</div>
+                        </div>
+                      ):null)}
+                    </div>
+                    {selResaGeneral.notes&&<div style={{background:"#F7F2EA",borderRadius:8,padding:"12px 14px"}}><div style={{fontSize:10,color:"#9CA3AF",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4,fontFamily:"'Inter',sans-serif"}}>📝 Notes</div><div style={{fontSize:13,color:"#3A3F52",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{selResaGeneral.notes}</div></div>}
+                  </div>
+                );
+              })()}
+
+              {/* Onglet Mails */}
+              {generalFilter==="mails"&&(()=>{
+                const linked = getLinkedEmails(selResaGeneral);
+                return linked.length===0
+                  ? <div style={{textAlign:"center",padding:"40px 0",color:"#6B6E7E",fontSize:13}}>Aucun email lié à cet événement</div>
+                  : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      {linked.map(m=>(
+                        <div key={m.id} onClick={()=>{setPlanningResaModal(false);ouvrirMailDepuisEvenement(m,selResaGeneral);}} style={{padding:"12px 14px",background:"#F7F2EA",borderRadius:8,border:"1px solid #E6DCC9",cursor:"pointer"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                            <span style={{fontSize:12,fontWeight:600,color:"#1B1E2B"}}>{m.from}</span>
+                            <span style={{fontSize:11,color:"#9CA3AF"}}>{m.date}</span>
+                          </div>
+                          <div style={{fontSize:12,color:"#3A3F52",marginBottom:3}}>{m.subject}</div>
+                          <div style={{fontSize:11,color:"#9CA3AF",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.snippet||m.body?.slice(0,100)}</div>
+                          {sentReplies[m.id]&&<div style={{fontSize:11,color:"#B89456",marginTop:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📤 Vous — {sentReplies[m.id].text.slice(0,60)}…</div>}
+                        </div>
+                      ))}
+                    </div>;
+              })()}
+
+              {/* Onglet Note IA */}
+              {generalFilter==="noteIA"&&(
+                <div>
+                  {noteIA[selResaGeneral.id]
+                    ? <div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                          <span style={{fontSize:11,color:"#9CA3AF",fontStyle:"italic"}}>Générée le {noteIA[selResaGeneral.id].date}</span>
+                          <button onClick={()=>generateNoteIA(selResaGeneral)} disabled={!!genNoteIA} style={{fontSize:11,padding:"5px 12px",borderRadius:6,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:genNoteIA?"wait":"pointer"}}>↺ Regénérer</button>
+                        </div>
+                        <div style={{fontSize:13,color:"#1B1E2B",lineHeight:1.75,whiteSpace:"pre-wrap"}}>{noteIA[selResaGeneral.id].text}</div>
+                      </div>
+                    : <div style={{textAlign:"center",padding:"40px 0"}}>
+                        <div style={{fontSize:32,marginBottom:10}}>✨</div>
+                        <div style={{fontSize:13,color:"#6B6E7E",marginBottom:16}}>Générez une note de briefing basée sur les échanges emails</div>
+                        <button onClick={()=>generateNoteIA(selResaGeneral)} disabled={!!genNoteIA} style={{padding:"10px 20px",borderRadius:8,border:"none",background:"#1B1E2B",color:"#B89456",fontSize:12,fontWeight:600,cursor:genNoteIA?"wait":"pointer",display:"flex",alignItems:"center",gap:8,margin:"0 auto"}}>
+                          {genNoteIA?<><Spin s={12}/> Génération…</>:"✨ Générer la note"}
+                        </button>
+                      </div>
+                  }
+                </div>
+              )}
+
+              {/* Onglet Relances */}
+              {generalFilter==="relances"&&(
+                <div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                    <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B"}}>Relances planifiées</div>
+                    <button onClick={()=>setShowRelanceForm(selResaGeneral.id)} style={{fontSize:11,padding:"6px 12px",borderRadius:6,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer"}}>+ Ajouter</button>
+                  </div>
+                  {relances.filter(r=>r.resaId===selResaGeneral.id).length===0
+                    ? <div style={{textAlign:"center",padding:"30px 0",color:"#9CA3AF",fontSize:13}}>Aucune relance planifiée</div>
+                    : relances.filter(r=>r.resaId===selResaGeneral.id).map(rel=>(
+                        <div key={rel.id} style={{padding:"10px 14px",background:"#F7F2EA",borderRadius:8,border:"1px solid #E6DCC9",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <div>
+                            <div style={{fontSize:12,fontWeight:600,color:"#1B1E2B"}}>{rel.date}</div>
+                            <div style={{fontSize:11,color:"#6B6E7E"}}>{rel.motif||"Relance générale"}</div>
+                          </div>
+                          <button onClick={()=>saveRelances(relances.filter(r=>r.id!==rel.id))} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"2px 4px"}}>✕</button>
+                        </div>
+                      ))
+                  }
+                  <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(selResaGeneral);}} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"#1B1E2B",color:"#B89456",fontSize:12,fontWeight:600,cursor:"pointer",marginTop:8,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>✨ Générer une relance IA</button>
+                </div>
+              )}
+            </div>
+
+            {/* Actions bas */}
+            <div style={{padding:"14px 24px",borderTop:"1px solid #E6DCC9",display:"flex",flexDirection:"column",gap:8,flexShrink:0}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <button onClick={()=>{setPlanningResaModal(false);setEditResaPanel({...selResaGeneral});}} style={{padding:"9px",borderRadius:8,border:"1px solid #E6DCC9",background:"transparent",color:"#1B1E2B",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✏️ Modifier</button>
+                <button onClick={()=>{setShowRelanceForm(selResaGeneral.id);}} style={{padding:"9px",borderRadius:8,border:"1px solid #FDE68A",background:"#FFFBEB",color:"#92400E",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>⏰ Relance date</button>
+                <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(selResaGeneral);}} style={{padding:"9px",borderRadius:8,border:"none",background:"#1B1E2B",color:"#B89456",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✨ Mail relance IA</button>
+                <button onClick={()=>openSendMail(selResaGeneral)} style={{padding:"9px",borderRadius:8,border:"none",background:"rgba(184,148,86,0.15)",color:"#B89456",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>📤 Envoyer mail</button>
+              </div>
+              <button onClick={()=>{if(!window.confirm("Supprimer cet événement ?"))return;saveResas(resas.filter(r=>r.id!==selResaGeneral.id));setPlanningResaModal(false);setSelResaGeneral(null);toast("Supprimé");}} style={{width:"100%",padding:"9px",borderRadius:8,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",fontSize:12,cursor:"pointer"}}>Supprimer l'événement</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══ MODALE RADAR — CRÉER RÉSERVATION ══ */}
       {radarResaModal&&(
