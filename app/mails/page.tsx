@@ -3447,6 +3447,58 @@ FORMAT
 
                     {/* ── Zone réponse IA ── */}
                     <div style={{borderTop:"1px solid #E6DCC9",paddingTop:14}}>
+
+                    {/* ── Carré ARCHANGE — données du cache, AUCUN appel IA ── */}
+                    {extracted?.isReservation && !showPlanForm && (()=>{
+                      const alreadyIn = resas.find(r=>emailResaLinks[sel?.id||""]===r.id||(r.email&&extracted.email&&r.email.toLowerCase()===extracted.email.toLowerCase()));
+                      const espace = ESPACES.find(e=>e.id===extracted.espaceDetecte);
+                      return (
+                        <div style={{marginBottom:16,padding:"18px 20px",background:"#EFE7DA",border:"1px solid #E6DCC9",borderLeft:"3px solid #B89456",borderRadius:"0 4px 4px 0"}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B89456" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B89456"/><path d="M12 9.6 L 12 18.2" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B89456"/></svg>
+                              <span style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#1B1E2B",fontWeight:500,fontFamily:"'Inter',sans-serif"}}>Lecture par Archange</span>
+                              {extracted.confiance&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:1,background:"rgba(184,148,86,0.15)",color:"#B89456",border:"1px solid rgba(184,148,86,0.3)",letterSpacing:"0.06em",textTransform:"uppercase"}}>Confiance {extracted.confiance}</span>}
+                            </div>
+                            {!alreadyIn&&<button onClick={openPlanForm} style={{fontSize:10,padding:"5px 12px",borderRadius:2,border:"1px solid #E6DCC9",background:"#1B1E2B",color:"#F7F2EA",cursor:"pointer",letterSpacing:"0.04em",fontFamily:"'Inter',sans-serif"}}>+ Planning</button>}
+                            {alreadyIn&&<button onClick={()=>{setSelResaGeneral(alreadyIn);setView("general");}} style={{fontSize:10,padding:"5px 12px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#B89456",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Voir l'événement →</button>}
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"7px 18px",fontSize:13}}>
+                            {extracted.nom&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Client</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#1B1E2B"}}>{extracted.nom}{extracted.entreprise?` — ${extracted.entreprise}`:""}</div></>}
+                            {extracted.typeEvenement&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Événement</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#1B1E2B"}}>{extracted.typeEvenement}</div></>}
+                            {extracted.nombrePersonnes&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Convives</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#1B1E2B"}}>{extracted.nombrePersonnesMin&&extracted.nombrePersonnesMin!==extracted.nombrePersonnes?`${extracted.nombrePersonnesMin}–${extracted.nombrePersonnes}`:extracted.nombrePersonnes} personnes</div></>}
+                            {extracted.dateDebut&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Date</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#1B1E2B"}}>{extracted.dateDebut}{extracted.heureDebut?` · ${extracted.heureDebut}${extracted.heureFin?` → ${extracted.heureFin}`:""}`:""}</div></>}
+                            {espace&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Espace suggéré</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#B89456",fontWeight:500}}>{espace.nom} · disponible</div></>}
+                            {extracted.budget&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Inter',sans-serif"}}>Budget</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:14,color:"#1B1E2B"}}>{extracted.budget}</div></>}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* ── Formulaire planning (identique lecteur standard) ── */}
+                    {showPlanForm&&(
+                      <div style={{background:"#FFFFFF",border:"1px solid #E6DCC9",borderRadius:14,padding:"20px",marginBottom:16}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                          <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B",letterSpacing:"-0.01em"}}>📅 Ajouter au planning</div>
+                          <button onClick={()=>setShowPlanForm(false)} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:18}}>×</button>
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                          {[["dateDebut","📅 Date *","date"],["heureDebut","🕐 Heure début *","time"],["heureFin","🕕 Heure fin *","time"]].map(([k,l,type])=>(
+                            <div key={k}><label style={{fontSize:11,color:planErrors[k]?"#DC2626":"#8A8178",display:"block",marginBottom:4,fontWeight:planErrors[k]?600:400}}>{l}</label>{type==="date"?<DatePicker value={planForm[k]||""} onChange={v=>setPlanForm({...planForm,[k]:v})}/>:<TimePicker value={planForm[k]||""} onChange={v=>setPlanForm({...planForm,[k]:v})} placeholder={l.replace(" *","")}/>}{planErrors[k]&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {planErrors[k]}</div>}</div>
+                          ))}
+                          <div><label style={{fontSize:11,color:planErrors["nombrePersonnes"]?"#DC2626":"#8A8178",display:"block",marginBottom:4,fontWeight:planErrors["nombrePersonnes"]?600:400}}>👥 Personnes *</label><input type="number" min="1" value={planForm.nombrePersonnes||""} onChange={e=>setPlanForm({...planForm,nombrePersonnes:e.target.value})} placeholder="Ex: 50" style={{padding:"8px 10px",borderRadius:8,border:"1px solid #E6DCC9",fontSize:13,width:"100%",boxSizing:"border-box"}}/>{planErrors["nombrePersonnes"]&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {planErrors["nombrePersonnes"]}</div>}</div>
+                          <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🎉 Type</label><input value={planForm.typeEvenement||""} onChange={e=>setPlanForm({...planForm,typeEvenement:e.target.value})} placeholder="Cocktail, Dîner…" style={{padding:"8px 10px",borderRadius:8,border:"1px solid #E6DCC9",fontSize:13,width:"100%",boxSizing:"border-box"}}/></div>
+                          <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>💰 Budget</label><input value={planForm.budget||""} onChange={e=>setPlanForm({...planForm,budget:e.target.value})} placeholder="Ex: 5 000€" style={{padding:"8px 10px",borderRadius:8,border:"1px solid #E6DCC9",fontSize:13,width:"100%",boxSizing:"border-box"}}/></div>
+                          <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📍 Espace</label><select value={planForm.espaceId||espacesDyn[0]?.id||""} onChange={e=>setPlanForm({...planForm,espaceId:e.target.value})} style={{padding:"8px 10px",borderRadius:8,border:"1px solid #E6DCC9",fontSize:13,width:"100%"}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
+                          <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📝 Notes</label><input value={planForm.notes||""} onChange={e=>setPlanForm({...planForm,notes:e.target.value})} style={{padding:"8px 10px",borderRadius:8,border:"1px solid #E6DCC9",fontSize:13,width:"100%",boxSizing:"border-box"}}/></div>
+                        </div>
+                        <div style={{display:"flex",gap:8,marginTop:16}}>
+                          <button onClick={submitPlanForm} style={{background:"#1B1E2B",color:"#F7F2EA",border:"none",borderRadius:8,padding:"10px 18px",fontSize:12,fontWeight:600,cursor:"pointer",flex:1}}>Confirmer et ajouter</button>
+                          <button onClick={()=>setShowPlanForm(false)} style={{background:"transparent",color:"#6B6E7E",border:"1px solid #E6DCC9",borderRadius:8,padding:"10px 14px",fontSize:12,cursor:"pointer"}}>Annuler</button>
+                        </div>
+                      </div>
+                    )}
+
                       {!reply&&!genReply&&(
                         <button onClick={genererReponse} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 18px",borderRadius:2,border:"1px solid #E6DCC9",background:"#1B1E2B",color:"#F7F2EA",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>
                           {genReply?<><Spin s={12}/> Génération…</>:<>✨ Générer une réponse</>}
