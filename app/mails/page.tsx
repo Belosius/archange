@@ -1740,11 +1740,34 @@ export default function App() {
   filteredRef.current = filtered;
 
   // ─── Vue Envoyés ─────────────────────────────────────────────────────────────
+  // Fix : emails SENT depuis emails_cache (vrais emails Gmail envoyés)
+  const [sentEmails, setSentEmails] = React.useState<any[]>([]);
+  const [loadingSent, setLoadingSent] = React.useState(false);
+
+  // Charger les emails SENT depuis le backend quand on passe sur cette vue
+  React.useEffect(() => {
+    if (mailFilter !== "envoyes") return;
+    setLoadingSent(true);
+    fetch("/api/emails?filter=sent&limit=100")
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(d => {
+        const data = Array.isArray(d) ? d : (d?.emails || []);
+        setSentEmails(data.map((m: any) => mapEmail(m)));
+      })
+      .catch(() => {})
+      .finally(() => setLoadingSent(false));
+  }, [mailFilter]);
+
   const sentList = React.useMemo(() => {
-    return Object.entries(sentReplies)
-      .map(([emailId, s]) => ({ _sentId: emailId, from: "Moi", fromEmail: "", subject: s.subject, date: s.date, body: s.text, snippet: s.text.slice(0,120), unread: false, flags: [], attachments: [], id: "sent_"+emailId, rawDate: s.date }))
-      .sort((a,b) => b.rawDate.localeCompare(a.rawDate));
-  }, [sentReplies]);
+    // Fusionner les emails SENT Gmail + les réponses envoyées depuis ARCHANGE
+    const fromCache = sentEmails;
+    const fromReplies = Object.entries(sentReplies)
+      .map(([emailId, s]) => ({ _sentId: emailId, from: "Moi", fromEmail: "", subject: s.subject, date: s.date, body: s.text, snippet: s.text.slice(0,120), unread: false, flags: [], attachments: [], id: "sent_"+emailId, rawDate: s.date }));
+    // Fusionner sans doublons (prefer cache)
+    const cacheIds = new Set(fromCache.map((m: any) => m.id));
+    const merged = [...fromCache, ...fromReplies.filter(r => !cacheIds.has(r.id))];
+    return merged.sort((a: any, b: any) => (b.rawDate||"").localeCompare(a.rawDate||""));
+  }, [sentEmails, sentReplies]);
 
   // ─── Vue Brouillons ───────────────────────────────────────────────────────────
   const draftList = React.useMemo(() => {
