@@ -507,6 +507,10 @@ export default function App() {
   useEffect(() => { if (status === "unauthenticated") router.replace("/") }, [status, router])
   const [view, setView] = useState("general");
   const [emails, setEmails] = useState([]);
+  // Fix #4 — Pagination : savoir s'il y a plus d'emails à charger
+  const [emailsTotal, setEmailsTotal] = useState(0);
+  const [emailsLimit, setEmailsLimit] = useState(100);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [resas, setResas] = useState<any[]>([]);
   const [sel, setSel] = useState(null);
   // Origine du mail ouvert — pour le fil d'Ariane "← Retour à l'événement"
@@ -1050,14 +1054,14 @@ export default function App() {
     let totalSynced = 0;
     let estimatedTotal = 0;
 
-    // Fonction interne — paginer UN label à la fois (Gmail labelIds = AND, pas OR)
+    // Fonction interne — paginer UN label + gérer nextLabel automatiquement
     const syncLabel = async (label: string) => {
       let pageToken: string|null = null;
       while (syncRunning.current) {
         const res = await fetch('/api/emails/sync', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ pageToken, labels: [label] }), // un seul label à la fois
+          body: JSON.stringify({ pageToken, labels: [label] }),
         });
         if (!res.ok) { setSyncStatus('error'); return; }
         const data = await res.json();
@@ -1065,14 +1069,18 @@ export default function App() {
         if (data.total > estimatedTotal) estimatedTotal = data.total;
         pageToken = data.nextPageToken || null;
         setSyncProgress({synced: totalSynced, total: estimatedTotal, pageToken});
+        // Si le serveur signale de passer au label suivant
+        if (data.nextLabel && data.nextLabel !== label) {
+          await syncLabel(data.nextLabel);
+          break;
+        }
         if (!pageToken) break;
         await new Promise(r => setTimeout(r, 300));
       }
     };
 
     try {
-      await syncLabel('INBOX'); // emails reçus des clients
-      await syncLabel('SENT');  // emails envoyés par le manager
+      await syncLabel('INBOX');
       setSyncStatus('done');
       setSyncLastDate(new Date().toISOString());
       // Recharger les emails depuis emails_cache maintenant rempli
@@ -1152,22 +1160,40 @@ export default function App() {
     try {
       if (withSync) {
         try {
-          const syncRes = await fetch("/api/emails", { method: "POST" });
-          if (syncRes.status === 401) {
-            const syncData = await syncRes.json();
-            if (syncData.error === "GMAIL_AUTH_EXPIRED") {
-              toast("Session Gmail expirée — reconnectez-vous", "err");
-              setLoadingMail(false);
-              return;
+          // Fix #1 — Sync différentielle via historyId (ne récupère que les nouveaux)
+          // Récupérer le dernier historyId connu depuis la route sync
+          const statusRes = await fetch("/api/emails/sync");
+          if (statusRes.ok) {
+            const { lastHistoryId, syncCompleted } = await statusRes.json();
+
+            if (syncCompleted && lastHistoryId) {
+              // Sync différentielle — seulement les changements depuis la dernière sync
+              const diffRes = await fetch("/api/emails/sync", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ useHistoryId: true, lastHistoryId }),
+              });
+              if (diffRes.status === 401) {
+                const d = await diffRes.json();
+                if (d.error === "GMAIL_AUTH_EXPIRED") {
+                  toast("Session Gmail expirée — reconnectez-vous", "err");
+                  setLoadingMail(false);
+                  return;
+                }
+              }
+            } else if (!syncCompleted) {
+              // Sync initiale pas encore terminée — relancer lancerSyncComplete
+              lancerSyncComplete();
             }
           }
         } catch {}
       }
-      const r = await fetch("/api/emails");
+      const r = await fetch(`/api/emails?limit=${emailsLimit}`);
       if (!r.ok) throw new Error("Erreur " + r.status);
       const payload = await r.json();
-      // Nouveau format : { emails: [], syncCompleted: bool } — rétrocompat avec []
+      // Nouveau format : { emails: [], syncCompleted: bool, total? } — rétrocompat avec []
       const data = Array.isArray(payload) ? payload : (payload?.emails || []);
+      if (payload?.total) setEmailsTotal(payload.total);
       if (data.length > 0) {
         const mapped = data.map((m: any) => mapEmail(m));
         setEmails(mapped);
@@ -1181,6 +1207,29 @@ export default function App() {
       toast("Erreur chargement emails : " + (e.message || "réseau"), "err");
     }
     setLoadingMail(false);
+  };
+
+  // Fix #4 — Charger plus d'emails (pagination cursor)
+  const chargerPlusEmails = async () => {
+    if (loadingMore || emails.length === 0) return;
+    setLoadingMore(true);
+    try {
+      const oldest = emails[emails.length - 1]?.rawDate || "";
+      const r = await fetch(`/api/emails?limit=50&before=${encodeURIComponent(oldest)}`);
+      if (!r.ok) throw new Error("Erreur " + r.status);
+      const payload = await r.json();
+      const data = Array.isArray(payload) ? payload : (payload?.emails || []);
+      if (data.length > 0) {
+        const mapped = data.map((m: any) => mapEmail(m));
+        setEmails(prev => [...prev, ...mapped]);
+        if (payload?.total) setEmailsTotal(payload.total);
+      } else {
+        toast("Tous les emails sont chargés");
+      }
+    } catch (e: any) {
+      toast("Erreur chargement : " + (e.message || "réseau"), "err");
+    }
+    setLoadingMore(false);
   };
 
   useEffect(() => {
@@ -1280,6 +1329,19 @@ export default function App() {
         setLoadingMail(false);
         // Lancer la synchronisation complète en arrière-plan (sans bloquer l'UI)
         setTimeout(() => lancerSyncComplete(), 2000);
+        // Fix #5 — Vérifier et renouveler le Gmail Watch si expiré (temps réel)
+        setTimeout(async () => {
+          try {
+            const watchRes = await fetch("/api/gmail/watch");
+            if (watchRes.ok) {
+              const { active } = await watchRes.json();
+              if (!active) {
+                // Watch expiré ou non configuré — tenter de le renouveler
+                await fetch("/api/gmail/watch", { method: "POST" });
+              }
+            }
+          } catch {}
+        }, 5000);
       }
     };
 
@@ -1427,13 +1489,18 @@ export default function App() {
     // Optimiste local
     setEmails(prev => prev.map(m => m.id === id ? { ...m, flags: newFlags } : m));
     if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, flags: newFlags } : prev);
-    // Bidirectionnel Gmail
+    // Bidirectionnel Gmail — avec rollback si échec
     if (email.gmailId && flag === "star") {
       fetch("/api/emails", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gmail_id: email.gmailId, action: "star", value: !hasFlag }),
-      }).catch(() => {});
+      }).catch(() => {
+        // Rollback si Gmail échoue
+        setEmails(prev => prev.map(m => m.id === id ? { ...m, flags: email.flags || [] } : m));
+        if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, flags: email.flags || [] } : prev);
+        toast("Erreur synchronisation Gmail — réessayez", "err");
+      });
     }
   };
 
@@ -1448,13 +1515,17 @@ export default function App() {
     // Optimiste local
     setEmails(prev => prev.map(m => m.id === id ? { ...m, archived: true } : m));
     if (sel?.id === id) setSel(null);
-    // Bidirectionnel Gmail
+    // Bidirectionnel Gmail — avec rollback si échec
     if (email?.gmailId) {
       fetch("/api/emails", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gmail_id: email.gmailId, action: "archive" }),
-      }).catch(() => {});
+      }).catch(() => {
+        // Rollback si Gmail échoue
+        setEmails(prev => prev.map(m => m.id === id ? { ...m, archived: false } : m));
+        toast("Erreur archivage Gmail — réessayez", "err");
+      });
     }
     toast("Email archivé — E pour archiver");
   };
@@ -2238,13 +2309,18 @@ FORMAT
     // Optimiste local
     setEmails(prev => prev.map(m => m.id === id ? { ...m, unread: newUnread } : m));
     if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, unread: newUnread } : prev);
-    // Bidirectionnel Gmail
+    // Bidirectionnel Gmail — avec rollback si échec
     if (email.gmailId) {
       fetch("/api/emails", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gmail_id: email.gmailId, action: newUnread ? "unread" : "read" }),
-      }).catch(() => {});
+      }).catch(() => {
+        // Rollback si Gmail échoue
+        setEmails(prev => prev.map(m => m.id === id ? { ...m, unread: email.unread } : m));
+        if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, unread: email.unread } : prev);
+        toast("Erreur synchronisation Gmail — réessayez", "err");
+      });
     }
   };
 
@@ -3422,6 +3498,18 @@ FORMAT
                   </div>
                 );})}
 
+                {/* ── Fix #4 — Charger plus d'emails ── */}
+                {!search && emails.length > 0 && emails.length % 100 === 0 && (
+                  <div style={{padding:"12px 16px",textAlign:"center",borderTop:"1px solid #E6DCC9"}}>
+                    <button
+                      onClick={chargerPlusEmails}
+                      disabled={loadingMore}
+                      style={{fontSize:11,padding:"6px 18px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#B89456",cursor:loadingMore?"wait":"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"'Inter',sans-serif",letterSpacing:"0.04em"}}
+                    >
+                      {loadingMore ? <><Spin s={10}/> Chargement…</> : `↓ Charger plus (${emails.length} chargés)`}
+                    </button>
+                  </div>
+                )}
                 {/* ── Résultats recherche approfondie Gmail ── */}
                 {deepResults.length>0&&(
                   <>
