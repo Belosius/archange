@@ -1047,42 +1047,39 @@ export default function App() {
     setSyncStatus('running');
     setSyncProgress({synced: 0, total: 0, pageToken: null});
 
-    // Vérifier l'état actuel du cache
-    try {
-      const statusRes = await fetch('/api/emails/sync');
-      if (statusRes.ok) {
-        const { count, lastSync } = await statusRes.json();
-        if (count > 0) setSyncLastDate(lastSync);
-      }
-    } catch {}
-
-    let pageToken: string|null = null;
     let totalSynced = 0;
     let estimatedTotal = 0;
 
-    try {
-      // Synchroniser INBOX + SENT en boucle
+    // Fonction interne — paginer UN label à la fois (Gmail labelIds = AND, pas OR)
+    const syncLabel = async (label: string) => {
+      let pageToken: string|null = null;
       while (syncRunning.current) {
         const res = await fetch('/api/emails/sync', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ pageToken, labels: ['INBOX', 'SENT'] }),
+          body: JSON.stringify({ pageToken, labels: [label] }), // un seul label à la fois
         });
-        if (!res.ok) { setSyncStatus('error'); break; }
+        if (!res.ok) { setSyncStatus('error'); return; }
         const data = await res.json();
         totalSynced += data.synced || 0;
         if (data.total > estimatedTotal) estimatedTotal = data.total;
         pageToken = data.nextPageToken || null;
         setSyncProgress({synced: totalSynced, total: estimatedTotal, pageToken});
         if (!pageToken) break;
-        // Pause 300ms entre les pages pour ne pas surcharger l'API
         await new Promise(r => setTimeout(r, 300));
       }
+    };
+
+    try {
+      await syncLabel('INBOX'); // emails reçus des clients
+      await syncLabel('SENT');  // emails envoyés par le manager
       setSyncStatus('done');
       setSyncLastDate(new Date().toISOString());
+      // Recharger les emails depuis emails_cache maintenant rempli
+      await loadEmailsFromApi(false);
     } catch(e) {
       setSyncStatus('error');
-      syncRunning.current = false; // Fix #7 — éviter le blocage permanent après erreur
+      syncRunning.current = false;
     }
     syncRunning.current = false;
   };
