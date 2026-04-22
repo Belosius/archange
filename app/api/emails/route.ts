@@ -8,11 +8,12 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Non connecte' }, { status: 401 })
   const { searchParams } = req.nextUrl
-  const filter = searchParams.get('filter') || 'all'
-  const search = searchParams.get('q') || ''
-  const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 200)
+  const filter  = searchParams.get('filter') || 'all'
+  const search  = searchParams.get('q') || ''
+  const limit   = Math.min(parseInt(searchParams.get('limit') || '100'), 200)
+  const before  = searchParams.get('before') || ''
   const gmailId = searchParams.get('gmail_id')
-  const userId = session.user.id
+  const userId  = session.user.id
 
   if (gmailId) {
     try {
@@ -26,30 +27,35 @@ export async function GET(req: NextRequest) {
 
   let query = supabaseAdmin
     .from('emails_cache')
-    .select('id,gmail_id,thread_id,from_name,from_email,subject,snippet,date_iso,labels,is_unread,is_starred,is_archived,has_attachments,attachments,direction,updated_at')
+    .select('id,gmail_id,thread_id,from_name,from_email,subject,snippet,date_iso,labels,is_unread,is_starred,is_archived,has_attachments,attachments,direction,updated_at', { count: 'exact' })
     .eq('user_id', userId)
     .order('date_iso', { ascending: false })
     .limit(limit)
 
-  if (filter === 'inbox') query = query.contains('labels', ['INBOX'])
-  if (filter === 'sent') query = query.eq('direction', 'sent')
-  if (filter === 'unread') query = query.eq('is_unread', true)
-  if (filter === 'starred') query = query.eq('is_starred', true)
+  if (before) query = query.lt('date_iso', before)
+  if (filter === 'inbox')    query = query.contains('labels', ['INBOX'])
+  if (filter === 'sent')     query = query.eq('direction', 'sent')
+  if (filter === 'unread')   query = query.eq('is_unread', true)
+  if (filter === 'starred')  query = query.eq('is_starred', true)
   if (filter === 'archived') query = query.eq('is_archived', true)
   if (search) query = query.or('subject.ilike.%' + search + '%,from_name.ilike.%' + search + '%,snippet.ilike.%' + search + '%,from_email.ilike.%' + search + '%')
 
-  const { data, error } = await query
+  const { data, error, count } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const { data: settings } = await supabaseAdmin.from('user_settings').select('sync_completed,last_history_id').eq('user_id', userId).single()
+  const { count: totalCount } = await supabaseAdmin.from('emails_cache').select('*', { count: 'exact', head: true }).eq('user_id', userId)
 
-  return NextResponse.json({ emails: data || [], syncCompleted: settings?.sync_completed || false })
+  return NextResponse.json({
+    emails: data || [],
+    total: totalCount || 0,
+    hasMore: (data?.length || 0) >= limit,
+    syncCompleted: settings?.sync_completed || false,
+  })
 }
 
-export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return NextResponse.json({ error: 'Non connecte' }, { status: 401 })
-  return NextResponse.json({ status: 'use /api/emails/sync for initial sync' })
+export async function POST() {
+  return NextResponse.json({ status: 'use /api/emails/sync' })
 }
 
 export async function PATCH(req: NextRequest) {
@@ -60,13 +66,12 @@ export async function PATCH(req: NextRequest) {
   if (!gmail_id || !action) return NextResponse.json({ error: 'gmail_id et action requis' }, { status: 400 })
   try {
     let supabaseUpdate: any = {}
-    let addLabels: string[] = []
-    let removeLabels: string[] = []
+    let addLabels: string[] = [], removeLabels: string[] = []
     switch (action) {
-      case 'read': supabaseUpdate = { is_unread: false }; removeLabels = ['UNREAD']; break
-      case 'unread': supabaseUpdate = { is_unread: true }; addLabels = ['UNREAD']; break
-      case 'star': supabaseUpdate = { is_starred: value !== false }; if (value !== false) addLabels = ['STARRED']; else removeLabels = ['STARRED']; break
-      case 'archive': supabaseUpdate = { is_archived: true }; removeLabels = ['INBOX']; break
+      case 'read':    supabaseUpdate = { is_unread: false };              removeLabels = ['UNREAD']; break
+      case 'unread':  supabaseUpdate = { is_unread: true };               addLabels = ['UNREAD']; break
+      case 'star':    supabaseUpdate = { is_starred: value !== false };   if (value !== false) addLabels = ['STARRED']; else removeLabels = ['STARRED']; break
+      case 'archive': supabaseUpdate = { is_archived: true };             removeLabels = ['INBOX']; break
       default: return NextResponse.json({ error: 'Action inconnue: ' + action }, { status: 400 })
     }
     await supabaseAdmin.from('emails_cache').update(supabaseUpdate).eq('gmail_id', gmail_id).eq('user_id', userId)
