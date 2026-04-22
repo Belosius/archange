@@ -11,18 +11,18 @@ export async function GET(req: NextRequest) {
 
   const { data } = await supabaseAdmin
     .from('user_settings')
-    .select('watch_expiry, watch_history_id')
+    .select('watch_expiry, last_history_id')
     .eq('user_id', session.user.id)
     .single()
 
   const now = Date.now()
   const expiry = data?.watch_expiry ? new Date(data.watch_expiry).getTime() : 0
-  const active = expiry > now + 24 * 60 * 60 * 1000 // actif si expire dans > 24h
+  const active = expiry > now + 24 * 60 * 60 * 1000
 
   return NextResponse.json({
     active,
     expiry: data?.watch_expiry || null,
-    historyId: data?.watch_history_id || null,
+    historyId: data?.last_history_id || null,
   })
 }
 
@@ -32,17 +32,17 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Non connecte' }, { status: 401 })
 
   try {
-    const result = await setupGmailWatch(session.user.id)
+    // setupGmailWatch gere lui-meme le upsert dans user_settings
+    await setupGmailWatch(session.user.id)
 
-    // Stocker l'expiry dans user_settings
-    await supabaseAdmin.from('user_settings').upsert({
-      user_id: session.user.id,
-      watch_expiry: new Date(result.expiration).toISOString(),
-      watch_history_id: result.historyId,
-      updated_at: new Date().toISOString(),
-    })
+    // Relire pour retourner le statut mis a jour
+    const { data } = await supabaseAdmin
+      .from('user_settings')
+      .select('watch_expiry, last_history_id')
+      .eq('user_id', session.user.id)
+      .single()
 
-    return NextResponse.json({ ok: true, expiry: result.expiration, historyId: result.historyId })
+    return NextResponse.json({ ok: true, expiry: data?.watch_expiry, historyId: data?.last_history_id })
   } catch (e: any) {
     if (e.message === 'GMAIL_AUTH_EXPIRED') {
       return NextResponse.json({ error: 'GMAIL_AUTH_EXPIRED' }, { status: 401 })
