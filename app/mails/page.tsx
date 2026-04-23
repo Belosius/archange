@@ -266,6 +266,22 @@ JSON à retourner :
 // EMPTY_RESA : espaceId initialisé au premier espace dispo — sera surchargé par getEmptyResa()
 const EMPTY_RESA = { id:null, nom:"", email:"", telephone:"", entreprise:"", typeEvenement:"", nombrePersonnes:"", espaceId:"", dateDebut:"", heureDebut:"", heureFin:"", statut:"nouveau", notes:"", budget:"", noteDirecteur:"" };
 
+// ─── Traduction des erreurs techniques en langage humain ─────────────────────
+function humanError(e: any): string {
+  const msg = (e?.message || String(e || "")).toLowerCase();
+  if (msg.includes("401") || msg.includes("unauthorized") || msg.includes("invalid_grant") || msg.includes("unauthenticated")) return "Votre session a expiré. Déconnectez-vous puis reconnectez-vous.";
+  if (msg.includes("403") || msg.includes("forbidden")) return "Accès refusé. Vérifiez vos autorisations Gmail.";
+  if (msg.includes("429") || msg.includes("rate limit") || msg.includes("overload") || msg.includes("surcharg")) return "Service momentanément surchargé. Réessayez dans quelques secondes.";
+  if (msg.includes("timeout") || msg.includes("abort") || msg.includes("délai")) return "La requête a pris trop de temps. Vérifiez votre connexion et réessayez.";
+  if (msg.includes("network") || msg.includes("fetch") || msg.includes("réseau") || msg.includes("connexion") || msg.includes("failed to fetch")) return "Connexion impossible. Vérifiez votre accès internet.";
+  if (msg.includes("500") || msg.includes("internal server")) return "Une erreur est survenue côté serveur. Réessayez dans un moment.";
+  if (msg.includes("503") || msg.includes("unavailable")) return "Le service est temporairement indisponible. Réessayez dans quelques minutes.";
+  if (msg.includes("gmail_auth_expired") || msg.includes("session gmail")) return "Session Gmail expirée. Déconnectez-vous puis reconnectez-vous.";
+  if (msg.includes("ia indisponible") || msg.includes("erreur ia") || msg.includes("anthropic")) return "L'assistant IA est temporairement indisponible. Réessayez dans un moment.";
+  // Fallback — garder le message original si non reconnu, mais le nettoyer
+  return e?.message || "Une erreur inattendue est survenue. Réessayez.";
+}
+
 async function callClaude(msg: string, system: string, docs: any[] | null): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 55000);
@@ -1238,7 +1254,7 @@ export default function App() {
         toast("Aucun email — vérifiez la connexion Gmail", "err");
       }
     } catch (e: any) {
-      toast("Erreur chargement emails : " + (e.message || "réseau"), "err");
+      toast(humanError(e), "err");
     }
     setLoadingMail(false);
   };
@@ -1261,7 +1277,7 @@ export default function App() {
         toast("Tous les emails sont chargés");
       }
     } catch (e: any) {
-      toast("Erreur chargement : " + (e.message || "réseau"), "err");
+      toast(humanError(e), "err");
     }
     setLoadingMore(false);
   };
@@ -1628,7 +1644,7 @@ export default function App() {
       setReplyEditorText("");
       toast("Email envoyé ✓");
     } catch (e: any) {
-      toast("Erreur envoi : " + (e.message || "réessayez"), "err");
+      toast(humanError(e), "err");
     }
     setSending(false);
   };
@@ -1648,7 +1664,7 @@ export default function App() {
       setComposeTo(""); setComposeSubject(""); setComposeBody("");
       toast("Email envoyé ✓");
     } catch (e: any) {
-      toast("Erreur envoi : " + (e.message || "réessayez"), "err");
+      toast(humanError(e), "err");
     }
     setComposeSending(false);
   };
@@ -1957,7 +1973,7 @@ export default function App() {
         setReply(newReply); setEditReply(newReply);
       } else {
         const msg = reponse.status === "rejected" ? (reponse.reason?.message || "Erreur IA") : "Réponse vide";
-        toast("Impossible de générer la réponse : " + msg, "err");
+        toast("ARCHANGE n'a pas pu rédiger la réponse. " + humanError({message: msg}), "err");
       }
 
       if (infoRaw.status === "fulfilled") {
@@ -2077,7 +2093,7 @@ Retourne UNIQUEMENT ce JSON valide :
         } catch { /* matching silencieux — ne bloque pas la génération */ }
       }
     } catch (e: any) {
-      toast("Erreur : " + (e.message || "connexion impossible"), "err");
+      toast(humanError(e), "err");
     }
     setGenReply(false);
   };
@@ -2174,7 +2190,7 @@ Retourne UNIQUEMENT ce JSON valide :
       saveToSupabase({ links_fetched: JSON.stringify(upd) });
       toast("Analysé !");
     } catch (e: any) {
-      toast("Erreur analyse : " + (e.message || "réseau"), "err");
+      toast(humanError(e), "err");
     }
     setFetchingLink(null);
   };
@@ -2257,7 +2273,7 @@ INSTRUCTIONS DE RÉDACTION
       const txt = await callClaude(prompt, sys, null);
       setRelanceIAText(txt);
     } catch (e: any) {
-      toast("Erreur génération : " + (e.message || "IA indisponible"), "err");
+      toast(humanError(e), "err");
       setShowRelanceIA(null);
     }
     setGenRelanceIA(false);
@@ -2342,7 +2358,7 @@ FORMAT
       const upd = { ...noteIA, [resa.id]: { text: txt, date: new Date().toLocaleDateString("fr-FR") } };
       saveNoteIA(upd);
     } catch (e: any) {
-      toast("Erreur génération note : " + (e.message || "IA indisponible"), "err");
+      toast(humanError(e), "err");
     }
     setGenNoteIA(null);
   };
@@ -2361,7 +2377,7 @@ FORMAT
       const rep = await callClaude(prompt, sys, null);
       setRadarReplyText(rep || "");
     } catch(e: any) {
-      toast("Erreur génération : " + (e.message||"IA indisponible"), "err");
+      toast(humanError(e), "err");
     }
     setRadarReplyLoading(false);
   };
@@ -2465,7 +2481,7 @@ FORMAT
     {id:"mails",    label:"Mails",       badge:emails.filter(m=>m.unread).length||null},
     {id:"planning", label:"Planning"},
     {id:"stats",    label:"Stats"},
-    {id:"sources",  label:"Sources IA"},
+    {id:"sources",  label:"Sources IA",  badge:(!menusCtx&&!conditionsCtx&&!tonCtx&&!espacesCtx)?"!":null},
   ];
 
   const inp = {padding:"8px 12px",borderRadius:3,border:"1px solid #E6DCC9",background:"#F7F2EA",color:"#1B1E2B",fontSize:13,width:"100%",outline:"none",transition:"border-color .15s",fontFamily:"'Inter',sans-serif"};
@@ -3484,7 +3500,22 @@ FORMAT
                             <div style={{display:"flex",alignItems:"center",gap:8}}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B89456" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B89456"/><path d="M12 9.6 L 12 18.2" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B89456"/></svg>
                               <span style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#1B1E2B",fontWeight:500,fontFamily:"'Inter',sans-serif"}}>Lecture par Archange</span>
-                              {extracted.confiance&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:1,background:"rgba(184,148,86,0.15)",color:"#B89456",border:"1px solid rgba(184,148,86,0.3)",letterSpacing:"0.06em",textTransform:"uppercase"}}>Confiance {extracted.confiance}</span>}
+                              {extracted.confiance&&(()=>{
+                              const conf = extracted.confiance;
+                              const isHaute = conf === "haute";
+                              const isFaible = conf === "faible";
+                              const bg = isFaible ? "rgba(220,38,38,0.1)" : isHaute ? "rgba(5,150,105,0.1)" : "rgba(184,148,86,0.15)";
+                              const col = isFaible ? "#991B1B" : isHaute ? "#065F46" : "#B89456";
+                              const brd = isFaible ? "rgba(220,38,38,0.3)" : isHaute ? "rgba(5,150,105,0.3)" : "rgba(184,148,86,0.3)";
+                              const tip = isFaible
+                                ? "ARCHANGE a extrait ces informations avec incertitude. Vérifiez chaque champ avant de créer l'événement."
+                                : isHaute
+                                ? "ARCHANGE a extrait ces informations avec une bonne certitude."
+                                : "ARCHANGE a extrait ces informations partiellement. Vérifiez les champs importants.";
+                              return <span title={tip} style={{fontSize:9,padding:"1px 6px",borderRadius:1,background:bg,color:col,border:`1px solid ${brd}`,letterSpacing:"0.06em",textTransform:"uppercase",cursor:"help"}}>
+                                {isFaible?"⚠ ":isHaute?"✓ ":""}Confiance {conf}
+                              </span>;
+                            })()}
                             </div>
                             {!alreadyIn&&<button onClick={openPlanForm} style={{fontSize:10,padding:"5px 12px",borderRadius:2,border:"1px solid #E6DCC9",background:"#1B1E2B",color:"#F7F2EA",cursor:"pointer",letterSpacing:"0.04em",fontFamily:"'Inter',sans-serif"}}>+ Planning</button>}
                             {alreadyIn&&<button onClick={()=>{setSelResaGeneral(alreadyIn);setView("general");}} style={{fontSize:10,padding:"5px 12px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#B89456",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Voir l'événement →</button>}
@@ -3543,7 +3574,7 @@ FORMAT
                           <div style={{display:"flex",gap:6,padding:"10px 14px",borderTop:"1px solid #E6DCC9",background:"#F7F2EA",flexWrap:"wrap"}}>
                             <button onClick={async()=>{
                               const subject=sel.subject?.startsWith("Re:")?sel.subject:`Re: ${sel.subject||""}`;
-                              try{const res=await fetch("/api/gmail/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:sel.fromEmail,subject,body:reply})});if(res.ok)toast("Brouillon créé dans Gmail ✓");else toast("Erreur brouillon","err");}catch{toast("Erreur réseau","err");}
+                              try{const res=await fetch("/api/gmail/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:sel.fromEmail,subject,body:reply})});if(res.ok)toast("Brouillon créé dans Gmail ✓");else toast("Impossible de créer le brouillon dans Gmail. Réessayez.","err");}catch{toast("Erreur réseau","err");}
                               const upd={...sentReplies,[sel.id]:{text:reply,date:new Date().toLocaleDateString("fr-FR"),subject:sel.subject||"",toEmail:sel.fromEmail||""}};saveSentReplies(upd);
                               setDrafted(p=>new Set([...p,sel.id]));
                             }} disabled={genReply} style={{padding:"6px 12px",borderRadius:2,border:"none",background:"rgba(184,148,86,0.2)",color:"#92400E",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Créer le brouillon</button>
@@ -3848,6 +3879,13 @@ FORMAT
                     <button onClick={()=>openReplyEditor("reply")} title="Répondre (R)" style={{fontSize:11,padding:"5px 12px",borderRadius:2,border:"none",background:"#1B1E2B",color:"#F7F2EA",cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:5,letterSpacing:"0.03em",fontFamily:"'Inter',sans-serif"}}>↩ Répondre</button>
                     {sel.cc?.length>0&&<button onClick={()=>openReplyEditor("replyAll")} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#3A3F52",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↩↩ À tous</button>}
                     <button onClick={()=>openReplyEditor("forward")} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#3A3F52",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↪ Transférer</button>
+                    {/* C1 — Raccourci + Planning si l'IA a détecté une réservation (évite de scroller jusqu'en bas) */}
+                    {extracted?.isReservation && !emailResaLinks[sel.id] && (
+                      <button onClick={openPlanForm} title="Créer un événement pré-rempli par ARCHANGE" style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid rgba(184,148,86,0.5)",background:"rgba(184,148,86,0.1)",color:"#92400E",cursor:"pointer",fontFamily:"'Inter',sans-serif",display:"flex",alignItems:"center",gap:4}}>📅 + Planning</button>
+                    )}
+                    {extracted?.isReservation && emailResaLinks[sel.id] && (
+                      <button onClick={()=>{const r=resas.find(x=>x.id===emailResaLinks[sel.id]);if(r){setSelResaGeneral(r);setView("general");}}} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid rgba(5,150,105,0.4)",background:"rgba(5,150,105,0.08)",color:"#065F46",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>✓ Événement lié</button>
+                    )}
                     <div style={{width:1,height:14,background:"#E6DCC9",margin:"0 2px"}}/>
                     <button onClick={()=>toggleFlag(sel.id,"star")} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(sel.flags||[]).includes("star")?1:0.25,padding:"3px 4px",color:"#B89456"}}>✦</button>
                     <button onClick={()=>toggleUnread(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:sel.unread?"rgba(184,148,86,0.12)":"transparent",color:sel.unread?"#B89456":"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>
@@ -3979,7 +4017,22 @@ FORMAT
                           <div style={{display:"flex",alignItems:"center",gap:8}}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B89456" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B89456"/><path d="M12 9.6 L 12 18.2" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B89456"/></svg>
                             <span style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#1B1E2B",fontWeight:500,fontFamily:"'Inter',sans-serif"}}>Lecture par Archange</span>
-                            {extracted.confiance&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:1,background:"rgba(184,148,86,0.15)",color:"#B89456",border:"1px solid rgba(184,148,86,0.3)",letterSpacing:"0.06em",textTransform:"uppercase"}}>Confiance {extracted.confiance}</span>}
+                            {extracted.confiance&&(()=>{
+                              const conf = extracted.confiance;
+                              const isHaute = conf === "haute";
+                              const isFaible = conf === "faible";
+                              const bg = isFaible ? "rgba(220,38,38,0.1)" : isHaute ? "rgba(5,150,105,0.1)" : "rgba(184,148,86,0.15)";
+                              const col = isFaible ? "#991B1B" : isHaute ? "#065F46" : "#B89456";
+                              const brd = isFaible ? "rgba(220,38,38,0.3)" : isHaute ? "rgba(5,150,105,0.3)" : "rgba(184,148,86,0.3)";
+                              const tip = isFaible
+                                ? "ARCHANGE a extrait ces informations avec incertitude. Vérifiez chaque champ avant de créer l'événement."
+                                : isHaute
+                                ? "ARCHANGE a extrait ces informations avec une bonne certitude."
+                                : "ARCHANGE a extrait ces informations partiellement. Vérifiez les champs importants.";
+                              return <span title={tip} style={{fontSize:9,padding:"1px 6px",borderRadius:1,background:bg,color:col,border:`1px solid ${brd}`,letterSpacing:"0.06em",textTransform:"uppercase",cursor:"help"}}>
+                                {isFaible?"⚠ ":isHaute?"✓ ":""}Confiance {conf}
+                              </span>;
+                            })()}
                           </div>
                           {!alreadyIn&&<button onClick={openPlanForm} style={{fontSize:10,padding:"5px 12px",borderRadius:2,border:"1px solid #E6DCC9",background:"#1B1E2B",color:"#F7F2EA",cursor:"pointer",letterSpacing:"0.04em",fontFamily:"'Inter',sans-serif"}}>+ Planning</button>}
                           {alreadyIn&&<button onClick={()=>{setSelResaGeneral(alreadyIn);setView("general");}} style={{fontSize:10,padding:"5px 12px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#B89456",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Voir l'événement →</button>}
@@ -4111,7 +4164,7 @@ FORMAT
                           });
                           if (res.ok) toast("Brouillon créé dans Gmail ✓");
                           else toast("Erreur création brouillon", "err");
-                        } catch { toast("Erreur réseau", "err"); }
+                        } catch { toast(humanError(new Error("network")), "err"); }
                         setDrafted(p=>new Set([...p,sel.id]));
                         const upd = { ...sentReplies, [sel.id]: { text: replyText, date: new Date().toLocaleDateString("fr-FR"), subject: sel.subject||"", toEmail: sel.fromEmail||"" }};
                         saveSentReplies(upd);
@@ -4440,6 +4493,21 @@ FORMAT
             <div style={{padding:"24px 28px 16px",flexShrink:0,borderBottom:"1px solid #E6DCC9",background:"#F7F2EA"}}>
               <div style={{fontSize:22,fontWeight:300,color:"#1B1E2B",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.02em"}}>Sources IA</div>
               <div style={{fontSize:12,color:"#6B6E7E",marginTop:4,marginBottom:14}}>Tout ce que vous écrivez ici est transmis à ARCHANGE à chaque génération.</div>
+
+              {/* C4 — Bandeau onboarding si aucune source n'est configurée */}
+              {!menusCtx && !conditionsCtx && !tonCtx && !espacesCtx && (
+                <div style={{marginBottom:14,padding:"12px 16px",background:"rgba(184,148,86,0.08)",border:"1px solid rgba(184,148,86,0.3)",borderLeft:"3px solid #B89456",borderRadius:"0 6px 6px 0",display:"flex",alignItems:"flex-start",gap:12}}>
+                  <span style={{fontSize:18,flexShrink:0}}>✨</span>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#1B1E2B",marginBottom:3}}>Personnalisez ARCHANGE pour votre établissement</div>
+                    <div style={{fontSize:12,color:"#6B6E7E",lineHeight:1.5}}>
+                      Aucune source n'est encore configurée. En renseignant vos menus, conditions et règles de ton, ARCHANGE rédigera des réponses parfaitement adaptées à votre brasserie — et non des réponses génériques.
+                    </div>
+                    <div style={{fontSize:11,color:"#B89456",marginTop:6,fontWeight:500}}>👇 Commencez par "Menus & Tarifs" ci-dessous</div>
+                  </div>
+                </div>
+              )}
+
               <div style={{display:"flex",background:"#FFFFFF",borderRadius:10,border:"1px solid #E6DCC9",overflow:"hidden"}}>
                 {[
                   ["Menus", menusCtx?"Actif":"—","🍽️"],
