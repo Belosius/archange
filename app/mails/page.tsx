@@ -3127,21 +3127,22 @@ FORMAT
                             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}>
                               {cells.map(([lbl,val],i)=>(
                                 <div key={lbl} style={{padding:"8px 14px",borderBottom:i<3?"0.5px solid #EBEAE5":"none",borderRight:(i+1)%3!==0?"0.5px solid #EBEAE5":"none"}}>
-                                  <div style={{fontSize:10,color:"#6B6E7E",marginBottom:2}}>{lbl}</div>
-                                  <div style={{fontSize:12,fontWeight:val==="—"?400:500,color:val==="—"?"#C5C3BE":"#1A1A1E",fontStyle:val==="—"?"italic":"normal"}}>{val}</div>
+                                  <div style={{fontSize:10,color:"#6B6E7E",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif"}}>{lbl}</div>
+                                  <div style={{fontSize:12,fontWeight:val==="—"?400:500,color:val==="—"?"#C5C3BE":"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif"}}>{val}</div>
                                 </div>
                               ))}
                             </div>
 
                             {resume && (
-                              <div style={{padding:"8px 14px",borderTop:"0.5px solid #EBEAE5",background:"#FFFFFF"}}>
-                                <div style={{fontSize:12,color:"#6B6E7E",fontStyle:"italic",lineHeight:1.6}}>{resume}</div>
+                              <div style={{padding:"10px 14px",borderTop:"0.5px solid #EBEAE5",background:"#FFFFFF"}}>
+                                <div style={{fontSize:12,color:"#6B6E7E",lineHeight:1.55,fontFamily:"'Geist','system-ui',sans-serif"}}>{resume}</div>
                               </div>
                             )}
 
-                            <div style={{padding:"8px 12px",borderTop:"0.5px solid #EBEAE5",display:"flex",alignItems:"center",gap:6,background:"#FAFAF9"}}>
-                              <button onClick={e=>{e.stopPropagation(); setRadarResaModal({ nom: ext.nom||m.from||"", email: ext.email||m.fromEmail||"", telephone: ext.telephone||"", entreprise: ext.entreprise||"", typeEvenement: ext.typeEvenement||"", nombrePersonnes: ext.nombrePersonnes||"", espaceId: ext.espaceDetecte||resa?.espaceId||espacesDyn[0]?.id||"", dateDebut: ext.dateDebut||resa?.dateDebut||"", heureDebut: ext.heureDebut||resa?.heureDebut||"", heureFin: ext.heureFin||resa?.heureFin||"", budget: ext.budget||resa?.budget||"", notes: ext.notes||"", statut: ext.statutSuggere||"nouveau", _emailId: m.id, });}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",fontSize:11,fontWeight:500,cursor:"pointer"}}>
-                                📅 Créer réservation
+                            <div style={{padding:"10px 12px",borderTop:"0.5px solid #EBEAE5",display:"flex",alignItems:"center",gap:7,background:"#FAFAF9"}}>
+                              <button onClick={e=>{e.stopPropagation(); setRadarResaModal({ nom: ext.nom||m.from||"", email: ext.email||m.fromEmail||"", telephone: ext.telephone||"", entreprise: ext.entreprise||"", typeEvenement: ext.typeEvenement||"", nombrePersonnes: ext.nombrePersonnes||"", espaceId: ext.espaceDetecte||resa?.espaceId||espacesDyn[0]?.id||"", dateDebut: ext.dateDebut||resa?.dateDebut||"", heureDebut: ext.heureDebut||resa?.heureDebut||"", heureFin: ext.heureFin||resa?.heureFin||"", budget: ext.budget||resa?.budget||"", notes: ext.notes||"", statut: ext.statutSuggere||"nouveau", _emailId: m.id, });}} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 13px",borderRadius:9,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",letterSpacing:"-0.005em",transition:"all .14s ease"}}>
+                                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.2" fill="none"/><path d="M1.5 5.5h11M4.5 1v2.5M9.5 1v2.5M7 8v3M5.5 9.5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                                Ajouter au planning
                               </button>
                               <button onClick={e=>{e.stopPropagation();
                                 // Ouvrir le lecteur complet (panel droit) plutôt qu'une modale séparée
@@ -3149,10 +3150,11 @@ FORMAT
                                 setMailOrigine({type:'radar', resaId: resa?.id||'', nom: 'Radar ARCHANGE'});
                                 handleSel(m);
                                 setRadarSelEmail(m);
-                              }} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",fontSize:11,fontWeight:500,cursor:"pointer"}}>
-                                ✨ Générer réponse
+                              }} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:9,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease"}}>
+                                <span style={{color:"#B8924F",fontSize:13,lineHeight:1}}>✦</span>
+                                Générer réponse
                               </button>
-                              <button onClick={e=>{e.stopPropagation(); saveRadarTraites(new Set([...radarTraites,m.id])); toast("Demande archivée du Radar");}} style={{marginLeft:"auto",padding:"5px 11px",borderRadius:7,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",fontSize:11,cursor:"pointer"}} title="Archiver cette carte">
+                              <button onClick={e=>{e.stopPropagation(); saveRadarTraites(new Set([...radarTraites,m.id])); toast("Demande archivée du Radar");}} style={{marginLeft:"auto",padding:"7px 11px",borderRadius:9,border:"none",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease"}} title="Archiver cette carte">
                                 ✓ Traité
                               </button>
                             </div>
@@ -3444,19 +3446,8 @@ FORMAT
                       <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2 10l4-4L2 2M12 2v4a3 3 0 01-3 3H3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       Transférer
                     </button>
-                    {/* C1 — Raccourci + Planning si l'IA a détecté une réservation */}
-                    {extracted?.isReservation && !emailResaLinks[sel.id] && (
-                      <button onClick={openPlanForm} title="Créer un événement pré-rempli par ARCHANGE" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid rgba(184,146,79,0.4)",background:"rgba(184,146,79,0.08)",color:"#B8924F",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,transition:"all .14s ease"}}>
-                        <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.2" fill="none"/><path d="M1.5 5.5h11M4.5 1v2.5M9.5 1v2.5M7 8v3M5.5 9.5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                        Planning
-                      </button>
-                    )}
-                    {extracted?.isReservation && emailResaLinks[sel.id] && (
-                      <button onClick={()=>{const r=resas.find(x=>x.id===emailResaLinks[sel.id]);if(r){setSelResaGeneral(r);setView("general");}}} title="Ouvrir l'événement lié" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid rgba(107,138,91,0.35)",background:"rgba(107,138,91,0.08)",color:"#3F5B32",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,transition:"all .14s ease"}}>
-                        <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        Événement lié
-                      </button>
-                    )}
+                    {/* NB : Les boutons "Planning" et "Événement lié" sont rendus par la résa card directement
+                        (affichée au-dessus du corps du mail), donc pas de doublon ici. */}
                     <div style={{width:1,height:20,background:"#EBEAE5",margin:"0 4px"}}/>
                     {/* Toggles d'état — icon buttons 30x30 */}
                     <button onClick={()=>toggleFlag(sel.id,"star")} title={(sel.flags||[]).includes("star")?"Retirer des favoris":"Ajouter aux favoris"} style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:(sel.flags||[]).includes("star")?"#B8924F":"#A5A4A0",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease, color .12s ease"}}>✦</button>
