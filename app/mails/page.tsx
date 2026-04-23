@@ -746,6 +746,7 @@ export default function App() {
   const [generalFilter, setGeneralFilter] = useState("all");
   const [searchEvt, setSearchEvt] = useState("");
   const [selResaGeneral, setSelResaGeneral] = useState<any>(null);
+  const [eventsGroupBy, setEventsGroupBy] = useState<"urgency"|"status">("urgency");
   // UI collapse state
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [subCollapsed, setSubCollapsed] = useState(false);
@@ -2424,6 +2425,66 @@ FORMAT
 
   const fmt = s => s>1048576?(s/1048576).toFixed(1)+" Mo":Math.round(s/1024)+" Ko";
 
+  // ═══ Helpers vue Événements v3 ═══
+  const computeEventsKPIs = React.useMemo(() => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const in7 = new Date(today); in7.setDate(in7.getDate() + 7);
+    const ago72h = new Date(); ago72h.setHours(ago72h.getHours() - 72);
+    const todayStr = today.toISOString().slice(0,10);
+
+    const cetteSemaine = resas.filter(r => {
+      if (!r.dateDebut) return false;
+      try { const d = new Date(r.dateDebut); return d >= today && d <= in7; } catch { return false; }
+    });
+    const enRetard = relances.filter(r => r.date && r.date < todayStr);
+    const nouvelles = resas.filter(r => {
+      const statut = r.statut || "nouveau";
+      const st = statuts.find(s => s.id === statut);
+      const isNouveau = statut === "nouveau" || (st && st.label.toLowerCase().includes("nouveau"));
+      return isNouveau;
+    });
+
+    // CA prévisionnel : somme des budgets des résas confirmées/en cours du mois courant
+    const thisMonth = today.getMonth(), thisYear = today.getFullYear();
+    let totalBudget = 0;
+    resas.forEach(r => {
+      if (!r.dateDebut) return;
+      try {
+        const d = new Date(r.dateDebut);
+        if (d.getMonth() !== thisMonth || d.getFullYear() !== thisYear) return;
+      } catch { return; }
+      const statut = r.statut || "nouveau";
+      const st = statuts.find(s => s.id === statut);
+      const isValid = st && (st.label.toLowerCase().includes("confirm") || st.label.toLowerCase().includes("valid") || st.label.toLowerCase().includes("en cours") || st.label.toLowerCase().includes("devis"));
+      if (!isValid) return;
+      const match = String(r.budget || "").match(/(\d[\d\s]*)/);
+      if (match) {
+        const n = parseInt(match[1].replace(/\s/g, ''), 10);
+        if (!isNaN(n) && n > 0 && n < 1000000) totalBudget += n;
+      }
+    });
+    return { cetteSemaine, enRetard, aRelancerTotal: relances.length, nouvelles, totalBudget };
+  }, [resas, relances, statuts]);
+
+  const groupResasByUrgency = (list: any[]) => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const in7 = new Date(today); in7.setDate(in7.getDate() + 7);
+    const groups = { cetteSemaine: [] as any[], nouvelles: [] as any[], enCours: [] as any[], confirmees: [] as any[] };
+    list.forEach(r => {
+      const d = r.dateDebut ? (()=>{try{return new Date(r.dateDebut);}catch{return null;}})() : null;
+      const isThisWeek = d && d >= today && d <= in7;
+      const statut = r.statut || "nouveau";
+      const st = statuts.find(s => s.id === statut);
+      const isNouveau = statut === "nouveau" || (st && st.label.toLowerCase().includes("nouveau"));
+      const isConfirmed = st && (st.label.toLowerCase().includes("confirm") || st.label.toLowerCase().includes("valid"));
+      if (isThisWeek) groups.cetteSemaine.push(r);
+      else if (isNouveau) groups.nouvelles.push(r);
+      else if (isConfirmed) groups.confirmees.push(r);
+      else groups.enCours.push(r);
+    });
+    return groups;
+  };
+
   const fmtDateFr = (s: string) => {
     if (!s) return "";
     const d = new Date(s + "T12:00:00");
@@ -2624,101 +2685,147 @@ FORMAT
 
       <main style={{flex:1,display:"flex",overflow:"hidden",minWidth:0}}>
 
-        {/* ══ GÉNÉRAL ══ */}
-        {view==="general" && (
+        {/* ══ ÉVÉNEMENTS v3 — Apple Mail 2026 ══ */}
+        {view==="general" && (()=>{
+          const kpi = computeEventsKPIs;
+          // Filtrage par recherche
+          const q = searchEvt.toLowerCase();
+          const matchesSearch = (r: any) => !q || r.nom?.toLowerCase().includes(q) || r.entreprise?.toLowerCase().includes(q) || r.typeEvenement?.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q) || r.dateDebut?.includes(q);
+          // Filtrage par filtre actif (statut sélectionné dans sidebar)
+          const inStatusFilter = (r: any) => {
+            if (generalFilter === "all" || generalFilter === "arelancer") return true;
+            if (generalFilter === "__none__") return !r.statut || !statuts.find(s=>s.id===r.statut);
+            return (r.statut||"nouveau") === generalFilter;
+          };
+          const filteredResas = resas.filter(r => matchesSearch(r) && inStatusFilter(r));
+          // Styles communs
+          const chipStyle:any = {display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:"#6B6B72",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.005em",whiteSpace:"nowrap"};
+          const chipMoney:any = {...chipStyle,background:"#F4EEDF",color:"#B8924F",fontWeight:500};
+          const chipFaint:any = {...chipStyle,opacity:0.6};
+          const iconSvg = (path: string, size=11) => <svg width={size} height={size} viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><g dangerouslySetInnerHTML={{__html: path}}/></svg>;
+          const IcCal = () => <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M1.5 5.5h11" stroke="currentColor" strokeWidth="1.3"/></svg>;
+          const IcClock = () => <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3"/></svg>;
+          const IcPeople = () => <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2.5 12c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>;
+          const IcPin = () => <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><path d="M7 12.5s3.8-3.4 3.8-7A3.8 3.8 0 107 1.7c0 3.5 3.8 7 3.8 7z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="7" cy="5.3" r="1.3" stroke="currentColor" strokeWidth="1.3"/></svg>;
+          const IcMail = () => <svg width="10" height="10" viewBox="0 0 14 14" fill="none" style={{opacity:0.6}}><path d="M1 4l6 4.5L13 4M1 3.5h12v7H1z" stroke="currentColor" strokeWidth="1.2"/></svg>;
+
+          // Composant carte événement réutilisable
+          const EventCard = ({r, relance}: {r: any, relance?: any}) => {
+            const st = statuts.find(s=>s.id===(r.statut||"nouveau"))||statuts[0]||{bg:"#F5F4F0",color:"#6B6B72",label:"—"};
+            const linkedEmails = getLinkedEmails(r);
+            const espace = espacesDyn.find(e=>e.id===r.espaceId);
+            const isActive = selResaGeneral?.id===r.id;
+            const today = new Date(); today.setHours(0,0,0,0);
+            const isOverdue = relance && relance.date < today.toISOString().slice(0,10);
+            const daysOverdue = relance && isOverdue ? Math.floor((today.getTime() - new Date(relance.date).getTime())/86400000) : 0;
+            return (
+              <div key={r.id+(relance?"-"+relance.id:"")} onClick={()=>setSelResaGeneral(r)} style={{background:"#FFFFFF",border:`1px solid ${isActive?"rgba(184,146,79,0.35)":"#EBEAE5"}`,borderRadius:12,padding:"14px 16px",marginBottom:8,cursor:"pointer",transition:"all .14s ease",display:"flex",alignItems:"center",gap:14,boxShadow:isActive?"0 0 0 3px rgba(184,146,79,0.08), 0 1px 3px rgba(15,15,20,0.06)":"0 1px 2px rgba(15,15,20,0.04)",position:"relative"}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:st.color,flexShrink:0}}/>
+                <Avatar name={r.nom||"?"} size={38}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:5}}>
+                    <div style={{fontSize:13.5,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'Geist','system-ui',sans-serif"}}>{r.nom||"—"}</div>
+                    {r.entreprise&&<div style={{fontSize:12,color:"#6B6B72",whiteSpace:"nowrap",fontFamily:"'Geist','system-ui',sans-serif"}}>· {r.entreprise}</div>}
+                    {isOverdue&&<span style={{fontSize:10,fontWeight:500,color:"#A84B45",background:"#FAEDEB",padding:"2px 8px",borderRadius:4,textTransform:"uppercase",letterSpacing:"0.06em",marginLeft:6,display:"inline-flex",alignItems:"center",gap:4,fontFamily:"'Geist','system-ui',sans-serif"}}>{daysOverdue} jour{daysOverdue>1?"s":""} de retard</span>}
+                  </div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                    {r.dateDebut&&<span style={chipStyle}><IcCal/>{fmtDateFr(r.dateDebut)}</span>}
+                    {(r.heureDebut||r.heureFin)&&<span style={chipStyle}><IcClock/>{r.heureDebut||"?"}{r.heureFin?"–"+r.heureFin:""}</span>}
+                    {r.nombrePersonnes&&<span style={chipStyle}><IcPeople/>{r.nombrePersonnes} pers.</span>}
+                    <span style={espace?chipStyle:chipFaint}><IcPin/>{espace?.nom||"Espace à définir"}</span>
+                    {r.budget&&<span style={chipMoney}>{r.budget}</span>}
+                    {r.typeEvenement&&<span style={chipStyle}>{r.typeEvenement}</span>}
+                  </div>
+                  {relance&&relance.note&&<div style={{fontSize:11.5,color:"#6B6B72",marginTop:6,display:"flex",alignItems:"center",gap:6,fontFamily:"'Geist','system-ui',sans-serif"}}><svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{color:"#B17D2E",opacity:0.8,flexShrink:0}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>Relance prévue le {fmtDateFr(relance.date)}{relance.note?" — "+relance.note:""}</div>}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+                  <span style={{fontSize:10.5,fontWeight:500,padding:"3px 10px",borderRadius:100,background:st.bg,color:st.color,letterSpacing:"0.02em",fontFamily:"'Geist','system-ui',sans-serif"}}>{st.label}</span>
+                  {linkedEmails.length>0&&<span style={{fontSize:11,color:"#A5A4A0",display:"inline-flex",alignItems:"center",gap:4,fontVariantNumeric:"tabular-nums",fontFamily:"'Geist','system-ui',sans-serif"}}><IcMail/>{linkedEmails.length} mail{linkedEmails.length>1?"s":""}</span>}
+                </div>
+              </div>
+            );
+          };
+
+          const GroupHead = ({color, title, count}: any) => (
+            <div style={{display:"flex",alignItems:"center",gap:10,margin:"2px 4px 10px"}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
+              <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.005em",fontFamily:"'Geist','system-ui',sans-serif"}}>{title}</div>
+              <span style={{fontSize:11.5,color:"#A5A4A0",fontVariantNumeric:"tabular-nums",background:"#F5F4F0",padding:"1px 8px",borderRadius:100,fontWeight:500,fontFamily:"'Geist','system-ui',sans-serif"}}>{count}</span>
+              <div style={{flex:1,height:1,background:"#EBEAE5"}}/>
+            </div>
+          );
+
+          return (
           <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-            {/* Sidebar filtres statuts — collapsible */}
-            <div style={{width:subCollapsed?44:210,background:"#FAFAF7",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid #EBEAE5",transition:"width .2s ease",overflow:"hidden"}}>
-              <div style={{padding:subCollapsed?"10px 6px":"16px 12px 10px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0}}>
-                {!subCollapsed&&<div style={{fontSize:11,fontWeight:700,color:"#1A1A1E",letterSpacing:"0.1em",textTransform:"uppercase"}}>Filtrer</div>}
-                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"#EBEAE5",color:"#6B6E7E",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  {subCollapsed?"›":"‹"}
-                </button>
+            {/* ─── Sub-sidebar filtres statuts ─── */}
+            <div style={{width:subCollapsed?44:220,background:"#FAFAF7",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid #EBEAE5",transition:"width .2s ease",overflow:"hidden"}}>
+              <div style={{padding:subCollapsed?"10px 6px":"16px 10px 10px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0}}>
+                {!subCollapsed&&<div style={{fontSize:10,fontWeight:500,color:"#A5A4A0",letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif",padding:"0 1px"}}>Filtrer par statut</div>}
+                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"#EBEAE5",color:"#6B6B72",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{subCollapsed?"›":"‹"}</button>
               </div>
               {subCollapsed?(
                 <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center"}}>
-                  <button onClick={()=>setGeneralFilter("all")} title="Tous" style={{width:32,height:32,borderRadius:8,border:"none",background:generalFilter==="all"?"rgba(201,168,118,0.15)":"transparent",color:generalFilter==="all"?"#B8924F":"#6B6E7E",cursor:"pointer",fontSize:14}}>🗂</button>
+                  <button onClick={()=>setGeneralFilter("all")} title="Tous" style={{width:32,height:32,borderRadius:8,border:"none",background:generalFilter==="all"?"rgba(184,146,79,0.15)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:10,height:10,borderRadius:"50%",background:"#C5C3BE"}}/></button>
                   {statuts.map(s=>(
-                    <button key={s.id} onClick={()=>setGeneralFilter(s.id)} title={s.label} style={{width:32,height:32,borderRadius:8,border:"none",background:generalFilter===s.id?"rgba(201,168,118,0.15)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                      <div style={{width:10,height:10,borderRadius:"50%",background:s.color}}/>
-                    </button>
+                    <button key={s.id} onClick={()=>setGeneralFilter(s.id)} title={s.label} style={{width:32,height:32,borderRadius:8,border:"none",background:generalFilter===s.id?"rgba(184,146,79,0.15)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:10,height:10,borderRadius:"50%",background:s.color}}/></button>
                   ))}
-                  <button onClick={()=>setGeneralFilter("arelancer")} title="À relancer" style={{width:32,height:32,borderRadius:8,border:"none",background:generalFilter==="arelancer"?"rgba(201,168,118,0.15)":"transparent",cursor:"pointer",fontSize:14}}>⏰</button>
+                  <button onClick={()=>setGeneralFilter("arelancer")} title="Relances" style={{width:32,height:32,borderRadius:8,border:"none",background:generalFilter==="arelancer"?"rgba(184,146,79,0.15)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:kpi.enRetard.length>0?"#A84B45":"#6B6B72"}}><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3l1.8 1.3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg></button>
                 </div>
               ):(
                 <>
-                  <div style={{padding:"0 12px 10px",flex:1,overflowY:"auto"}}>
-                    <button onClick={()=>setGeneralFilter("all")} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"9px 10px",borderRadius:8,border:"none",background:generalFilter==="all"?"#F5F4F0":"transparent",color:generalFilter==="all"?"#1A1A1E":"#4A4A52",fontSize:13,textAlign:"left",cursor:"pointer",marginBottom:2,fontWeight:generalFilter==="all"?600:400}}>
-                      <span>🗂 Tous</span>
-                      <span style={{fontSize:11,color:generalFilter==="all"?"#B8924F":"#6B6E7E"}}>{resas.length}</span>
+                  <div style={{padding:"0 10px 10px",flex:1,overflowY:"auto"}}>
+                    <button onClick={()=>setGeneralFilter("all")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:generalFilter==="all"?"#FFFFFF":"transparent",color:generalFilter==="all"?"#1A1A1E":"#6B6B72",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:generalFilter==="all"?500:400,boxShadow:generalFilter==="all"?"0 1px 2px rgba(15,15,20,0.04)":"none",transition:"background .12s ease"}}>
+                      <div style={{width:9,height:9,borderRadius:"50%",background:"#C5C3BE",flexShrink:0}}/>
+                      <span style={{flex:1}}>Tous</span>
+                      <span style={{fontSize:11,color:generalFilter==="all"?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{resas.length}</span>
                     </button>
-
-                    {/* Statuts draggables */}
                     {statuts.map((s,idx)=>{
                       const count=resas.filter(r=>(r.statut||"nouveau")===s.id).length;
+                      const active=generalFilter===s.id;
                       return (
                         <div key={s.id}
                           draggable
                           onDragStart={()=>setDragStatutIdx(idx)}
                           onDragOver={e=>{e.preventDefault();}}
-                          onDrop={e=>{
-                            e.preventDefault();
-                            if(dragStatutIdx===null||dragStatutIdx===idx) return;
-                            const arr=[...statuts];
-                            const [moved]=arr.splice(dragStatutIdx,1);
-                            arr.splice(idx,0,moved);
-                            saveStatuts(arr); setDragStatutIdx(null);
-                          }}
-                          style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"7px 10px",borderRadius:8,background:generalFilter===s.id?"#F5F4F0":"transparent",marginBottom:2,cursor:"grab",userSelect:"none",opacity:dragStatutIdx===idx?0.4:1}}
-                        >
-                          <button onClick={()=>setGeneralFilter(s.id)} style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",color:generalFilter===s.id?"#1A1A1E":"#4A4A52",fontSize:13,textAlign:"left",cursor:"pointer",flex:1,padding:0,fontWeight:generalFilter===s.id?600:400}}>
-                            <span style={{fontSize:10,opacity:.3,marginRight:1,color:"#6B6E7E"}}>⠿</span>
+                          onDrop={e=>{e.preventDefault();if(dragStatutIdx===null||dragStatutIdx===idx) return;const arr=[...statuts];const [moved]=arr.splice(dragStatutIdx,1);arr.splice(idx,0,moved);saveStatuts(arr); setDragStatutIdx(null);}}
+                          style={{display:"flex",alignItems:"center",gap:10,padding:"8px 11px",borderRadius:8,background:active?"#FFFFFF":"transparent",marginBottom:2,cursor:"grab",userSelect:"none",opacity:dragStatutIdx===idx?0.4:1,boxShadow:active?"0 1px 2px rgba(15,15,20,0.04)":"none"}}>
+                          <button onClick={()=>setGeneralFilter(s.id)} style={{display:"flex",alignItems:"center",gap:10,background:"none",border:"none",color:active?"#1A1A1E":"#6B6B72",fontSize:12.5,textAlign:"left",cursor:"pointer",flex:1,padding:0,fontWeight:active?500:400,fontFamily:"'Geist','system-ui',sans-serif"}}>
                             <div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0}}/>
                             <span>{s.label}</span>
                           </button>
                           <div style={{display:"flex",alignItems:"center",gap:5}}>
-                            {count>0&&<span style={{fontSize:11,color:generalFilter===s.id?"#B8924F":"#6B6E7E"}}>{count}</span>}
-                            <button onClick={e=>{e.stopPropagation();const ok=window.confirm('Supprimer "'+s.label+'" ? Les événements avec ce statut passeront à "Nouveau".');if(!ok) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);if(generalFilter===s.id)setGeneralFilter("all");toast("Statut supprimé");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(27,30,43,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(239,68,68,0.8)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(255,255,255,0.2)")}>✕</button>
+                            {count>0&&<span style={{fontSize:11,color:active?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{count}</span>}
+                            <button onClick={e=>{e.stopPropagation();const ok=window.confirm('Supprimer "'+s.label+'" ? Les événements avec ce statut passeront à "Nouveau".');if(!ok) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);if(generalFilter===s.id)setGeneralFilter("all");toast("Statut supprimé");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(27,30,43,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(168,75,69,0.8)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(27,30,43,0.2)")}>✕</button>
                           </div>
                         </div>
                       );
                     })}
-
-                    {/* Séparateur + À relancer */}
-                    <div style={{height:1,background:"#EBEAE5",margin:"12px 0"}}/>
-                    <button onClick={()=>setGeneralFilter("arelancer")} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"9px 10px",borderRadius:8,border:"none",background:generalFilter==="arelancer"?"#F5F4F0":"transparent",color:generalFilter==="arelancer"?"#1A1A1E":"#4A4A52",fontSize:13,textAlign:"left",cursor:"pointer",fontWeight:generalFilter==="arelancer"?600:400}}>
-                      <span>⏰ À relancer</span>
-                      {relances.length>0&&<span style={{fontSize:11,color:generalFilter==="arelancer"?"#B8924F":"#6B6E7E"}}>{relances.length}</span>}
+                    <div style={{height:1,background:"#EBEAE5",margin:"10px 4px"}}/>
+                    <button onClick={()=>setGeneralFilter("arelancer")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:generalFilter==="arelancer"?"#FFFFFF":"transparent",color:generalFilter==="arelancer"?"#1A1A1E":"#6B6B72",fontSize:12.5,textAlign:"left",cursor:"pointer",fontWeight:generalFilter==="arelancer"?500:400,fontFamily:"'Geist','system-ui',sans-serif",boxShadow:generalFilter==="arelancer"?"0 1px 2px rgba(15,15,20,0.04)":"none",transition:"background .12s ease"}}>
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{color:kpi.enRetard.length>0?"#A84B45":"#B17D2E",flexShrink:0}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3l1.8 1.3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                      <span style={{flex:1}}>Relances</span>
+                      {relances.length>0&&<span style={{fontSize:11,color:kpi.enRetard.length>0?"#A84B45":(generalFilter==="arelancer"?"#B8924F":"#A5A4A0"),fontVariantNumeric:"tabular-nums",fontWeight:kpi.enRetard.length>0?500:400}}>{relances.length}</span>}
                     </button>
                   </div>
-
-                  <div style={{padding:"10px 12px",borderTop:"1px solid #EBEAE5"}}>
+                  <div style={{padding:"10px 10px",borderTop:"1px solid #EBEAE5"}}>
                     {showCreateStatut?(
                       <div>
-                        <div style={{fontSize:11,color:"#6B6E7E",marginBottom:8}}>Nouveau statut</div>
-                        <input value={newStatutLabel} onChange={e=>setNewStatutLabel(e.target.value)} placeholder="Nom du statut…" style={{width:"100%",padding:"6px 9px",borderRadius:7,border:"1px solid #EBEAE5",background:"#F5F4F0",color:"#1A1A1E",fontSize:12,marginBottom:8,outline:"none"}}/>
+                        <div style={{fontSize:11,color:"#6B6B72",marginBottom:8,fontFamily:"'Geist','system-ui',sans-serif"}}>Nouveau statut</div>
+                        <input value={newStatutLabel} onChange={e=>setNewStatutLabel(e.target.value)} placeholder="Nom du statut…" style={{width:"100%",padding:"7px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",fontSize:12,marginBottom:8,outline:"none",fontFamily:"'Geist','system-ui',sans-serif"}}/>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                          <span style={{fontSize:11,color:"#6B6E7E"}}>Couleur</span>
+                          <span style={{fontSize:11,color:"#6B6B72",fontFamily:"'Geist','system-ui',sans-serif"}}>Couleur</span>
                           <input type="color" value={newStatutColor} onChange={e=>setNewStatutColor(e.target.value)} style={{width:32,height:24,borderRadius:5,border:"none",cursor:"pointer",background:"transparent"}}/>
                           <div style={{width:16,height:16,borderRadius:"50%",background:newStatutColor}}/>
                         </div>
                         <div style={{display:"flex",gap:6}}>
-                          <button onClick={()=>{
-                            if(!newStatutLabel.trim()) return;
-                            const hex=newStatutColor;
-                            const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
-                            const bg=`rgba(${r},${g},${b},0.12)`;
-                            const ns:StatutDef={id:"s_"+Date.now(),label:newStatutLabel.trim(),bg,color:hex};
-                            saveStatuts([...statuts,ns]);
-                            setNewStatutLabel("");setNewStatutColor("#6366f1");setShowCreateStatut(false);
-                            toast("Statut créé !");
-                          }} style={{flex:1,padding:"6px",borderRadius:7,border:"none",background:"#1A1A1E",color:"#F5F4F0",fontSize:11,fontWeight:600,cursor:"pointer"}}>Créer</button>
-                          <button onClick={()=>{setShowCreateStatut(false);setNewStatutLabel("");}} style={{padding:"6px 8px",borderRadius:7,border:"1px solid rgba(255,255,255,0.12)",background:"transparent",color:"#6B6E7E",fontSize:11,cursor:"pointer"}}>✕</button>
+                          <button onClick={()=>{if(!newStatutLabel.trim()) return;const hex=newStatutColor;const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);const bg=`rgba(${r},${g},${b},0.12)`;const ns:StatutDef={id:"s_"+Date.now(),label:newStatutLabel.trim(),bg,color:hex};saveStatuts([...statuts,ns]);setNewStatutLabel("");setNewStatutColor("#6366f1");setShowCreateStatut(false);toast("Statut créé !");}} style={{flex:1,padding:"7px",borderRadius:8,border:"none",background:"#1A1A1E",color:"#FFFFFF",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>Créer</button>
+                          <button onClick={()=>{setShowCreateStatut(false);setNewStatutLabel("");}} style={{padding:"7px 10px",borderRadius:8,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6B72",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>✕</button>
                         </div>
                       </div>
                     ):(
-                      <button onClick={()=>setShowCreateStatut(true)} style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"1px dashed #EBEAE5",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-                        <span>+</span> Créer un statut
+                      <button onClick={()=>setShowCreateStatut(true)} style={{width:"100%",padding:"9px 11px",borderRadius:8,border:"1px dashed #E0DED7",background:"transparent",color:"#A5A4A0",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                        <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                        Créer un statut
                       </button>
                     )}
                   </div>
@@ -2726,185 +2833,182 @@ FORMAT
               )}
             </div>
 
-            {/* Liste des réservations */}
-            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#F5F4F0"}}>
-              <div style={{padding:"20px 24px 0",flexShrink:0,display:"flex",alignItems:"flex-end",justifyContent:"space-between"}}>
+            {/* ─── Zone principale ─── */}
+            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#FAFAF7"}}>
+              {/* Header : titre + toggle + bouton nouvelle */}
+              <div style={{padding:"22px 28px 14px",flexShrink:0,display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:16}}>
                 <div>
-                  <div style={{fontSize:22,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.01em"}}>Événements</div>
-                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3}}>
+                  <h1 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:28,fontWeight:400,color:"#1A1A1E",letterSpacing:"-0.02em",lineHeight:1.1,margin:0}}>Événements</h1>
+                  <div style={{fontSize:12.5,color:"#6B6B72",marginTop:4,fontFamily:"'Geist','system-ui',sans-serif"}}>
                     {generalFilter==="all"?`${resas.length} demande${resas.length!==1?"s":""}`:
-                    `${resas.filter(r=>(r.statut||"nouveau")===generalFilter).length} demande${resas.filter(r=>(r.statut||"nouveau")===generalFilter).length!==1?"s":""} · ${statuts.find(s=>s.id===generalFilter)?.label||""}`}
+                     generalFilter==="arelancer"?`${relances.length} relance${relances.length!==1?"s":""}`:
+                     `${resas.filter(r=>(r.statut||"nouveau")===generalFilter).length} demande${resas.filter(r=>(r.statut||"nouveau")===generalFilter).length!==1?"s":""} · ${statuts.find(s=>s.id===generalFilter)?.label||""}`}
                   </div>
                 </div>
-                <button onClick={()=>{ setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setNewEventErrors({}); setShowNewEvent(true); }} style={{...gold}}>+ Nouvelle demande</button>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{display:"inline-flex",border:"1px solid #E0DED7",background:"#FFFFFF",borderRadius:8,padding:3,fontSize:12}}>
+                    <button onClick={()=>setEventsGroupBy("urgency")} style={{padding:"5px 11px",border:"none",background:eventsGroupBy==="urgency"?"#F5F4F0":"transparent",color:eventsGroupBy==="urgency"?"#1A1A1E":"#6B6B72",fontFamily:"'Geist','system-ui',sans-serif",cursor:"pointer",borderRadius:6,fontWeight:500}}>Par urgence</button>
+                    <button onClick={()=>setEventsGroupBy("status")} style={{padding:"5px 11px",border:"none",background:eventsGroupBy==="status"?"#F5F4F0":"transparent",color:eventsGroupBy==="status"?"#1A1A1E":"#6B6B72",fontFamily:"'Geist','system-ui',sans-serif",cursor:"pointer",borderRadius:6,fontWeight:500}}>Par statut</button>
+                  </div>
+                  <button onClick={()=>{ setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setNewEventErrors({}); setShowNewEvent(true); }} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"9px 14px",borderRadius:8,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",boxShadow:"0 1px 2px rgba(184,146,79,0.2)",letterSpacing:"-0.005em"}}>
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                    Nouvelle demande
+                  </button>
+                </div>
               </div>
-              <div style={{padding:"12px 24px",flexShrink:0,position:"relative"}}>
-                <span style={{position:"absolute",left:36,top:"50%",transform:"translateY(-50%)",fontSize:12,color:"#6B6E7E",pointerEvents:"none"}}>🔍</span>
-                <input value={searchEvt} onChange={e=>setSearchEvt(e.target.value)} placeholder="Rechercher par nom, entreprise, type, date…" style={{...inp,paddingLeft:32,paddingRight:searchEvt?28:12}} />
-                {searchEvt&&<button onClick={()=>setSearchEvt("")} style={{position:"absolute",right:36,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>×</button>}
+              {/* Recherche */}
+              <div style={{padding:"0 28px 18px",flexShrink:0,position:"relative"}}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:42,top:"50%",transform:"translateY(calc(-50% - 9px))",color:"#A5A4A0",pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                <input value={searchEvt} onChange={e=>setSearchEvt(e.target.value)} placeholder="Rechercher par nom, entreprise, type, date…" style={{width:"100%",padding:"10px 14px 10px 38px",border:"1px solid #EBEAE5",borderRadius:10,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,color:"#1A1A1E",outline:"none",transition:"border-color .12s ease"}}/>
+                {searchEvt&&<button onClick={()=>setSearchEvt("")} style={{position:"absolute",right:36,top:"50%",transform:"translateY(calc(-50% - 9px))",background:"none",border:"none",color:"#A5A4A0",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>×</button>}
+              </div>
+              {/* Hero dashboard 4 KPI */}
+              <div style={{padding:"0 28px 22px",flexShrink:0,display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:12}}>
+                <div style={{background:"linear-gradient(180deg, #FEF7F6 0%, #FFFFFF 100%)",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease",position:"relative",overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <div style={{width:26,height:26,borderRadius:7,background:"#FAEDEB",color:"#A84B45",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M1.5 5.5h11M4.5 1v2.5M9.5 1v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    </div>
+                    <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Cette semaine</div>
+                  </div>
+                  <div style={{fontFamily:"'Fraunces',serif",fontSize:30,fontWeight:500,color:"#A84B45",letterSpacing:"-0.03em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.cetteSemaine.length}</div>
+                  <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>événement{kpi.cetteSemaine.length!==1?"s":""} dans les <strong style={{color:"#1A1A1E",fontWeight:500}}>7 prochains jours</strong></div>
+                </div>
+                <div onClick={()=>setGeneralFilter("arelancer")} style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease",position:"relative",overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <div style={{width:26,height:26,borderRadius:7,background:"#F7EDD8",color:"#B17D2E",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    </div>
+                    <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>À relancer</div>
+                  </div>
+                  <div style={{fontFamily:"'Fraunces',serif",fontSize:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.03em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{relances.length}</div>
+                  <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>{kpi.enRetard.length>0?<>dont <strong style={{color:"#A84B45",fontWeight:500}}>{kpi.enRetard.length} en retard</strong></>:<>aucune en retard</>}</div>
+                </div>
+                <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease",position:"relative",overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <div style={{width:26,height:26,borderRadius:7,background:"#EDF2E8",color:"#3F5B32",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    </div>
+                    <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Nouvelles</div>
+                  </div>
+                  <div style={{fontFamily:"'Fraunces',serif",fontSize:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.03em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.nouvelles.length}</div>
+                  <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>demande{kpi.nouvelles.length!==1?"s":""} <strong style={{color:"#1A1A1E",fontWeight:500}}>au statut Nouveau</strong></div>
+                </div>
+                <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease",position:"relative",overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <div style={{width:26,height:26,borderRadius:7,background:"#F4EEDF",color:"#B8924F",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 3H5a2 2 0 000 4h4a2 2 0 010 4H3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M6.5 1.5v11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    </div>
+                    <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Prévisionnel</div>
+                  </div>
+                  <div style={{fontFamily:"'Fraunces',serif",fontSize:kpi.totalBudget>999?24:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.totalBudget.toLocaleString("fr-FR")} €</div>
+                  <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>mois en cours</strong> · en cours + confirmés</div>
+                </div>
               </div>
 
-              {/* ── Barre de filtre pills par statut ── */}
-              <div style={{padding:"0 24px 12px",flexShrink:0,display:"flex",gap:6,flexWrap:"wrap"}}>
-                {/* Tous */}
-                <button onClick={()=>setGeneralFilter("all")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${generalFilter==="all"?"#B8924F":"#EBEAE5"}`,background:generalFilter==="all"?"#B8924F":"transparent",color:generalFilter==="all"?"#1A1A1E":"#6B6B72",fontSize:11,fontWeight:generalFilter==="all"?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
-                  Tous ({resas.length})
-                </button>
-                {/* Un pill par statut */}
-                {statuts.map(s=>{
-                  const count=resas.filter(r=>(r.statut||"nouveau")===s.id).length;
-                  const active=generalFilter===s.id;
+              {/* ─── Liste ─── */}
+              <div style={{flex:1,overflowY:"auto",padding:"0 28px 40px"}}>
+
+                {/* Vue Relances (depuis filter ou KPI) */}
+                {generalFilter==="arelancer"?(
+                  <>
+                    <GroupHead color="#B17D2E" title="Toutes les relances" count={relances.length}/>
+                    {relances.length===0?(
+                      <div style={{textAlign:"center",padding:"60px 24px",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                        <svg width="32" height="32" viewBox="0 0 14 14" fill="none" style={{color:"#C5C3BE",marginBottom:10}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
+                        <div style={{fontSize:14,color:"#6B6B72"}}>Aucune relance programmée</div>
+                        <div style={{fontSize:12,marginTop:4}}>Ouvrez un événement et cliquez sur "Relance date"</div>
+                      </div>
+                    ):(
+                      relances.sort((a,b)=>a.date.localeCompare(b.date)).map(rel=>{
+                        const resa = resas.find(r=>r.id===rel.resaId);
+                        if (!resa) return null;
+                        return <EventCard key={"rel-"+rel.id} r={resa} relance={rel}/>;
+                      })
+                    )}
+                  </>
+                ):resas.length===0?(
+                  <div style={{textAlign:"center",padding:"80px 24px",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                    <svg width="40" height="40" viewBox="0 0 14 14" fill="none" style={{color:"#C5C3BE",marginBottom:12}}><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1"/><path d="M1.5 5.5h11" stroke="currentColor" strokeWidth="1"/></svg>
+                    <div style={{fontSize:14,color:"#6B6B72"}}>Aucune demande de réservation</div>
+                    <div style={{fontSize:12,marginTop:4}}>Les demandes détectées dans vos mails apparaîtront ici.</div>
+                  </div>
+                ):searchEvt&&filteredResas.length===0?(
+                  <div style={{textAlign:"center",padding:"60px 24px",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                    <svg width="32" height="32" viewBox="0 0 14 14" fill="none" style={{color:"#C5C3BE",marginBottom:10}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1"/><path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
+                    <div style={{fontSize:14,color:"#6B6B72"}}>Aucun résultat pour "{searchEvt}"</div>
+                    <button onClick={()=>setSearchEvt("")} style={{marginTop:12,background:"none",border:"none",color:"#B8924F",fontSize:12,cursor:"pointer",fontWeight:500,fontFamily:"'Geist','system-ui',sans-serif"}}>Effacer la recherche</button>
+                  </div>
+                ):eventsGroupBy==="urgency"?(()=>{
+                  const grp = groupResasByUrgency(filteredResas);
+                  const relancesEnRetardFiltered = kpi.enRetard.filter(rel => {
+                    const r = resas.find(x=>x.id===rel.resaId);
+                    return r && matchesSearch(r) && inStatusFilter(r);
+                  });
                   return (
-                    <button key={s.id} onClick={()=>setGeneralFilter(s.id)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?s.color:s.color+"55"}`,background:active?s.bg:"transparent",color:active?s.color:s.color,fontSize:11,fontWeight:active?600:400,cursor:"pointer",whiteSpace:"nowrap",opacity:count===0?0.4:1}}>
-                      {s.label} ({count})
-                    </button>
+                    <>
+                      {grp.cetteSemaine.length>0&&<div style={{marginBottom:26}}>
+                        <GroupHead color="#A84B45" title="Cette semaine" count={grp.cetteSemaine.length}/>
+                        {grp.cetteSemaine.map(r=><EventCard key={r.id} r={r}/>)}
+                      </div>}
+                      {relancesEnRetardFiltered.length>0&&<div style={{marginBottom:26}}>
+                        <GroupHead color="#B17D2E" title="Relances en retard" count={relancesEnRetardFiltered.length}/>
+                        {relancesEnRetardFiltered.map(rel=>{
+                          const r = resas.find(x=>x.id===rel.resaId);
+                          return r ? <EventCard key={"rel-"+rel.id} r={r} relance={rel}/> : null;
+                        })}
+                      </div>}
+                      {grp.nouvelles.length>0&&<div style={{marginBottom:26}}>
+                        <GroupHead color="#6B8A5B" title="Nouvelles demandes" count={grp.nouvelles.length}/>
+                        {grp.nouvelles.map(r=><EventCard key={r.id} r={r}/>)}
+                      </div>}
+                      {grp.enCours.length>0&&<div style={{marginBottom:26}}>
+                        <GroupHead color="#B17D2E" title="En cours" count={grp.enCours.length}/>
+                        {grp.enCours.map(r=><EventCard key={r.id} r={r}/>)}
+                      </div>}
+                      {grp.confirmees.length>0&&<div style={{marginBottom:26}}>
+                        <GroupHead color="#3F5B32" title="Confirmées" count={grp.confirmees.length}/>
+                        {grp.confirmees.map(r=><EventCard key={r.id} r={r}/>)}
+                      </div>}
+                      {filteredResas.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13}}>Aucun événement avec ce filtre</div>}
+                    </>
                   );
-                })}
-                {/* Sans statut */}
-                {(()=>{const c=resas.filter(r=>!r.statut||!statuts.find(s=>s.id===r.statut)).length;const active=generalFilter==="__none__";return c>0&&(
-                  <button onClick={()=>setGeneralFilter("__none__")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?"#A5A4A0":"#EBEAE5"}`,background:active?"#F1EFE8":"transparent",color:active?"#3D3530":"#A5A4A0",fontSize:11,fontWeight:active?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
-                    Sans statut ({c})
-                  </button>
-                );})()}
-                {/* À relancer */}
-                {(()=>{const active=generalFilter==="arelancer";return(
-                  <button onClick={()=>setGeneralFilter("arelancer")} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?"#F59E0B":"#EBEAE5"}`,background:active?"#FFFBEB":"transparent",color:active?"#92400E":"#A5A4A0",fontSize:11,fontWeight:active?600:400,cursor:"pointer",whiteSpace:"nowrap"}}>
-                    ⏰ Relances ({relances.length})
-                  </button>
-                );})()}
-              </div>
-              <div style={{flex:1,overflowY:"auto",padding:"0 24px 20px"}}>
-
-              {/* Vue À relancer */}
-              {generalFilter==="arelancer"&&(
-                <div>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-                    <span style={{fontSize:16,fontWeight:600,color:"#1A1A1E"}}>⏰ À relancer</span>
-                    <span style={{fontSize:12,color:"#6B6E7E"}}>{relances.length} relance{relances.length!==1?"s":""}</span>
-                  </div>
-                  {relances.length===0?(
-                    <div style={{textAlign:"center",padding:"60px 24px",color:"#6B6E7E"}}>
-                      <div style={{fontSize:36,marginBottom:10}}>⏰</div>
-                      <div style={{fontSize:14}}>Aucune relance programmée</div>
-                      <div style={{fontSize:12,marginTop:4}}>Ouvrez un événement et cliquez sur "Relance date"</div>
-                    </div>
-                  ):(
-                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                      {relances.sort((a,b)=>a.date.localeCompare(b.date)).map(rel=>{
-                        const resa=resas.find(r=>r.id===rel.resaId);
-                        const st=resa?statuts.find(s=>s.id===(resa.statut||"nouveau"))||statuts[0]:null;
-                        const isOverdue=rel.date<new Date().toISOString().slice(0,10);
+                })():(() => {
+                  // Vue par statut
+                  if (generalFilter === "__none__") {
+                    const group = filteredResas.filter(r=>(!r.statut||!statuts.find(s=>s.id===r.statut)));
+                    return (
+                      <>
+                        <GroupHead color="#C5C3BE" title="Sans statut" count={group.length}/>
+                        {group.length===0?<div style={{textAlign:"center",padding:"60px 0",color:"#A5A4A0",fontSize:13,fontFamily:"'Geist','system-ui',sans-serif"}}>Aucun événement sans statut</div>:group.map(r=><EventCard key={r.id} r={r}/>)}
+                      </>
+                    );
+                  }
+                  const statutsToShow = generalFilter==="all"?statuts:[statuts.find(s=>s.id===generalFilter)].filter(Boolean);
+                  return (
+                    <>
+                      {statutsToShow.map(statut=>{
+                        const group = filteredResas.filter(r=>(r.statut||"nouveau")===statut!.id);
+                        if (group.length===0 && generalFilter==="all") return null;
                         return (
-                          <div key={rel.id} onClick={()=>resa&&setSelResaGeneral(resa)} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5",padding:"14px 18px",cursor:resa?"pointer":"default",display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${isOverdue?"#DC2626":"#F59E0B"}`}}>
-                            <div style={{width:36,height:36,borderRadius:"50%",background:isOverdue?"#FEE2E2":"#FFFBEB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>⏰</div>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",marginBottom:3}}>{rel.resaNom||"—"}</div>
-                              <div style={{fontSize:12,color:isOverdue?"#DC2626":"#92400E",fontWeight:isOverdue?600:400}}>{isOverdue?"En retard · ":""}{rel.date}{rel.heure&&` à ${rel.heure}`}</div>
-                              {rel.note&&<div style={{fontSize:11,color:"#6B6E7E",marginTop:2}}>{rel.note}</div>}
-                            </div>
-                            <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end",flexShrink:0}}>
-                              {st&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:100,background:st.bg,color:st.color,fontWeight:600}}>{st.label}</span>}
-                              <button onClick={e=>{e.stopPropagation();saveRelances(relances.filter(r=>r.id!==rel.id));}} style={{fontSize:10,color:"#DC2626",background:"none",border:"none",cursor:"pointer",padding:0}}>Supprimer</button>
-                            </div>
+                          <div key={statut!.id} style={{marginBottom:26}}>
+                            {generalFilter==="all"&&<GroupHead color={statut!.color} title={statut!.label} count={group.length}/>}
+                            {group.length===0&&generalFilter!=="all"?(
+                              <div style={{textAlign:"center",padding:"48px 24px",color:"#A5A4A0",fontSize:13,fontFamily:"'Geist','system-ui',sans-serif"}}>Aucune demande avec ce statut</div>
+                            ):group.map(r=><EventCard key={r.id} r={r}/>)}
                           </div>
                         );
                       })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Groupes par statut */}
-              {generalFilter!=="arelancer"&&(()=>{
-                const q=searchEvt.toLowerCase();
-                if(generalFilter==="__none__") {
-                  const group=resas.filter(r=>(!r.statut||!statuts.find(s=>s.id===r.statut))&&(!q||r.nom?.toLowerCase().includes(q)||r.entreprise?.toLowerCase().includes(q)||r.typeEvenement?.toLowerCase().includes(q)||r.email?.toLowerCase().includes(q)||r.dateDebut?.includes(q)));
-                  return group.length===0
-                    ? <div style={{textAlign:"center",padding:"60px 0",color:"#6B6E7E",fontSize:13}}>Aucun événement sans statut</div>
-                    : <div style={{display:"flex",flexDirection:"column",gap:8}}>{group.map(r=>{
-                        const st=statuts[0]||{bg:"#F3F4F6",color:"#6B7280",label:"—"};
-                        return <div key={r.id} onClick={()=>setSelResaGeneral(r)} style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"13px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,borderLeft:"3px solid #EBEAE5",boxShadow:selResaGeneral?.id===r.id?"0 2px 10px rgba(26,26,30,.07)":"0 1px 3px rgba(26,26,30,.04)"}}>
-                          <Avatar name={r.nom||"?"} size={36}/>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",marginBottom:3}}>{r.nom||"—"}</div>
-                            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                              {r.typeEvenement&&<span style={{fontSize:11,color:"#6B6E7E"}}>{r.typeEvenement}</span>}
-                              {r.dateDebut&&<span style={{fontSize:11,color:"#6B6E7E"}}>📅 {fmtDateFr(r.dateDebut)}</span>}
-                              {r.nombrePersonnes&&<span style={{fontSize:11,color:"#6B6E7E"}}>👥 {r.nombrePersonnes}</span>}
-                            </div>
-                          </div>
-                        </div>;
-                      })}</div>;
-                }
-                return (generalFilter==="all"?statuts:[statuts.find(s=>s.id===generalFilter)].filter(Boolean)).map(statut=>{
-                const q=searchEvt.toLowerCase();
-                const group=resas.filter(r=>(r.statut||"nouveau")===statut.id&&(!q||r.nom?.toLowerCase().includes(q)||r.entreprise?.toLowerCase().includes(q)||r.typeEvenement?.toLowerCase().includes(q)||r.email?.toLowerCase().includes(q)||r.dateDebut?.includes(q)));
-                if(group.length===0) return null;
-                return (
-                  <div key={statut.id} style={{marginBottom:24}}>
-                    {generalFilter==="all"&&(
-                      <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:10,marginTop:4}}>
-                        <div style={{width:7,height:7,borderRadius:"50%",background:statut.color}}/>
-                        <span style={{fontSize:9,fontWeight:700,color:"#6B6E7E",textTransform:"uppercase",letterSpacing:"0.14em"}}>{statut.label}</span>
-                        <span style={{fontSize:10,color:"#6B6E7E",background:"#EBEAE5",padding:"2px 7px",borderRadius:100}}>{group.length}</span>
-                        <div style={{flex:1,height:1,background:"#EBEAE5"}}/>
-                      </div>
-                    )}
-                    {group.length===0&&generalFilter!=="all"&&(
-                      <div style={{textAlign:"center",padding:"48px 24px",color:"#6B6E7E",fontSize:13}}>
-                        <div style={{fontSize:32,marginBottom:8}}>📭</div>
-                        Aucune demande avec ce statut
-                      </div>
-                    )}
-                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                      {group.map(r=>{
-                        const st=statuts.find(s=>s.id===(r.statut||"nouveau"))||statuts[0];
-                        const linkedEmails=getLinkedEmails(r);
-                        return (
-                          <div key={r.id} onClick={()=>setSelResaGeneral(r)} style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"13px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,borderLeft:`3px solid ${st.color}`,boxShadow:selResaGeneral?.id===r.id?"0 2px 10px rgba(26,26,30,.07)":"0 1px 3px rgba(26,26,30,.04)"}}>
-                            <Avatar name={r.nom||"?"} size={34}/>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                                {r.nom||"—"}{r.entreprise&&<span style={{fontSize:12,fontWeight:400,color:"#6B6E7E"}}> · {r.entreprise}</span>}
-                              </div>
-                              <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-                                {r.typeEvenement&&<span style={{fontSize:11,color:"#6B6E7E"}}>🎉 {r.typeEvenement}</span>}
-                                {r.dateDebut&&<span style={{fontSize:11,color:"#6B6E7E"}}>📅 {r.dateDebut}</span>}
-                                {(r.heureDebut||r.heureFin)&&<span style={{fontSize:11,color:"#6B6E7E"}}>🕐 {r.heureDebut}{r.heureFin?" → "+r.heureFin:""}</span>}
-                                {r.nombrePersonnes&&<span style={{fontSize:11,color:"#6B6E7E"}}>👥 {r.nombrePersonnes} pers.</span>}
-                              </div>
-                            </div>
-                            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
-                              <span style={{fontSize:10,fontWeight:600,padding:"3px 9px",borderRadius:5,background:st.bg,color:st.color,letterSpacing:"0.03em"}}>{st.label}</span>
-                              {linkedEmails.length>0&&<span style={{fontSize:10,color:"#B0AAA2"}}>✉ {linkedEmails.length} mail{linkedEmails.length>1?"s":""}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              });
-              })()}
-              {resas.length===0?(
-                <div style={{textAlign:"center",padding:"80px 24px",color:"#6B6E7E"}}>
-                  <div style={{fontSize:40,marginBottom:12}}>📭</div>
-                  <div style={{fontSize:14}}>Aucune demande de réservation</div>
-                  <div style={{fontSize:12,marginTop:4}}>Les demandes détectées dans vos mails apparaîtront ici.</div>
-                </div>
-              ):searchEvt&&resas.filter(r=>{const q=searchEvt.toLowerCase();return r.nom?.toLowerCase().includes(q)||r.entreprise?.toLowerCase().includes(q)||r.typeEvenement?.toLowerCase().includes(q)||r.email?.toLowerCase().includes(q)||r.dateDebut?.includes(q);}).length===0?(
-                <div style={{textAlign:"center",padding:"60px 24px",color:"#6B6E7E"}}>
-                  <div style={{fontSize:32,marginBottom:10}}>🔍</div>
-                  <div style={{fontSize:14}}>Aucun résultat pour "{searchEvt}"</div>
-                  <button onClick={()=>setSearchEvt("")} style={{marginTop:12,background:"none",border:"none",color:"#B8924F",fontSize:12,cursor:"pointer",fontWeight:600}}>Effacer la recherche</button>
-                </div>
-              ):null}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
             {/* Panel détail réservation (général) — ouvert comme modale via selResaGeneral */}
           </div>
-        )}
+          );
+        })()}
 
         {/* ══ MAILS ══ */}
         {view==="mails" && (
