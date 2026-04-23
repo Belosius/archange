@@ -3310,6 +3310,7 @@ FORMAT
                             onClick={()=>{
                               // Fix 8 — Ouvrir le lecteur complet à droite du Radar (split view)
                               // handleSel charge le corps et marque lu, sans naviguer ailleurs
+                              setMailOrigine({type:'radar', resaId: resa?.id||'', nom: 'Radar ARCHANGE'});
                               handleSel(m);
                               setRadarSelEmail(m);
                             }}
@@ -3374,7 +3375,7 @@ FORMAT
 
                     {/* Bouton fermer le panel */}
                     <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
-                      <button onClick={()=>{setRadarSelEmail(null);setSel(null);}} style={{background:"none",border:"none",color:"#9CA3AF",cursor:"pointer",fontSize:18,lineHeight:1,padding:"2px 4px"}}>×</button>
+                      <button onClick={()=>{setRadarSelEmail(null);setSel(null);setExtracted(null);setReply("");setEditReply("");setShowReplyEditor(false);}} style={{background:"none",border:"none",color:"#9CA3AF",cursor:"pointer",fontSize:18,lineHeight:1,padding:"2px 4px"}}>×</button>
                     </div>
 
                     {/* ── Barre d'actions ── */}
@@ -3384,8 +3385,25 @@ FORMAT
                       <button onClick={()=>openReplyEditor("forward")} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#3A3F52",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↪ Transférer</button>
                       <div style={{width:1,height:14,background:"#E6DCC9",margin:"0 2px"}}/>
                       <button onClick={()=>toggleFlag(sel.id,"star")} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(sel.flags||[]).includes("star")?1:0.25,padding:"3px 4px",color:"#B89456"}}>✦</button>
+                      <button onClick={()=>toggleUnread(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:sel.unread?"rgba(184,148,86,0.12)":"transparent",color:sel.unread?"#B89456":"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>{sel.unread?"● Non lu":"○ Non lu"}</button>
+                      <button onClick={()=>toggleATraiter(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:sel.aTraiter?"rgba(184,148,86,0.12)":"transparent",color:sel.aTraiter?"#B89456":"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>📋 {sel.aTraiter?"À traiter":"Traiter"}</button>
                       <button onClick={()=>archiveEmail(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>📦</button>
                       <div style={{flex:1}}/>
+                      {/* Tag */}
+                      <div style={{position:"relative"}}>
+                        <button onClick={()=>setShowTagMenu(showTagMenu===sel.id?null:sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>🏷️</button>
+                        {showTagMenu===sel.id&&(
+                          <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:300,background:"#FFF",border:"1px solid #E6DCC9",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,.12)",minWidth:190,padding:8}}>
+                            {customTags.length===0&&<div style={{fontSize:11,color:"#9CA3AF",padding:"4px 8px",fontStyle:"italic"}}>Aucun tag</div>}
+                            {customTags.map(t=>{const applied=(emailTags[sel.id]||[]).includes(t.id);return(
+                              <div key={t.id} onClick={()=>{const cur=emailTags[sel.id]||[];saveEmailTags({...emailTags,[sel.id]:applied?cur.filter((x:string)=>x!==t.id):[...cur,t.id]});}} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",borderRadius:4,cursor:"pointer",background:applied?"rgba(184,148,86,0.08)":"transparent"}}>
+                                <span style={{width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0}}/>
+                                <span style={{fontSize:12,flex:1,color:"#1B1E2B"}}>{t.label}</span>
+                                {applied&&<span style={{fontSize:10,color:"#B89456"}}>✓</span>}
+                              </div>);})}
+                          </div>
+                        )}
+                      </div>
                       <button onClick={()=>deleteEmailWithUndo(sel)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"1px solid rgba(220,38,38,0.3)",background:"transparent",color:"#DC2626",cursor:"pointer"}}>✕</button>
                     </div>
 
@@ -3507,12 +3525,25 @@ FORMAT
                         </button>
                       )}
                       {reply&&(
-                        <div style={{background:"#FFF",borderRadius:2,border:"1px solid #E6DCC9",padding:14}}>
-                          <div style={{fontSize:11,color:"#B89456",fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,fontFamily:"'Inter',sans-serif"}}>✨ Réponse ARCHANGE</div>
-                          <div style={{fontSize:13,color:"#1B1E2B",lineHeight:1.75,whiteSpace:"pre-wrap",fontFamily:"'Cormorant Garamond',Georgia,serif"}}>{reply}</div>
-                          <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
-                            <button onClick={()=>openReplyEditor("reply")} style={{fontSize:11,padding:"5px 12px",borderRadius:2,border:"none",background:"#1B1E2B",color:"#F7F2EA",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↩ Utiliser cette réponse</button>
-                            <button onClick={genererReponse} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↺ Regénérer</button>
+                        <div style={{background:"#EFE7DA",borderRadius:3,border:"1px solid #E6DCC9",overflow:"hidden",marginTop:8}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 14px",background:"#1B1E2B"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B89456" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B89456"/><path d="M12 9.6 L 12 18.2" stroke="#B89456" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B89456"/></svg>
+                              <span style={{fontSize:10,fontWeight:500,color:"#B89456",letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"'Inter',sans-serif"}}>Réponse Archange</span>
+                            </div>
+                            {srcActives>0&&<span style={{fontSize:10,color:"rgba(184,148,86,0.7)",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>🧠 {srcActives} source{srcActives>1?"s":""}</span>}
+                          </div>
+                          <div style={{padding:"16px 18px",fontFamily:"'Cormorant Garamond',Georgia,serif",fontSize:15,color:"#1B1E2B",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{reply}</div>
+                          <div style={{display:"flex",gap:6,padding:"10px 14px",borderTop:"1px solid #E6DCC9",background:"#F7F2EA",flexWrap:"wrap"}}>
+                            <button onClick={async()=>{
+                              const subject=sel.subject?.startsWith("Re:")?sel.subject:`Re: ${sel.subject||""}`;
+                              try{const res=await fetch("/api/gmail/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:sel.fromEmail,subject,body:reply})});if(res.ok)toast("Brouillon créé dans Gmail ✓");else toast("Erreur brouillon","err");}catch{toast("Erreur réseau","err");}
+                              const upd={...sentReplies,[sel.id]:{text:reply,date:new Date().toLocaleDateString("fr-FR"),subject:sel.subject||"",toEmail:sel.fromEmail||""}};saveSentReplies(upd);
+                              setDrafted(p=>new Set([...p,sel.id]));
+                            }} disabled={genReply} style={{padding:"6px 12px",borderRadius:2,border:"none",background:"rgba(184,148,86,0.2)",color:"#92400E",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Créer le brouillon</button>
+                            {sel?.fromEmail&&<button onClick={()=>{const subject=sel.subject?.startsWith("Re:")?sel.subject:`Re: ${sel.subject||""}`;window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(sel.fromEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(reply)}`,"_blank");const upd={...sentReplies,[sel.id]:{text:reply,date:new Date().toLocaleDateString("fr-FR"),subject:sel.subject||"",toEmail:sel.fromEmail||""}};saveSentReplies(upd);toast("Gmail ouvert ✓");}} disabled={genReply} style={{padding:"6px 12px",borderRadius:2,border:"none",background:"#1a73e8",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>✉ Ouvrir dans Gmail</button>}
+                            <button onClick={()=>openReplyEditor("reply")} style={{fontSize:11,padding:"6px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↩ Utiliser</button>
+                            <button onClick={genererReponse} disabled={genReply} style={{fontSize:11,padding:"6px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>↺ Regénérer</button>
                           </div>
                         </div>
                       )}
@@ -3520,14 +3551,20 @@ FORMAT
 
                     {/* ── Éditeur de réponse ── */}
                     {showReplyEditor&&(
-                      <div style={{marginTop:14,background:"#FFF",borderRadius:2,border:"1px solid #E6DCC9",padding:14}}>
-                        <div style={{fontSize:11,color:"#6B6E7E",marginBottom:6,fontFamily:"'Inter',sans-serif"}}>
-                          {replyEditorMode==="reply"?"↩ Répondre à":replyEditorMode==="replyAll"?"↩↩ Répondre à tous:":"↪ Transférer à:"} <strong>{replyEditorTo}</strong>
+                      <div style={{marginTop:14,background:"#EFE7DA",borderRadius:3,border:"1px solid #E6DCC9",borderTop:"2px solid #1B1E2B",overflow:"hidden"}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 16px",background:"#1B1E2B"}}>
+                          <span style={{fontSize:10,fontWeight:500,color:"#B89456",letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"'Inter',sans-serif"}}>{replyEditorMode==="reply"?"↩ Répondre":replyEditorMode==="replyAll"?"↩↩ Répondre à tous":"↪ Transférer"}</span>
+                          <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:15}}>×</button>
                         </div>
-                        <textarea value={replyEditorText} onChange={e=>setReplyEditorText(e.target.value)} rows={8} style={{width:"100%",padding:"10px 12px",borderRadius:2,border:"1px solid #E6DCC9",fontSize:13,fontFamily:"'Cormorant Garamond',Georgia,serif",lineHeight:1.75,resize:"vertical",background:"#FAFAFA",color:"#1B1E2B",boxSizing:"border-box"}}/>
-                        <div style={{display:"flex",gap:6,marginTop:8}}>
-                          <button onClick={sendReplyEmail} disabled={sending} style={{fontSize:11,padding:"6px 14px",borderRadius:2,border:"none",background:"#1B1E2B",color:"#F7F2EA",cursor:sending?"wait":"pointer",fontFamily:"'Inter',sans-serif",display:"flex",alignItems:"center",gap:6}}>{sending?<><Spin s={10}/> Envoi…</>:"Envoyer"}</button>
-                          <button onClick={()=>{setShowReplyEditor(false);setReplyEditorText("");}} style={{fontSize:11,padding:"6px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Annuler</button>
+                        <div style={{padding:14}}>
+                          <div style={{fontSize:11,color:"#6B6E7E",marginBottom:6,fontFamily:"'Inter',sans-serif"}}>À : <strong>{replyEditorTo}</strong></div>
+                          <textarea value={replyEditorText} onChange={e=>setReplyEditorText(e.target.value)} rows={8} style={{width:"100%",padding:"10px 12px",borderRadius:2,border:"1px solid #E6DCC9",fontSize:13,fontFamily:"'Cormorant Garamond',Georgia,serif",lineHeight:1.75,resize:"vertical",background:"#FAFAFA",color:"#1B1E2B",boxSizing:"border-box"}}/>
+                          <div style={{display:"flex",gap:6,marginTop:8}}>
+                            <button onClick={sendReplyEmail} disabled={sending} style={{fontSize:11,padding:"6px 14px",borderRadius:2,border:"none",background:"#1B1E2B",color:"#F7F2EA",cursor:sending?"wait":"pointer",fontFamily:"'Inter',sans-serif",display:"flex",alignItems:"center",gap:6}}>{sending?<><Spin s={10}/> Envoi…</>:"✉ Envoyer"}</button>
+                            <button onClick={saveDraft} style={{fontSize:11,padding:"6px 10px",borderRadius:2,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Brouillon</button>
+                            <div style={{flex:1}}/>
+                            <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{fontSize:11,padding:"6px 10px",borderRadius:2,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Annuler</button>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -4189,7 +4226,7 @@ FORMAT
                               <span style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:isToday?700:400,background:isToday?"#B89456":"transparent",color:isToday?"#FFFFFF":"#9E9890"}}>{day}</span>
                             </div>
                             {dr.slice(0,3).map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                              <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setPlanningResaModal(true); }} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
+                              <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setGeneralFilter("infos"); setPlanningResaModal(true); }} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
                                 <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                                   {r.heureDebut&&<span style={{opacity:.7,marginRight:3}}>{r.heureDebut}{r.heureFin&&`→${r.heureFin}`}</span>}{r.nom}
                                 </div>
@@ -4221,7 +4258,7 @@ FORMAT
                       {weekDays.map(d=>{ const ds=fmtDate(d); const dr=resasForDate(ds); const isTd=ds===todayStr; return (
                         <div key={ds} style={{borderLeft:"1px solid #E6DCC9",minHeight:300,padding:"6px 4px",background:isTd?"rgba(232,184,109,0.03)":"transparent"}}>
                           {dr.map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                            <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setPlanningResaModal(true); }} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
+                            <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setGeneralFilter("infos"); setPlanningResaModal(true); }} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
                               <div style={{fontWeight:600,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.nom}</div>
                               {r.heureDebut&&<div style={{fontSize:10,color:st.color,opacity:.8}}>{r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</div>}
                               {(r.entreprise||espace)&&<div style={{fontSize:9,color:st.color,opacity:.65,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
@@ -4245,7 +4282,7 @@ FORMAT
                     ):(
                       <div style={{display:"flex",flexDirection:"column",gap:12}}>
                         {dayResas.map(r=>{ const st=getStatut(r); return (
-                          <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setPlanningResaModal(true); }} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
+                          <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setGeneralFilter("infos"); setPlanningResaModal(true); }} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                               <div>
                                 <div style={{fontSize:15,fontWeight:600,color:"#1B1E2B"}}>{r.nom}</div>
@@ -4781,7 +4818,11 @@ FORMAT
                   ? <div style={{textAlign:"center",padding:"40px 0",color:"#6B6E7E",fontSize:13}}>Aucun email lié à cet événement</div>
                   : <div style={{display:"flex",flexDirection:"column",gap:8}}>
                       {linked.map(m=>(
-                        <div key={m.id} onClick={()=>{setPlanningResaModal(false);ouvrirMailDepuisEvenement(m,selResaGeneral);}} style={{padding:"12px 14px",background:"#F7F2EA",borderRadius:8,border:"1px solid #E6DCC9",cursor:"pointer"}}>
+                        <div key={m.id} onClick={()=>{
+                          setMailOrigine({type:'evenement', resaId: selResaGeneral.id, nom: selResaGeneral.nom||"l'événement"});
+                          setPlanningResaModal(false);
+                          ouvrirMailDepuisEvenement(m,selResaGeneral);
+                        }} style={{padding:"12px 14px",background:"#F7F2EA",borderRadius:8,border:"1px solid #E6DCC9",cursor:"pointer"}}>
                           <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
                             <span style={{fontSize:12,fontWeight:600,color:"#1B1E2B"}}>{m.from}</span>
                             <span style={{fontSize:11,color:"#9CA3AF"}}>{m.date}</span>
@@ -4825,7 +4866,7 @@ FORMAT
                   </div>
                   {relances.filter(r=>r.resaId===selResaGeneral.id).length===0
                     ? <div style={{textAlign:"center",padding:"30px 0",color:"#9CA3AF",fontSize:13}}>Aucune relance planifiée</div>
-                    : relances.filter(r=>r.resaId===selResaGeneral.id).map(rel=>(
+                    : [...relances.filter(r=>r.resaId===selResaGeneral.id)].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(rel=>(
                         <div key={rel.id} style={{padding:"10px 14px",background:"#F7F2EA",borderRadius:8,border:"1px solid #E6DCC9",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                           <div>
                             <div style={{fontSize:12,fontWeight:600,color:"#1B1E2B"}}>{rel.date}</div>
@@ -4843,7 +4884,7 @@ FORMAT
             {/* Actions bas */}
             <div style={{padding:"14px 24px",borderTop:"1px solid #E6DCC9",display:"flex",flexDirection:"column",gap:8,flexShrink:0}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <button onClick={()=>{setPlanningResaModal(false);setEditResaPanel({...selResaGeneral});}} style={{padding:"9px",borderRadius:8,border:"1px solid #E6DCC9",background:"transparent",color:"#1B1E2B",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✏️ Modifier</button>
+                <button onClick={()=>{setPlanningResaModal(false);setEditResaPanel({...selResaGeneral});setView("general");}} style={{padding:"9px",borderRadius:8,border:"1px solid #E6DCC9",background:"transparent",color:"#1B1E2B",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✏️ Modifier</button>
                 <button onClick={()=>{setShowRelanceForm(selResaGeneral.id);}} style={{padding:"9px",borderRadius:8,border:"1px solid #FDE68A",background:"#FFFBEB",color:"#92400E",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>⏰ Relance date</button>
                 <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(selResaGeneral);}} style={{padding:"9px",borderRadius:8,border:"none",background:"#1B1E2B",color:"#B89456",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✨ Mail relance IA</button>
                 <button onClick={()=>openSendMail(selResaGeneral)} style={{padding:"9px",borderRadius:8,border:"none",background:"rgba(184,148,86,0.15)",color:"#B89456",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>📤 Envoyer mail</button>
