@@ -2884,7 +2884,7 @@ FORMAT
         {view==="mails" && (
           <>
             {/* Sidebar catégories mails — collapsible */}
-            <div style={{width:subCollapsed?44:160,background:"#FAFAF7",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid #EBEAE5",transition:"width .2s ease",overflow:"hidden"}}>
+            <div style={{width:subCollapsed?44:240,background:"#FAFAF7",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid #EBEAE5",transition:"width .2s ease",overflow:"hidden"}}>
               {/* Barre de progression synchronisation */}
               {!subCollapsed&&syncStatus==="running"&&(
                 <div style={{padding:"6px 10px",background:"rgba(184,146,79,0.08)",borderBottom:"1px solid #EBEAE5",flexShrink:0}}>
@@ -3507,69 +3507,6 @@ FORMAT
                     </div>
                   </div>
 
-                  {/* ── Corps email — Reader v3 ── */}
-                  {/* 1a — Bandeau résumé IA ARCHANGE (si extraction dispo et isReservation) */}
-                  {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext?.isReservation&&ext?.resume&&(
-                    <div style={{margin:"18px 32px 0",padding:"12px 16px",background:"rgba(107,138,91,0.06)",border:"1px solid rgba(107,138,91,0.18)",borderRadius:10,display:"flex",gap:10,alignItems:"flex-start"}}>
-                      <span style={{fontSize:13,flexShrink:0,marginTop:1,color:"#3F5B32"}}>✦</span>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:10,fontWeight:500,color:"#3F5B32",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3,fontFamily:"'Geist','system-ui',sans-serif"}}>Résumé ARCHANGE</div>
-                        <div style={{fontSize:13,color:"#4A4A52",lineHeight:1.55,fontFamily:"'Geist','system-ui',sans-serif"}}>{ext.resume}</div>
-                      </div>
-                    </div>
-                  );})()}
-                  <div style={{marginBottom:16}}>
-                    {sel.bodyHtml ? (
-                      <iframe
-                        key={sel.id}
-                        srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;}html,body{margin:0;padding:0;background:#F5F4F0;}body{font-family:'Fraunces',Georgia,serif;font-size:16px;color:#4A4A52;line-height:1.7;word-break:break-word;overflow-wrap:break-word;padding:0;}img{max-width:100%!important;height:auto!important;}a{color:#B8924F;}table{max-width:100%!important;border-collapse:collapse;}td,th{word-break:break-word;}table[width="100%"]{width:100%!important;}img[width="1"],img[height="1"],img[width="0"],img[height="0"]{display:none!important;}</style></head><body>${sel.bodyHtml}</body></html>`}
-                        sandbox="allow-same-origin allow-popups"
-                        style={{width:"100%",border:"none",display:"block",minHeight:100,background:"#F5F4F0"}}
-                        onLoad={e=>{const f=e.currentTarget;try{const h=f.contentDocument?.documentElement?.scrollHeight||f.contentDocument?.body?.scrollHeight||400;f.style.height=(h+20)+"px";}catch{}}}
-                      />
-                    ) : (
-                      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:16,color:"#4A4A52",lineHeight:1.7,whiteSpace:"pre-wrap"}}>
-                        {renderPlainText(sel.body||sel.snippet||"")}
-                      </div>
-                    )}
-
-                    {/* Pièces jointes */}
-                    {(sel.attachments||[]).length > 0 && (
-                      <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #EBEAE5"}}>
-                        <div style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:"#6B6E7E",marginBottom:8,fontFamily:"'Geist','system-ui',sans-serif"}}>Pièces jointes · {sel.attachments.length}</div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                          {sel.attachments.map((att: any, i: number) => {
-                            const ext = (att.filename||att.name||"").split(".").pop()?.toLowerCase() || "";
-                            const icons: Record<string,string> = {pdf:"📄",doc:"📝",docx:"📝",xls:"📊",xlsx:"📊",ppt:"📋",pptx:"📋",jpg:"🖼",jpeg:"🖼",png:"🖼",gif:"🖼",webp:"🖼",zip:"🗜",csv:"📊",txt:"📃"};
-                            const icon = icons[ext] || "📎";
-                            const size = att.size ? (att.size > 1048576 ? (att.size/1048576).toFixed(1)+" Mo" : Math.round(att.size/1024)+" Ko") : "";
-                            return (
-                              <div key={i} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:"#FAFAF7",borderRadius:2,border:"1px solid #EBEAE5",cursor:"pointer"}} onClick={async()=>{
-                                if (att.id && sel?.gmailId) {
-                                  // Téléchargement via /api/gmail/attachment
-                                  try {
-                                    const url = `/api/gmail/attachment?gmailId=${encodeURIComponent(sel.gmailId)}&attachmentId=${encodeURIComponent(att.id)}&filename=${encodeURIComponent(att.filename||att.name||"attachment")}`;
-                                    const a = document.createElement("a");
-                                    a.href = url; a.download = att.filename||att.name||"attachment";
-                                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                                  } catch { toast("Erreur téléchargement", "err"); }
-                                } else if (att.url) {
-                                  window.open(att.url, "_blank");
-                                }
-                              }}>
-                                <span style={{fontSize:14}}>{icon}</span>
-                                <div>
-                                  <div style={{fontSize:11,fontWeight:500,color:"#1A1A1E",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{att.filename||att.name||"Pièce jointe"}</div>
-                                  {size&&<div style={{fontSize:9.5,color:"#6B6E7E"}}>{size}</div>}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
                   {/* ── Encart Lecture par Archange — v3 Apple Mail 2026 ── */}
                   {extracted?.isReservation && !showPlanForm && (()=>{
                     const alreadyIn = resas.find(r =>
@@ -3666,6 +3603,69 @@ FORMAT
                       </div>
                     );
                   })()}
+
+                  {/* ── Corps email — Reader v3 ── */}
+                  {/* 1a — Bandeau résumé IA ARCHANGE (si extraction dispo et isReservation) */}
+                  {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext?.isReservation&&ext?.resume&&(
+                    <div style={{margin:"18px 32px 0",padding:"12px 16px",background:"rgba(107,138,91,0.06)",border:"1px solid rgba(107,138,91,0.18)",borderRadius:10,display:"flex",gap:10,alignItems:"flex-start"}}>
+                      <span style={{fontSize:13,flexShrink:0,marginTop:1,color:"#3F5B32"}}>✦</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:10,fontWeight:500,color:"#3F5B32",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3,fontFamily:"'Geist','system-ui',sans-serif"}}>Résumé ARCHANGE</div>
+                        <div style={{fontSize:13,color:"#4A4A52",lineHeight:1.55,fontFamily:"'Geist','system-ui',sans-serif"}}>{ext.resume}</div>
+                      </div>
+                    </div>
+                  );})()}
+                  <div style={{marginBottom:16}}>
+                    {sel.bodyHtml ? (
+                      <iframe
+                        key={sel.id}
+                        srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;}html,body{margin:0;padding:0;background:#F5F4F0;}body{font-family:'Fraunces',Georgia,serif;font-size:16px;color:#4A4A52;line-height:1.7;word-break:break-word;overflow-wrap:break-word;padding:0;}img{max-width:100%!important;height:auto!important;}a{color:#B8924F;}table{max-width:100%!important;border-collapse:collapse;}td,th{word-break:break-word;}table[width="100%"]{width:100%!important;}img[width="1"],img[height="1"],img[width="0"],img[height="0"]{display:none!important;}</style></head><body>${sel.bodyHtml}</body></html>`}
+                        sandbox="allow-same-origin allow-popups"
+                        style={{width:"100%",border:"none",display:"block",minHeight:100,background:"#F5F4F0"}}
+                        onLoad={e=>{const f=e.currentTarget;try{const h=f.contentDocument?.documentElement?.scrollHeight||f.contentDocument?.body?.scrollHeight||400;f.style.height=(h+20)+"px";}catch{}}}
+                      />
+                    ) : (
+                      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:16,color:"#4A4A52",lineHeight:1.7,whiteSpace:"pre-wrap"}}>
+                        {renderPlainText(sel.body||sel.snippet||"")}
+                      </div>
+                    )}
+
+                    {/* Pièces jointes */}
+                    {(sel.attachments||[]).length > 0 && (
+                      <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #EBEAE5"}}>
+                        <div style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:"#6B6E7E",marginBottom:8,fontFamily:"'Geist','system-ui',sans-serif"}}>Pièces jointes · {sel.attachments.length}</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                          {sel.attachments.map((att: any, i: number) => {
+                            const ext = (att.filename||att.name||"").split(".").pop()?.toLowerCase() || "";
+                            const icons: Record<string,string> = {pdf:"📄",doc:"📝",docx:"📝",xls:"📊",xlsx:"📊",ppt:"📋",pptx:"📋",jpg:"🖼",jpeg:"🖼",png:"🖼",gif:"🖼",webp:"🖼",zip:"🗜",csv:"📊",txt:"📃"};
+                            const icon = icons[ext] || "📎";
+                            const size = att.size ? (att.size > 1048576 ? (att.size/1048576).toFixed(1)+" Mo" : Math.round(att.size/1024)+" Ko") : "";
+                            return (
+                              <div key={i} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:"#FAFAF7",borderRadius:2,border:"1px solid #EBEAE5",cursor:"pointer"}} onClick={async()=>{
+                                if (att.id && sel?.gmailId) {
+                                  // Téléchargement via /api/gmail/attachment
+                                  try {
+                                    const url = `/api/gmail/attachment?gmailId=${encodeURIComponent(sel.gmailId)}&attachmentId=${encodeURIComponent(att.id)}&filename=${encodeURIComponent(att.filename||att.name||"attachment")}`;
+                                    const a = document.createElement("a");
+                                    a.href = url; a.download = att.filename||att.name||"attachment";
+                                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                  } catch { toast("Erreur téléchargement", "err"); }
+                                } else if (att.url) {
+                                  window.open(att.url, "_blank");
+                                }
+                              }}>
+                                <span style={{fontSize:14}}>{icon}</span>
+                                <div>
+                                  <div style={{fontSize:11,fontWeight:500,color:"#1A1A1E",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{att.filename||att.name||"Pièce jointe"}</div>
+                                  {size&&<div style={{fontSize:9.5,color:"#6B6E7E"}}>{size}</div>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Formulaire planning */}
                   {showPlanForm && (
