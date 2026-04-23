@@ -2877,7 +2877,10 @@ FORMAT
               </div>
             </div>
 
-            {/* Panel détail réservation (général) — XL */}
+            {/* Panel détail réservation (général) — ouvert comme modale via selResaGeneral */}
+          </div>
+        )}
+
         {/* ══ MAILS ══ */}
         {view==="mails" && (
           <>
@@ -3161,7 +3164,7 @@ FORMAT
                 </div>
 
                 {/* ── Panel droit — lecteur email (même rendu que la boîte mail, via sel) ── */}
-                {/* Lecteur standard partagé — affiché via la zone ci-dessous */
+                {/* Lecteur standard partagé — affiché via la zone ci-dessous */}
               </div>
             )}
 
