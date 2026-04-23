@@ -2934,82 +2934,83 @@ FORMAT
                   ))}
                 </div>
               ):(
-                <div style={{padding:"4px 6px",flex:1,display:"flex",flexDirection:"column"}}>
-                  {/* Radar ARCHANGE — en premier */}
-                  <div style={{paddingBottom:8,marginBottom:6,borderBottom:"1px solid #EBEAE5"}}>
+                <div style={{padding:"10px 10px",flex:1,display:"flex",flexDirection:"column"}}>
+                  {/* Radar ARCHANGE — en premier, hero */}
+                  <div style={{paddingBottom:10,marginBottom:8,borderBottom:"1px solid #EBEAE5"}}>
                     {analysing&&(
-                      <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 9px",marginBottom:4}}>
+                      <div style={{display:"flex",alignItems:"center",gap:7,padding:"4px 11px",marginBottom:5}}>
                         <Spin s={10}/>
-                        <span style={{fontSize:10,color:"#6B6E7E"}}>Analyse {analysingProgress}…</span>
+                        <span style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Geist','system-ui',sans-serif"}}>Analyse {analysingProgress}…</span>
                       </div>
                     )}
-                    <button onClick={()=>setMailFilter("priorites")} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 11px",borderRadius:9,border:`1px solid ${mailFilter==="priorites"?"rgba(184,146,79,0.5)":"rgba(184,146,79,0.18)"}`,background:mailFilter==="priorites"?"rgba(184,146,79,0.12)":"rgba(184,146,79,0.06)",color:mailFilter==="priorites"?"#B8924F":"rgba(209,196,178,0.7)",fontSize:11,letterSpacing:"0.04em",textAlign:"left",cursor:"pointer",transition:"all .15s"}}>
-                      <span style={{fontSize:13,color:"#B8924F"}}>◆</span>
-                      <div style={{flex:1}}>
-                        <div style={{fontWeight:600,fontSize:11,color:mailFilter==="priorites"?"#B8924F":"rgba(209,196,178,0.88)"}}>Radar ARCHANGE</div>
-                        <div style={{fontSize:10,color:"#6B6E7E",marginTop:1}}>{analysing?`Analyse en cours…`:`${prioritesArchange.length} demande${prioritesArchange.length!==1?"s":""}`}</div>
+                    <button onClick={()=>setMailFilter("priorites")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"11px 12px",borderRadius:10,border:`1px solid ${mailFilter==="priorites"?"rgba(184,146,79,0.45)":"rgba(184,146,79,0.25)"}`,background:mailFilter==="priorites"?"linear-gradient(180deg, rgba(184,146,79,0.14) 0%, rgba(184,146,79,0.08) 100%)":"linear-gradient(180deg, rgba(184,146,79,0.08) 0%, rgba(184,146,79,0.04) 100%)",textAlign:"left",cursor:"pointer",transition:"all .15s ease",position:"relative",overflow:"hidden",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                      <span style={{position:"absolute",left:0,top:0,bottom:0,width:2,background:"#B8924F"}}/>
+                      <span style={{fontSize:14,color:"#B8924F",lineHeight:1,flexShrink:0}}>✦</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:600,fontSize:12.5,color:"#B8924F",letterSpacing:"-0.005em"}}>Radar ARCHANGE</div>
+                        <div style={{fontSize:11,color:"#6B6E7E",marginTop:1,fontVariantNumeric:"tabular-nums"}}>{analysing?"Analyse en cours…":`${prioritesArchange.length} demande${prioritesArchange.length!==1?"s":""}`}</div>
                       </div>
-                      {prioritesArchange.length>0&&<span style={{fontSize:11,background:"#A84B45",color:"#fff",padding:"2px 7px",borderRadius:100,fontWeight:700,flexShrink:0}}>{prioritesArchange.length}</span>}
+                      {prioritesArchange.length>0&&<span style={{fontSize:11,background:"#A84B45",color:"#fff",padding:"2px 8px",borderRadius:100,fontWeight:600,flexShrink:0,fontVariantNumeric:"tabular-nums",minWidth:22,textAlign:"center"}}>{prioritesArchange.length}</span>}
                     </button>
                   </div>
-                  {/* Catégories standard — Céleste */}
+                  {/* Catégories standard */}
                   {[
                     {id:"all", label:"Tous les mails", count:emails.filter(m=>m.unread&&!m.archived).length||null,
-                      icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="9" rx="1" stroke="currentColor" strokeWidth="1.1"/><path d="M1 4l6 4.5L13 4" stroke="currentColor" strokeWidth="1.1"/></svg>},
+                      icon:<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="9" rx="1" stroke="currentColor" strokeWidth="1.1"/><path d="M1 4l6 4.5L13 4" stroke="currentColor" strokeWidth="1.1"/></svg>},
                   ].map(item=>(
-                    <button key={item.id} onClick={()=>{setMailFilter("all");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 9px",borderRadius:3,border:"none",background:mailFilter==="all"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="all"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12,textAlign:"left",cursor:"pointer",marginBottom:1}}>
-                      <span style={{color:mailFilter==="all"&&!showArchived?"#1A1A1E":"#6B6E7E"}}>{item.icon}</span>
+                    <button key={item.id} onClick={()=>{setMailFilter("all");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="all"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="all"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="all"&&!showArchived?500:400,transition:"background .12s ease"}}>
+                      <span style={{color:mailFilter==="all"&&!showArchived?"#1A1A1E":"#6B6E7E",display:"inline-flex"}}>{item.icon}</span>
                       <span style={{flex:1}}>{item.label}</span>
-                      <span style={{fontSize:10,color:mailFilter==="all"&&!showArchived?"#B8924F":"#6B6E7E"}}>{item.count||""}</span>
+                      <span style={{fontSize:11,color:mailFilter==="all"&&!showArchived?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{item.count||""}</span>
                     </button>
                   ))}
                   {MAIL_CATS.map(c=>{
                     const cnt = emails.filter(m=>!m.archived&&(c.id==="nonlus"?!!m.unread:c.id==="atraiter"?m.aTraiter:(m.flags||[]).includes(c.id))).length;
                     const isActive = mailFilter===c.id&&!showArchived;
                     return (
-                    <button key={c.id} onClick={()=>{setMailFilter(c.id);setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 9px",borderRadius:3,border:"none",background:isActive?"#F5F4F0":"transparent",color:isActive?"#1A1A1E":"#4A4A52",fontSize:12,textAlign:"left",cursor:"pointer",marginBottom:1}}>
-                      <span style={{color:isActive?"#1A1A1E":"#6B6E7E"}}><MailCatIcon id={c.id} active={isActive}/></span>
+                    <button key={c.id} onClick={()=>{setMailFilter(c.id);setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:isActive?"#F5F4F0":"transparent",color:isActive?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:isActive?500:400,transition:"background .12s ease"}}>
+                      <span style={{color:isActive?"#1A1A1E":"#6B6E7E",display:"inline-flex"}}><MailCatIcon id={c.id} active={isActive}/></span>
                       <span style={{flex:1}}>{c.label}</span>
-                      <span style={{fontSize:10,color:isActive?"#B8924F":"#6B6E7E"}}>{cnt||""}</span>
+                      <span style={{fontSize:11,color:isActive?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{cnt||""}</span>
                     </button>
                   );})}
                   {/* Séparateur */}
-                  <div style={{height:1,background:"#EBEAE5",margin:"8px 4px"}}/>
+                  <div style={{height:1,background:"#EBEAE5",margin:"10px 4px"}}/>
                   {/* Archivés */}
-                  <button onClick={()=>setShowArchived(v=>!v)} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 9px",borderRadius:3,border:"none",background:showArchived?"#F5F4F0":"transparent",color:showArchived?"#1A1A1E":"#4A4A52",fontSize:12,textAlign:"left",cursor:"pointer",marginBottom:1}}>
-                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{color:showArchived?"#1A1A1E":"#6B6E7E"}}><rect x="1" y="2.5" width="12" height="3" rx="0.8" stroke="currentColor" strokeWidth="1"/><rect x="2" y="5.5" width="10" height="7" rx="0.8" stroke="currentColor" strokeWidth="1"/></svg>
+                  <button onClick={()=>setShowArchived(v=>!v)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:showArchived?"#F5F4F0":"transparent",color:showArchived?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:showArchived?500:400,transition:"background .12s ease"}}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{color:showArchived?"#1A1A1E":"#6B6E7E"}}><rect x="1" y="2.5" width="12" height="3" rx="0.8" stroke="currentColor" strokeWidth="1"/><rect x="2" y="5.5" width="10" height="7" rx="0.8" stroke="currentColor" strokeWidth="1"/></svg>
                     <span style={{flex:1}}>Archivés</span>
-                    <span style={{fontSize:10,color:showArchived?"#B8924F":"#6B6E7E"}}>{emails.filter(m=>m.archived).length||""}</span>
+                    <span style={{fontSize:11,color:showArchived?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{emails.filter(m=>m.archived).length||""}</span>
                   </button>
-                  {/* Envoyés — correction 6 : pas de compteur */}
-                  <button onClick={()=>{setMailFilter("envoyes");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 9px",borderRadius:3,border:"none",background:mailFilter==="envoyes"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="envoyes"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12,textAlign:"left",cursor:"pointer",marginBottom:1}}>
-                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{color:mailFilter==="envoyes"&&!showArchived?"#1A1A1E":"#6B6E7E"}}><path d="M1 7L13 1L9.5 13L7 8L1 7z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/></svg>
+                  {/* Envoyés */}
+                  <button onClick={()=>{setMailFilter("envoyes");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="envoyes"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="envoyes"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="envoyes"&&!showArchived?500:400,transition:"background .12s ease"}}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{color:mailFilter==="envoyes"&&!showArchived?"#1A1A1E":"#6B6E7E"}}><path d="M1 7L13 1L9.5 13L7 8L1 7z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
                     <span style={{flex:1}}>Envoyés</span>
                   </button>
                   {/* Brouillons */}
-                  <button onClick={()=>{setMailFilter("brouillons");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 9px",borderRadius:3,border:"none",background:mailFilter==="brouillons"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="brouillons"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12,textAlign:"left",cursor:"pointer",marginBottom:1}}>
-                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{color:mailFilter==="brouillons"&&!showArchived?"#1A1A1E":"#6B6E7E"}}><path d="M2 11l1-3 7-7 2 2-7 7-3 1z" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 3l2 2" stroke="currentColor" strokeWidth="1"/></svg>
+                  <button onClick={()=>{setMailFilter("brouillons");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="brouillons"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="brouillons"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="brouillons"&&!showArchived?500:400,transition:"background .12s ease"}}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{color:mailFilter==="brouillons"&&!showArchived?"#1A1A1E":"#6B6E7E"}}><path d="M2 11l1-3 7-7 2 2-7 7-3 1z" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 3l2 2" stroke="currentColor" strokeWidth="1.1"/></svg>
                     <span style={{flex:1}}>Brouillons</span>
-                    <span style={{fontSize:10,color:localDrafts.length>0?"#B8924F":"#6B6E7E"}}>{localDrafts.length||""}</span>
+                    <span style={{fontSize:11,color:localDrafts.length>0?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{localDrafts.length||""}</span>
                   </button>
                   {/* 3 — Filtres par tag personnalisé */}
                   {customTags.length>0&&<>
-                    <div style={{height:1,background:"#EBEAE5",margin:"8px 4px"}}/>
-                    <div style={{fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",color:"#9CA3AF",padding:"2px 9px 4px",fontFamily:"'Geist','system-ui',sans-serif"}}>Tags</div>
+                    <div style={{height:1,background:"#EBEAE5",margin:"10px 4px"}}/>
+                    <div style={{fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:"#A5A4A0",padding:"10px 11px 6px",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>Tags</div>
                     {customTags.map(t=>{
                       const cnt = Object.values(emailTags).filter(ids=>(ids as string[]).includes(t.id)).length;
                       const isActive = tagFilter===t.id;
-                      return <button key={t.id} onClick={()=>{setTagFilter(isActive?null:t.id);setMailFilter("all");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"6px 9px",borderRadius:3,border:"none",background:isActive?"#F5F4F0":"transparent",color:isActive?"#1A1A1E":"#4A4A52",fontSize:12,textAlign:"left",cursor:"pointer",marginBottom:1}}>
-                        <span style={{width:8,height:8,borderRadius:"50%",background:t.color,flexShrink:0}}/>
+                      return <button key={t.id} onClick={()=>{setTagFilter(isActive?null:t.id);setMailFilter("all");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"7px 11px",borderRadius:8,border:"none",background:isActive?"#F5F4F0":"transparent",color:isActive?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:isActive?500:400,transition:"background .12s ease"}}>
+                        <span style={{width:9,height:9,borderRadius:"50%",background:t.color,flexShrink:0}}/>
                         <span style={{flex:1}}>{t.label}</span>
-                        {cnt>0&&<span style={{fontSize:10,color:isActive?t.color:"#6B6E7E"}}>{cnt}</span>}
+                        {cnt>0&&<span style={{fontSize:11,color:isActive?t.color:"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{cnt}</span>}
                       </button>;
                     })}
                   </>}
                   {/* Aide raccourcis */}
-                  <div style={{marginTop:"auto",paddingTop:8}}>
-                    <button onClick={()=>setShowKeyHelp(true)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"7px 9px",borderRadius:3,border:"none",background:"transparent",color:"#6B6E7E",fontSize:10,cursor:"pointer",textAlign:"left"}}>
-                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1"/><path d="M4 6.5h6M4 8.5h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
+                  <div style={{marginTop:"auto",paddingTop:10}}>
+                    <button onClick={()=>setShowKeyHelp(true)} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:"transparent",color:"#6B6E7E",fontSize:11.5,cursor:"pointer",textAlign:"left",fontFamily:"'Geist','system-ui',sans-serif",transition:"background .12s ease"}}>
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1"/><path d="M4 6.5h6M4 8.5h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
                       <span>Raccourcis clavier</span>
                     </button>
                   </div>
