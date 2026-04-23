@@ -3277,80 +3277,80 @@ FORMAT
 
                   return (
                   <div key={em.id} className="mail-row celeste-email-item"
-                    style={{position:"relative",borderBottom:"1px solid #EBEAE5",cursor:"pointer",
+                    style={{position:"relative",margin:"2px 8px",borderRadius:10,cursor:"pointer",
                       background:isSelected?"#EEF2FF":isActive?"#FAFAF7":"transparent",
-                      borderLeft:isSelected?"2px solid #7BA8C4":isActive?"2px solid #B8924F":em.unread?"2px solid #B8924F":"2px solid transparent",
-                      transition:"background .1s"}}>
+                      boxShadow:isActive?"0 1px 2px rgba(15,15,20,0.05), 0 0 0 1px rgba(184,146,79,0.18)":"none",
+                      transition:"background .12s ease, box-shadow .12s ease"}}>
                     {/* Checkbox sélection */}
-                    <div className="mail-checkbox" onClick={e=>{e.stopPropagation();toggleSelect(em.id);}} style={{position:"absolute",top:12,left:4,width:16,height:16,borderRadius:2,border:`1.5px solid ${isSelected?"#7BA8C4":"#E0DED7"}`,background:isSelected?"#7BA8C4":"transparent",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,opacity:isSelected?1:0,transition:"opacity .1s",cursor:"pointer"}}>
+                    <div className="mail-checkbox" onClick={e=>{e.stopPropagation();toggleSelect(em.id);}} style={{position:"absolute",top:14,left:8,width:16,height:16,borderRadius:4,border:`1.5px solid ${isSelected?"#7BA8C4":"#E0DED7"}`,background:isSelected?"#7BA8C4":"transparent",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,opacity:isSelected?1:0,transition:"opacity .1s",cursor:"pointer"}}>
                       {isSelected&&<span style={{color:"#fff",fontSize:10,lineHeight:1}}>✓</span>}
                     </div>
                     {/* Corps de la carte */}
-                    <div onClick={()=>handleSel(em)} style={{padding:"12px 14px 10px 16px"}}>
+                    <div onClick={()=>handleSel(em)} style={{padding:"14px 14px 12px 14px"}}>
                       {/* Ligne 1 — expéditeur + date */}
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:2}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
-                          {em.unread&&<div style={{width:5,height:5,borderRadius:"50%",background:"#B8924F",flexShrink:0}}/>}
-                          <span style={{fontSize:13,fontWeight:em.unread?600:500,color:"#1A1A1E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{em.from||"(inconnu)"}</span>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3,gap:8}}>
+                        <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
+                          {em.unread&&<div style={{width:6,height:6,borderRadius:"50%",background:"#B8924F",flexShrink:0}}/>}
+                          <span style={{fontSize:13,fontWeight:em.unread?600:500,color:"#1A1A1E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:"-0.005em"}}>{em.from||"(inconnu)"}</span>
                         </div>
-                        <span style={{fontSize:10,color:"#6B6E7E",flexShrink:0,marginLeft:6,fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}>{em.date}</span>
+                        <span style={{fontSize:11,color:"#6B6E7E",flexShrink:0,fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>{em.date}</span>
                       </div>
                       {/* Ligne 2 — objet en serif */}
-                      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,fontWeight:em.unread?600:500,color:"#1A1A1E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:4,lineHeight:1.2}}>{em.subject||"(sans objet)"}</div>
+                      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14.5,fontWeight:em.unread?500:400,color:"#1A1A1E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:5,lineHeight:1.25,letterSpacing:"-0.01em"}}>{em.subject||"(sans objet)"}</div>
                       {/* Ligne 3 — snippet */}
-                      <div style={{fontSize:11.5,color:"#6B6E7E",overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:1.45,marginBottom:8}}>{em.snippet}</div>
+                      <div style={{fontSize:12,color:"#6B6E7E",overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:1.5,marginBottom:9}}>{em.snippet}</div>
                       {/* Tags enrichis Céleste */}
-                      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                         {/* Statut resa */}
                         {linkedStatut&&(
-                          <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px",borderRadius:2,fontSize:9.5,letterSpacing:"0.07em",textTransform:"uppercase",color:"#4A4A52",background:"#F5F4F0",border:"1px solid #EBEAE5"}}>
-                            <span style={{width:4,height:4,borderRadius:"50%",background:linkedStatut.color,flexShrink:0}}/>
+                          <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 9px",borderRadius:100,fontSize:10,letterSpacing:"0.04em",textTransform:"uppercase",color:"#4A4A52",background:"#F5F4F0",border:"1px solid #EBEAE5",fontWeight:500}}>
+                            <span style={{width:5,height:5,borderRadius:"50%",background:linkedStatut.color,flexShrink:0}}/>
                             {linkedStatut.label}
                           </span>
                         )}
                         {/* Espace détecté */}
                         {detectedEspace&&(
-                          <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px",borderRadius:2,fontSize:9.5,letterSpacing:"0.07em",textTransform:"uppercase",color:"#4A4A52",background:"#F5F4F0",border:"1px solid #EBEAE5"}}>
-                            <span style={{width:4,height:4,borderRadius:"50%",background:detectedEspace.color,flexShrink:0}}/>
+                          <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 9px",borderRadius:100,fontSize:10,letterSpacing:"0.04em",textTransform:"uppercase",color:"#4A4A52",background:"#F5F4F0",border:"1px solid #EBEAE5",fontWeight:500}}>
+                            <span style={{width:5,height:5,borderRadius:"50%",background:detectedEspace.color,flexShrink:0}}/>
                             {detectedEspace.nom}
                           </span>
                         )}
                         {/* Personnes + type */}
                         {ext?.nombrePersonnes&&(
-                          <span style={{fontSize:10,color:"#6B6E7E",fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}>
-                            {ext.nombrePersonnes} pers.{ext.typeEvenement?` · ${ext.typeEvenement}`:""}
+                          <span style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>
+                            <strong style={{fontWeight:500,color:"#1A1A1E"}}>{ext.nombrePersonnes} pers.</strong>{ext.typeEvenement?` · ${ext.typeEvenement}`:""}
                           </span>
                         )}
                         {/* Flags fonctionnels */}
-                        {em.aTraiter&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:1,background:"#FAFAF7",color:"#B8924F",border:"1px solid #EBEAE5",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600}}>À traiter</span>}
-                        {(em.flags||[]).includes("star")&&<span style={{fontSize:11,color:"#B8924F"}}>✦</span>}
-                        {em.snoozedUntil&&<span style={{fontSize:10,color:"#7C3AED",fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}>⏰</span>}
+                        {em.aTraiter&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:100,background:"rgba(184,146,79,0.1)",color:"#B8924F",border:"1px solid rgba(184,146,79,0.25)",letterSpacing:"0.05em",textTransform:"uppercase",fontWeight:600}}>À traiter</span>}
+                        {(em.flags||[]).includes("star")&&<span style={{fontSize:12,color:"#B8924F"}}>✦</span>}
+                        {em.snoozedUntil&&<span style={{fontSize:11,color:"#7C3AED"}}>⏰</span>}
                         {/* 5 — Indicateur brouillon de réponse en cours */}
-                        {(()=>{try{return localStorage.getItem(`draft_reply_${em.id}`);}catch{return null;}})()&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:1,background:"#EFF6FF",color:"#3B82F6",border:"1px solid #BFDBFE",letterSpacing:"0.05em",textTransform:"uppercase",fontWeight:600}}>Brouillon</span>}
+                        {(()=>{try{return localStorage.getItem(`draft_reply_${em.id}`);}catch{return null;}})()&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:100,background:"#EFF6FF",color:"#3B82F6",border:"1px solid #BFDBFE",letterSpacing:"0.04em",textTransform:"uppercase",fontWeight:600}}>Brouillon</span>}
                         {/* 3 — Badges tags personnalisés */}
-                        {(emailTags[em.id]||[]).map((tid:string)=>{const t=customTags.find(x=>x.id===tid);return t?<span key={tid} style={{fontSize:9,padding:"1px 5px",borderRadius:10,background:t.color+"22",color:t.color,border:`1px solid ${t.color}44`,fontWeight:600,letterSpacing:"0.04em"}}>{t.label}</span>:null;})}
+                        {(emailTags[em.id]||[]).map((tid:string)=>{const t=customTags.find(x=>x.id===tid);return t?<span key={tid} style={{fontSize:9.5,padding:"2px 8px",borderRadius:100,background:t.color+"1A",color:t.color,border:`1px solid ${t.color}40`,fontWeight:600,letterSpacing:"0.03em"}}>{t.label}</span>:null;})}
                       </div>
                     </div>
                     {/* Barre d'actions au survol */}
-                    <div className="mail-actions" style={{display:"flex",gap:1,opacity:0,transition:"opacity .15s",borderTop:"1px solid #EBEAE5",padding:"3px 8px",background:isActive?"#EBEAE5":"#FAFAF7",justifyContent:"flex-end",alignItems:"center"}}>
-                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(em.flags||[]).includes("star")?1:0.35,padding:"3px 5px",borderRadius:2}}>✦</button>
-                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title="À traiter" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:em.aTraiter?1:0.35,padding:"3px 5px",borderRadius:2}}>📋</button>
-                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title="Lu/Non lu" style={{background:"none",border:"none",cursor:"pointer",fontSize:10,opacity:0.4,padding:"3px 5px",borderRadius:2,color:"#1A1A1E"}}>●</button>
-                      <button onClick={e=>{e.stopPropagation();archiveEmail(em.id);}} title="Archiver" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.5,padding:"3px 5px",borderRadius:2}}>📦</button>
+                    <div className="mail-actions" style={{display:"flex",gap:2,opacity:0,transition:"opacity .15s",borderTop:"1px solid #EBEAE5",padding:"4px 10px",background:isActive?"rgba(245,244,240,0.6)":"rgba(250,250,247,0.6)",justifyContent:"flex-end",alignItems:"center",borderRadius:"0 0 10px 10px"}}>
+                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:(em.flags||[]).includes("star")?1:0.4,padding:"4px 6px",borderRadius:6}}>✦</button>
+                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title="À traiter" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:em.aTraiter?1:0.4,padding:"4px 6px",borderRadius:6}}>📋</button>
+                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title="Lu/Non lu" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.45,padding:"4px 6px",borderRadius:6,color:"#1A1A1E"}}>●</button>
+                      <button onClick={e=>{e.stopPropagation();archiveEmail(em.id);}} title="Archiver" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:0.55,padding:"4px 6px",borderRadius:6}}>📦</button>
                       <div style={{position:"relative"}} className="snooze-wrap">
-                        <button onClick={e=>{e.stopPropagation(); const el=e.currentTarget.nextElementSibling as HTMLElement; if(el) el.style.display=el.style.display==="block"?"none":"block";}} title="Reporter" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.5,padding:"3px 5px",borderRadius:2}}>⏰</button>
-                        <div className="snooze-menu" style={{display:"none",position:"absolute",bottom:"100%",right:0,background:"#F5F4F0",border:"1px solid #EBEAE5",borderRadius:3,boxShadow:"0 4px 16px rgba(0,0,0,.1)",zIndex:100,minWidth:140,padding:4}}>
+                        <button onClick={e=>{e.stopPropagation(); const el=e.currentTarget.nextElementSibling as HTMLElement; if(el) el.style.display=el.style.display==="block"?"none":"block";}} title="Reporter" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:0.55,padding:"4px 6px",borderRadius:6}}>⏰</button>
+                        <div className="snooze-menu" style={{display:"none",position:"absolute",bottom:"100%",right:0,background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:8,boxShadow:"0 4px 16px rgba(15,15,20,0.08)",zIndex:100,minWidth:150,padding:5}}>
                           {[{label:"Dans 1 heure",hours:1},{label:"Ce soir 18h",tonight:18},{label:"Demain matin",days:1},{label:"Dans 3 jours",days:3},{label:"Dans 1 semaine",days:7}].map(opt=>{
                             const d = new Date();
                             if(opt.hours) d.setHours(d.getHours()+opt.hours);
                             else if(opt.tonight) { d.setDate(d.getDate()+(d.getHours()>=opt.tonight?1:0)); d.setHours(opt.tonight,0,0,0); }
                             else if(opt.days) { d.setDate(d.getDate()+opt.days); d.setHours(8,0,0,0); }
-                            return <button key={opt.label} onClick={e=>{e.stopPropagation();snoozeEmail(em.id,d.toISOString());}} style={{display:"block",width:"100%",textAlign:"left",padding:"6px 10px",fontSize:11,color:"#4A4A52",background:"none",border:"none",cursor:"pointer",borderRadius:2}}>{opt.label}</button>;
+                            return <button key={opt.label} onClick={e=>{e.stopPropagation();snoozeEmail(em.id,d.toISOString());}} style={{display:"block",width:"100%",textAlign:"left",padding:"7px 11px",fontSize:12,color:"#4A4A52",background:"none",border:"none",cursor:"pointer",borderRadius:5}}>{opt.label}</button>;
                           })}
                         </div>
                       </div>
                       <div style={{flex:1}}/>
-                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:"#DC2626",padding:"3px 6px",borderRadius:2,opacity:0.7}}>✕</button>
+                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#A84B45",padding:"4px 7px",borderRadius:6,opacity:0.75}}>✕</button>
                     </div>
                   </div>
                 );})}
@@ -3429,81 +3429,92 @@ FORMAT
                     </div>
                   )}
 
-                  {/* ── Barre d'actions Céleste ── */}
-                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:18,padding:"7px 12px",background:"#F5F4F0",borderRadius:2,border:"1px solid #EBEAE5",flexWrap:"wrap"}}>
-                    <button onClick={()=>openReplyEditor("reply")} title="Répondre (R)" style={{fontSize:11,padding:"5px 12px",borderRadius:2,border:"none",background:"#1A1A1E",color:"#F5F4F0",cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:5,letterSpacing:"0.03em",fontFamily:"'Geist','system-ui',sans-serif"}}>↩ Répondre</button>
-                    {sel.cc?.length>0&&<button onClick={()=>openReplyEditor("replyAll")} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #EBEAE5",background:"transparent",color:"#4A4A52",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>↩↩ À tous</button>}
-                    <button onClick={()=>openReplyEditor("forward")} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid #EBEAE5",background:"transparent",color:"#4A4A52",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>↪ Transférer</button>
-                    {/* C1 — Raccourci + Planning si l'IA a détecté une réservation (évite de scroller jusqu'en bas) */}
+                  {/* ── Barre d'actions Reader v3 — icon buttons sobres ── */}
+                  <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:0,padding:"10px 18px",background:"rgba(255,255,255,0.72)",backdropFilter:"saturate(180%) blur(8px)",WebkitBackdropFilter:"saturate(180%) blur(8px)",borderBottom:"1px solid #EBEAE5",flexWrap:"wrap"}}>
+                    {/* Action principale : Répondre */}
+                    <button onClick={()=>openReplyEditor("reply")} title="Répondre (R)" style={{fontSize:13,padding:"7px 13px",borderRadius:8,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",cursor:"pointer",fontWeight:500,display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease"}}>
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M12 10L8 6l4-4M2 2v4a3 3 0 003 3h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Répondre
+                    </button>
+                    {sel.cc?.length>0&&(
+                      <button onClick={()=>openReplyEditor("replyAll")} title="Répondre à tous" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,transition:"all .14s ease"}}>À tous</button>
+                    )}
+                    <button onClick={()=>openReplyEditor("forward")} title="Transférer" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,transition:"all .14s ease"}}>
+                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2 10l4-4L2 2M12 2v4a3 3 0 01-3 3H3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Transférer
+                    </button>
+                    {/* C1 — Raccourci + Planning si l'IA a détecté une réservation */}
                     {extracted?.isReservation && !emailResaLinks[sel.id] && (
-                      <button onClick={openPlanForm} title="Créer un événement pré-rempli par ARCHANGE" style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid rgba(184,146,79,0.5)",background:"rgba(184,146,79,0.1)",color:"#92400E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",display:"flex",alignItems:"center",gap:4}}>📅 + Planning</button>
+                      <button onClick={openPlanForm} title="Créer un événement pré-rempli par ARCHANGE" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid rgba(184,146,79,0.4)",background:"rgba(184,146,79,0.08)",color:"#B8924F",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,transition:"all .14s ease"}}>
+                        <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.2" fill="none"/><path d="M1.5 5.5h11M4.5 1v2.5M9.5 1v2.5M7 8v3M5.5 9.5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                        Planning
+                      </button>
                     )}
                     {extracted?.isReservation && emailResaLinks[sel.id] && (
-                      <button onClick={()=>{const r=resas.find(x=>x.id===emailResaLinks[sel.id]);if(r){setSelResaGeneral(r);setView("general");}}} style={{fontSize:11,padding:"5px 10px",borderRadius:2,border:"1px solid rgba(5,150,105,0.4)",background:"rgba(5,150,105,0.08)",color:"#3F5B32",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>✓ Événement lié</button>
+                      <button onClick={()=>{const r=resas.find(x=>x.id===emailResaLinks[sel.id]);if(r){setSelResaGeneral(r);setView("general");}}} title="Ouvrir l'événement lié" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid rgba(107,138,91,0.35)",background:"rgba(107,138,91,0.08)",color:"#3F5B32",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,transition:"all .14s ease"}}>
+                        <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Événement lié
+                      </button>
                     )}
-                    <div style={{width:1,height:14,background:"#EBEAE5",margin:"0 2px"}}/>
-                    <button onClick={()=>toggleFlag(sel.id,"star")} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:(sel.flags||[]).includes("star")?1:0.25,padding:"3px 4px",color:"#B8924F"}}>✦</button>
-                    <button onClick={()=>toggleUnread(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:sel.unread?"rgba(184,146,79,0.12)":"transparent",color:sel.unread?"#B8924F":"#6B6E7E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>
-                      {sel.unread?"● Non lu":"○ Non lu"}
-                    </button>
-                    <button onClick={()=>toggleATraiter(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:sel.aTraiter?"rgba(184,146,79,0.12)":"transparent",color:sel.aTraiter?"#B8924F":"#6B6E7E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>
-                      📋 {sel.aTraiter?"À traiter":"Traiter"}
-                    </button>
-                    <button onClick={()=>archiveEmail(sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>
-                      {sel.archived?"📦 Archivé":"📦"}
-                    </button>
+                    <div style={{width:1,height:20,background:"#EBEAE5",margin:"0 4px"}}/>
+                    {/* Toggles d'état — icon buttons 30x30 */}
+                    <button onClick={()=>toggleFlag(sel.id,"star")} title={(sel.flags||[]).includes("star")?"Retirer des favoris":"Ajouter aux favoris"} style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:(sel.flags||[]).includes("star")?"#B8924F":"#A5A4A0",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease, color .12s ease"}}>✦</button>
+                    <button onClick={()=>toggleUnread(sel.id)} title={sel.unread?"Marquer comme lu":"Marquer comme non lu"} style={{width:30,height:30,borderRadius:6,border:"none",background:sel.unread?"rgba(184,146,79,0.1)":"transparent",color:sel.unread?"#B8924F":"#A5A4A0",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>●</button>
+                    <button onClick={()=>toggleATraiter(sel.id)} title={sel.aTraiter?"Retirer de À traiter":"Marquer À traiter"} style={{width:30,height:30,borderRadius:6,border:"none",background:sel.aTraiter?"rgba(184,146,79,0.1)":"transparent",color:sel.aTraiter?"#B8924F":"#6B6E7E",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>📋</button>
+                    <button onClick={()=>archiveEmail(sel.id)} title={sel.archived?"Archivé":"Archiver"} style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:sel.archived?"#B8924F":"#6B6E7E",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>📦</button>
                     <div style={{flex:1}}/>
                     {/* 3 — Bouton tag personnalisé */}
                     <div style={{position:"relative"}}>
-                      <button onClick={()=>setShowTagMenu(showTagMenu===sel.id?null:sel.id)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>🏷️</button>
+                      <button onClick={()=>setShowTagMenu(showTagMenu===sel.id?null:sel.id)} title="Tags" style={{width:30,height:30,borderRadius:6,border:"none",background:showTagMenu===sel.id?"rgba(184,146,79,0.1)":"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>🏷️</button>
                       {showTagMenu===sel.id&&(
-                        <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:300,background:"#FFF",border:"1px solid #EBEAE5",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,.12)",minWidth:190,padding:8}}>
-                          {customTags.length===0&&<div style={{fontSize:11,color:"#9CA3AF",padding:"4px 8px",fontStyle:"italic"}}>Aucun tag — créez-en dans Sources IA</div>}
+                        <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",zIndex:300,background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:10,boxShadow:"0 8px 24px rgba(15,15,20,0.10)",minWidth:200,padding:8}}>
+                          {customTags.length===0&&<div style={{fontSize:11.5,color:"#A5A4A0",padding:"6px 10px"}}>Aucun tag — créez-en dans Sources IA</div>}
                           {customTags.map(t=>{const applied=(emailTags[sel.id]||[]).includes(t.id);return(
-                            <div key={t.id} onClick={()=>{const cur=emailTags[sel.id]||[];saveEmailTags({...emailTags,[sel.id]:applied?cur.filter((x:string)=>x!==t.id):[...cur,t.id]});}} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",borderRadius:4,cursor:"pointer",background:applied?"rgba(184,146,79,0.08)":"transparent"}}>
+                            <div key={t.id} onClick={()=>{const cur=emailTags[sel.id]||[];saveEmailTags({...emailTags,[sel.id]:applied?cur.filter((x:string)=>x!==t.id):[...cur,t.id]});}} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",borderRadius:6,cursor:"pointer",background:applied?"rgba(184,146,79,0.08)":"transparent",transition:"background .12s ease"}}>
                               <span style={{width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0,boxShadow:applied?"0 0 0 2px #1A1A1E":undefined}}/>
-                              <span style={{fontSize:12,flex:1,color:"#1A1A1E"}}>{t.label}</span>
-                              {applied&&<span style={{fontSize:10,color:"#B8924F"}}>✓</span>}
+                              <span style={{fontSize:12.5,flex:1,color:"#1A1A1E"}}>{t.label}</span>
+                              {applied&&<span style={{fontSize:11,color:"#B8924F"}}>✓</span>}
                             </div>);
                           })}
                         </div>
                       )}
                     </div>
-                    <button onClick={()=>deleteEmailWithUndo(sel)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:"1px solid rgba(168,75,69,0.3)",background:"transparent",color:"#DC2626",cursor:"pointer"}}>✕</button>
+                    <button onClick={()=>deleteEmailWithUndo(sel)} title="Supprimer" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:"#A84B45",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",opacity:0.75,transition:"background .12s ease, opacity .12s ease"}}>✕</button>
                   </div>
 
-                  {/* ── En-tête éditorial Céleste ── */}
-                  <div style={{marginBottom:16}}>
+                  {/* ── En-tête éditorial Reader v3 — sujet display ── */}
+                  <div style={{padding:"24px 32px 20px",borderBottom:"1px solid #EBEAE5"}}>
                     {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext&&(
-                      <div style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#B8924F",marginBottom:8,fontWeight:500,display:"flex",alignItems:"center",gap:8,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                      <div style={{fontSize:10.5,letterSpacing:"0.08em",textTransform:"uppercase",color:"#B8924F",marginBottom:10,fontWeight:500,display:"flex",alignItems:"center",gap:8,fontFamily:"'Geist','system-ui',sans-serif"}}>
                         {ext.statutSuggere&&<span>{ext.statutSuggere.replace(/_/g," ")}</span>}
-                        {ext.typeEvenement&&<><span style={{color:"#EBEAE5"}}>·</span><span>{ext.typeEvenement}</span></>}
-                        {ext.nombrePersonnes&&<><span style={{color:"#EBEAE5"}}>·</span><span>{ext.nombrePersonnes} personnes</span></>}
+                        {ext.typeEvenement&&<><span style={{color:"#E0DED7"}}>·</span><span>{ext.typeEvenement}</span></>}
+                        {ext.nombrePersonnes&&<><span style={{color:"#E0DED7"}}>·</span><span style={{fontVariantNumeric:"tabular-nums"}}>{ext.nombrePersonnes} personnes</span></>}
                       </div>
                     );})()}
-                    {/* Sujet en grand + ligne expéditeur */}
-                    <div style={{display:"flex",alignItems:"flex-start",gap:12,paddingBottom:14,borderBottom:"1px solid #EBEAE5"}}>
-                      <div style={{width:38,height:38,borderRadius:"50%",background:"#FAFAF7",border:"1px solid #EBEAE5",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Fraunces',Georgia,serif",fontSize:15,fontWeight:500,color:"#1A1A1E",flexShrink:0,marginTop:2}}>
+                    {/* Sujet en grand */}
+                    <h1 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:28,fontWeight:400,letterSpacing:"-0.02em",lineHeight:1.2,color:"#1A1A1E",margin:"0 0 14px",wordBreak:"break-word"}}>{sel.subject||"(sans objet)"}</h1>
+                    {/* Ligne expéditeur */}
+                    <div style={{display:"flex",alignItems:"center",gap:12}}>
+                      <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(184,146,79,0.12)",border:"1px solid rgba(184,146,79,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,color:"#B8924F",flexShrink:0,letterSpacing:"-0.01em"}}>
                         {(sel.from||"?")[0].toUpperCase()}
                       </div>
                       <div style={{flex:1,minWidth:0}}>
-                        <h1 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:22,fontWeight:600,letterSpacing:"-0.2px",lineHeight:1.2,color:"#1A1A1E",margin:"0 0 4px",wordBreak:"break-word"}}>{sel.subject||"(sans objet)"}</h1>
-                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                          <span style={{fontSize:13,fontWeight:500,color:"#1A1A1E"}}>{sel.from||"(inconnu)"}</span>
-                          <span style={{fontSize:11,color:"#9CA3AF"}}>·</span>
-                          <span style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}>{sel.fromEmail}</span>
-                          <span style={{fontSize:11,color:"#9CA3AF",marginLeft:"auto"}}>{sel.date}</span>
-                        </div>
+                        <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.005em"}}>{sel.from||"(inconnu)"}</div>
+                        <div style={{fontSize:12,color:"#6B6E7E",fontFamily:"'Geist','system-ui',sans-serif",marginTop:1}}>{sel.fromEmail}</div>
                       </div>
+                      <span style={{fontSize:12,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap",flexShrink:0}}>{sel.date}</span>
                     </div>
                   </div>
 
-                  {/* ── Corps email — Céleste ── */}
+                  {/* ── Corps email — Reader v3 ── */}
                   {/* 1a — Bandeau résumé IA ARCHANGE (si extraction dispo et isReservation) */}
                   {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext?.isReservation&&ext?.resume&&(
-                    <div style={{margin:"0 0 14px",padding:"10px 14px",background:"rgba(201,168,118,0.08)",border:"1px solid rgba(201,168,118,0.25)",borderRadius:6,display:"flex",gap:8,alignItems:"flex-start"}}>
-                      <span style={{fontSize:14,flexShrink:0,marginTop:1}}>✨</span>
-                      <span style={{fontSize:13,color:"#92400E",fontStyle:"italic",lineHeight:1.5,fontFamily:"'Fraunces',Georgia,serif"}}>{ext.resume}</span>
+                    <div style={{margin:"18px 32px 0",padding:"12px 16px",background:"rgba(107,138,91,0.06)",border:"1px solid rgba(107,138,91,0.18)",borderRadius:10,display:"flex",gap:10,alignItems:"flex-start"}}>
+                      <span style={{fontSize:13,flexShrink:0,marginTop:1,color:"#3F5B32"}}>✦</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:10,fontWeight:500,color:"#3F5B32",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3,fontFamily:"'Geist','system-ui',sans-serif"}}>Résumé ARCHANGE</div>
+                        <div style={{fontSize:13,color:"#4A4A52",lineHeight:1.55,fontFamily:"'Geist','system-ui',sans-serif"}}>{ext.resume}</div>
+                      </div>
                     </div>
                   );})()}
                   <div style={{marginBottom:16}}>
@@ -3707,56 +3718,66 @@ FORMAT
                   )}
 
 
-                  {/* ── Éditeur de réponse manuelle — Céleste ── */}
+                  {/* ── Éditeur de réponse manuelle Reader v3 ── */}
                   {showReplyEditor&&(
-                    <div style={{background:"#FAFAF7",borderRadius:3,border:"1px solid #EBEAE5",borderTop:"2px solid #1A1A1E",overflow:"hidden",marginBottom:16}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 16px",background:"#1A1A1E"}}>
-                        <span style={{fontSize:10,fontWeight:500,color:"#B8924F",letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>
-                          {replyEditorMode==="reply"?"↩ Répondre":replyEditorMode==="replyAll"?"↩↩ Répondre à tous":"↪ Transférer"}
-                        </span>
-                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:15}}>×</button>
+                    <div style={{background:"#FFFFFF",borderRadius:14,border:"1px solid #EBEAE5",overflow:"hidden",marginBottom:18,boxShadow:"0 1px 3px rgba(15,15,20,0.04)"}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 18px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d={replyEditorMode==="forward"?"M2 10l4-4L2 2M12 2v4a3 3 0 01-3 3H3":"M12 10L8 6l4-4M2 2v4a3 3 0 003 3h6"} stroke="#1A1A1E" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          <span style={{fontSize:12,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",letterSpacing:"-0.005em"}}>
+                            {replyEditorMode==="reply"?"Répondre":replyEditorMode==="replyAll"?"Répondre à tous":"Transférer"}
+                          </span>
+                        </div>
+                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} title="Fermer" style={{width:28,height:28,borderRadius:6,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>×</button>
                       </div>
-                      <div style={{padding:"8px 16px",borderBottom:"1px solid #EBEAE5",display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:9.5,color:"#6B6E7E",fontWeight:500,flexShrink:0,letterSpacing:"0.12em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>À</span>
+                      <div style={{padding:"10px 18px",borderBottom:"1px solid #EBEAE5",display:"flex",alignItems:"center",gap:9,background:"#FFFFFF"}}>
+                        <span style={{fontSize:11,color:"#A5A4A0",fontWeight:500,flexShrink:0,fontFamily:"'Geist','system-ui',sans-serif"}}>À</span>
                         <input value={replyEditorTo} onChange={e=>setReplyEditorTo(e.target.value)} style={{flex:1,border:"none",outline:"none",fontSize:13,color:"#1A1A1E",background:"transparent",fontFamily:"'Geist','system-ui',sans-serif"}} placeholder="destinataire@exemple.com"/>
                       </div>
-                      <textarea value={replyEditorText} onChange={e=>setReplyEditorText(e.target.value)} style={{width:"100%",minHeight:200,padding:"14px 16px",fontFamily:"'Fraunces',Georgia,serif",fontSize:15,color:"#1A1A1E",lineHeight:1.75,border:"none",outline:"none",resize:"vertical",background:"transparent"}} placeholder="Votre réponse…" autoFocus/>
-                      <div style={{display:"flex",gap:7,padding:"9px 16px",borderTop:"1px solid #EBEAE5",background:"#F5F4F0"}}>
-                        <button onClick={sendReply} disabled={sending||!replyEditorTo.trim()||!replyEditorText.trim()} style={{padding:"7px 18px",borderRadius:2,border:"none",background:"#1A1A1E",color:"#B8924F",fontSize:11,fontWeight:500,cursor:sending?"wait":"pointer",display:"flex",alignItems:"center",gap:5,opacity:sending||!replyEditorTo.trim()||!replyEditorText.trim()?0.5:1,letterSpacing:"0.04em",fontFamily:"'Geist','system-ui',sans-serif"}}>
-                          {sending?<><Spin s={11}/> Envoi…</>:"✉ Envoyer"}
+                      <textarea value={replyEditorText} onChange={e=>setReplyEditorText(e.target.value)} style={{width:"100%",minHeight:200,padding:"16px 18px",fontFamily:"'Geist','system-ui',sans-serif",fontSize:14,color:"#1A1A1E",lineHeight:1.65,border:"none",outline:"none",resize:"vertical",background:"transparent"}} placeholder="Votre réponse…" autoFocus/>
+                      <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7"}}>
+                        <button onClick={sendReply} disabled={sending||!replyEditorTo.trim()||!replyEditorText.trim()} style={{padding:"8px 16px",borderRadius:8,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:sending?"wait":"pointer",display:"inline-flex",alignItems:"center",gap:6,opacity:sending||!replyEditorTo.trim()||!replyEditorText.trim()?0.5:1,letterSpacing:"-0.005em",fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease"}}>
+                          {sending?<><Spin s={11}/> Envoi…</>:<><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 7L13 1L9.5 13L7 8L1 7z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg> Envoyer</>}
                         </button>
-                        <button onClick={saveDraft} style={{padding:"7px 12px",borderRadius:2,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",fontSize:11,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>Brouillon</button>
+                        <button onClick={saveDraft} style={{padding:"8px 13px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontSize:12.5,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,transition:"all .14s ease"}}>Brouillon</button>
                         <div style={{flex:1}}/>
-                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{padding:"7px 10px",borderRadius:2,border:"none",background:"transparent",color:"#6B6E7E",fontSize:11,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>Annuler</button>
+                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} style={{padding:"8px 12px",borderRadius:8,border:"none",background:"transparent",color:"#6B6E7E",fontSize:12.5,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",transition:"color .14s ease"}}>Annuler</button>
                       </div>
                     </div>
                   )}
 
-                  {/* ── Réponse Archange — Céleste ── */}
-                  <div style={{background:"#FAFAF7",borderRadius:3,border:"1px solid #EBEAE5",overflow:"hidden"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:"#1A1A1E"}}>
+                  {/* ── Réponse ARCHANGE Reader v3 — palette dorée subtile ── */}
+                  <div style={{background:"linear-gradient(180deg, rgba(184,146,79,0.04) 0%, #FFFFFF 50%)",borderRadius:14,border:"1px solid rgba(184,146,79,0.22)",overflow:"hidden",boxShadow:"0 2px 6px rgba(184,146,79,0.06)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 18px",borderBottom:"1px solid rgba(184,146,79,0.15)"}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B8924F" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B8924F" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B8924F"/><path d="M12 9.6 L 12 18.2" stroke="#B8924F" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B8924F"/></svg>
-                        <span style={{fontSize:10,fontWeight:500,color:"#B8924F",letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Réponse Archange</span>
+                        <span style={{fontSize:14,color:"#B8924F",lineHeight:1}}>✦</span>
+                        <span style={{fontSize:10.5,fontWeight:500,color:"#B8924F",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Réponse ARCHANGE</span>
                         {genReply&&<Spin s={11}/>}
                       </div>
-                      {srcActives>0&&<span style={{fontSize:10,color:"rgba(184,146,79,0.7)",fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}>🧠 {srcActives} source{srcActives>1?"s":""}</span>}
+                      {srcActives>0&&(
+                        <span style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:5}}>
+                          <span style={{fontSize:12}}>🧠</span>
+                          <span><strong style={{fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{srcActives}</strong> source{srcActives>1?"s":""}</span>
+                        </span>
+                      )}
                     </div>
                     {genReply
-                      ? <div style={{padding:"20px",fontSize:13,color:"#6B6E7E",display:"flex",alignItems:"center",gap:10,fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}><Spin/> Archange rédige…</div>
+                      ? <div style={{padding:"24px",fontSize:13,color:"#6B6E7E",display:"flex",alignItems:"center",gap:10,fontFamily:"'Geist','system-ui',sans-serif",justifyContent:"center"}}><Spin/> Archange rédige…</div>
                       : !reply
-                        ? <div style={{padding:"24px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
-                            <div style={{fontSize:13,color:"#6B6E7E",textAlign:"center",fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}>Cliquez pour qu'Archange rédige une réponse.</div>
-                            <button onClick={genererReponse} disabled={genReply} style={{padding:"8px 20px",borderRadius:2,border:"none",background:"#1A1A1E",color:"#B8924F",fontSize:11,fontWeight:500,cursor:"pointer",letterSpacing:"0.04em",display:"flex",alignItems:"center",gap:7,fontFamily:"'Geist','system-ui',sans-serif"}}>{genReply?<><Spin s={11}/> Génération…</>:"✦ Générer une réponse"}</button>
+                        ? <div style={{padding:"28px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:14}}>
+                            <div style={{fontSize:13,color:"#6B6E7E",textAlign:"center",fontFamily:"'Geist','system-ui',sans-serif",lineHeight:1.5,maxWidth:320}}>Cliquez pour qu'Archange rédige une réponse adaptée au contexte de cet email.</div>
+                            <button onClick={genererReponse} disabled={genReply} style={{padding:"9px 18px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:"pointer",letterSpacing:"-0.005em",display:"inline-flex",alignItems:"center",gap:7,fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
+                              {genReply?<><Spin s={11}/> Génération…</>:<>✦ Générer une réponse</>}
+                            </button>
                           </div>
                         : editing
-                          ? <textarea value={editReply} onChange={e=>setEditReply(e.target.value)} style={{width:"100%",padding:"16px 20px",fontFamily:"'Fraunces',Georgia,serif",fontSize:15,color:"#1A1A1E",lineHeight:1.8,border:"none",outline:"none",resize:"vertical",background:"transparent",minHeight:200}}/>
-                          : <div style={{padding:"18px 20px",fontFamily:"'Fraunces',Georgia,serif",fontSize:15,color:"#1A1A1E",lineHeight:1.8,whiteSpace:"pre-wrap"}}>
+                          ? <textarea value={editReply} onChange={e=>setEditReply(e.target.value)} style={{width:"100%",padding:"18px 22px",fontFamily:"'Geist','system-ui',sans-serif",fontSize:14,color:"#1A1A1E",lineHeight:1.65,border:"none",outline:"none",resize:"vertical",background:"transparent",minHeight:200}}/>
+                          : <div style={{padding:"20px 22px",fontFamily:"'Fraunces',Georgia,serif",fontSize:15,color:"#1A1A1E",lineHeight:1.75,whiteSpace:"pre-wrap"}}>
                               {reply}
-                              {repliesCache[sel?.id]?.dateGen&&<div style={{marginTop:10,fontSize:11,color:"#6B6E7E",fontStyle:"italic",fontFamily:"'Fraunces',Georgia,serif"}}>Générée le {repliesCache[sel.id].dateGen}</div>}
+                              {repliesCache[sel?.id]?.dateGen&&<div style={{marginTop:14,fontSize:11,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>Générée le <span style={{fontVariantNumeric:"tabular-nums"}}>{repliesCache[sel.id].dateGen}</span></div>}
                             </div>
                     }
-                    <div style={{display:"flex",gap:8,padding:"12px 16px",borderTop:"1px solid #EBEAE5",background:"#F5F4F0",flexWrap:"wrap"}}>
+                    <div style={{display:"flex",gap:8,padding:"12px 18px",borderTop:"1px solid rgba(184,146,79,0.15)",background:"rgba(255,255,255,0.6)",flexWrap:"wrap"}}>
                       {reply && <><button onClick={async()=>{
                         const replyText = editing ? editReply : reply;
                         const subject = sel.subject?.startsWith("Re:") ? sel.subject : `Re: ${sel.subject||""}`;
