@@ -264,7 +264,7 @@ JSON à retourner :
 };
 
 // EMPTY_RESA : espaceId initialisé au premier espace dispo — sera surchargé par getEmptyResa()
-const EMPTY_RESA = { id:null, nom:"", email:"", telephone:"", entreprise:"", typeEvenement:"", nombrePersonnes:"", espaceId:"", dateDebut:"", heureDebut:"", heureFin:"", statut:"nouveau", notes:"", budget:"", noteDirecteur:"" };
+const EMPTY_RESA = { id:null, prenom:"", nom:"", email:"", telephone:"", entreprise:"", typeEvenement:"", nombrePersonnes:"", espaceId:"", dateDebut:"", heureDebut:"", heureFin:"", statut:"nouveau", notes:"", budget:"", noteDirecteur:"" };
 
 // ─── Traduction des erreurs techniques en langage humain ─────────────────────
 function humanError(e: any): string {
@@ -2424,6 +2424,20 @@ FORMAT
   };
 
   const fmt = s => s>1048576?(s/1048576).toFixed(1)+" Mo":Math.round(s/1024)+" Ko";
+
+  // Split un nom complet en {prenom, nom} pour rétrocompatibilité des anciennes résas
+  const splitNomPrenom = (r: any) => {
+    if (r.prenom) return { prenom: r.prenom, nom: r.nom || "" };
+    const full = (r.nom || "").trim();
+    if (!full) return { prenom: "", nom: "" };
+    const parts = full.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return { prenom: "", nom: parts[0] };
+    return { prenom: parts[0], nom: parts.slice(1).join(" ") };
+  };
+  const displayNom = (r: any) => {
+    const { prenom, nom } = splitNomPrenom(r);
+    return [prenom, nom].filter(Boolean).join(" ") || "—";
+  };
 
   // ═══ Helpers vue Événements v3 ═══
   const computeEventsKPIs = React.useMemo(() => {
@@ -4597,76 +4611,135 @@ FORMAT
       {/* ══ FICHE ÉVÉNEMENT UNIFIÉE ══
            UN seul composant — ouvert depuis Événements, Planning ou Mails
            Toujours en modale slide-in (position:fixed), 4 onglets identiques partout */}
-      {selResaGeneral && !editResaPanel && (
-        <div style={{position:"fixed",inset:0,zIndex:600,display:"flex",alignItems:"stretch",justifyContent:"flex-end"}} onClick={e=>{if(e.target===e.currentTarget){setSelResaGeneral(null);setResaOnglet("infos");}}}>
-          <div style={{position:"absolute",inset:0,background:"rgba(27,30,43,0.45)"}}/>
-          <div style={{position:"relative",width:580,maxWidth:"95vw",height:"100vh",background:"#FFFFFF",display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,0.15)",borderLeft:"1px solid #EBEAE5"}}>
+      {selResaGeneral && !editResaPanel && (()=>{
+        const resa = selResaGeneral;
+        const {prenom, nom} = splitNomPrenom(resa);
+        const fullName = [prenom, nom].filter(Boolean).join(" ") || "—";
+        const st = statuts.find(s=>s.id===(resa.statut||"nouveau")) || statuts[0] || {bg:"#F5F4F0",color:"#6B6B72",label:"—"};
+        const espaceNom = ESPACES.find(e=>e.id===resa.espaceId)?.nom || "";
+        const linkedCount = getLinkedEmails(resa).length;
+        const relancesCount = relances.filter(r=>r.resaId===resa.id).length;
 
-            {/* Header */}
-            <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #EBEAE5",flexShrink:0}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14}}>
-                <div style={{display:"flex",gap:14,alignItems:"flex-start",flex:1,minWidth:0}}>
-                  <Avatar name={selResaGeneral.nom||"?"} size={48}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:18,fontWeight:600,color:"#1A1A1E",letterSpacing:"-0.01em",marginBottom:5}}>{selResaGeneral.nom}</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
-                      {selResaGeneral.entreprise&&<span style={{fontSize:12,color:"#6B6E7E"}}>🏢 {selResaGeneral.entreprise}</span>}
-                      {selResaGeneral.email&&<span style={{fontSize:12,color:"#6B6E7E"}}>📧 {selResaGeneral.email}</span>}
-                      {selResaGeneral.telephone&&<span style={{fontSize:12,color:"#6B6E7E"}}>📞 {selResaGeneral.telephone}</span>}
-                    </div>
+        const grpLabel:any = {fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase" as const,letterSpacing:"0.08em",marginBottom:9,fontFamily:"'Geist','system-ui',sans-serif"};
+        const infoLabelStyle:any = {fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase" as const,letterSpacing:"0.08em",marginBottom:4,display:"inline-flex",alignItems:"center",gap:6,fontFamily:"'Geist','system-ui',sans-serif"};
+        const infoValueStyle:any = {fontSize:14,color:"#1A1A1E",fontWeight:500,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.005em",fontFamily:"'Geist','system-ui',sans-serif"};
+        const infoValueEmpty:any = {...infoValueStyle,color:"#A5A4A0",fontWeight:400};
+
+        const IcCal = () => <svg width="10" height="10" viewBox="0 0 14 14" fill="none" style={{opacity:0.6}}><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M1.5 5.5h11" stroke="currentColor" strokeWidth="1.3"/></svg>;
+        const IcClock = () => <svg width="10" height="10" viewBox="0 0 14 14" fill="none" style={{opacity:0.6}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3"/></svg>;
+        const IcPeople = () => <svg width="10" height="10" viewBox="0 0 14 14" fill="none" style={{opacity:0.6}}><circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2.5 12c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>;
+        const IcType = () => <svg width="10" height="10" viewBox="0 0 14 14" fill="none" style={{opacity:0.6}}><circle cx="7" cy="7" r="3.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 3.5v3M7 7.5v1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>;
+        const IcPin = () => <svg width="10" height="10" viewBox="0 0 14 14" fill="none" style={{opacity:0.6}}><path d="M7 12.5s3.8-3.4 3.8-7A3.8 3.8 0 107 1.7c0 3.5 3.8 7 3.8 7z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="7" cy="5.3" r="1.3" stroke="currentColor" strokeWidth="1.3"/></svg>;
+        const IcMoney = () => <svg width="10" height="10" viewBox="0 0 14 14" fill="none" style={{opacity:0.6}}><path d="M10 3H5a2 2 0 000 4h4a2 2 0 010 4H3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M6.5 1.5v11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>;
+
+        return (
+        <div style={{position:"fixed",inset:0,zIndex:600,display:"flex",alignItems:"stretch",justifyContent:"flex-end"}} onClick={e=>{if(e.target===e.currentTarget){setSelResaGeneral(null);setResaOnglet("infos");}}}>
+          <div style={{position:"absolute",inset:0,background:"rgba(27,30,43,0.45)",backdropFilter:"blur(3px)",WebkitBackdropFilter:"blur(3px)"}}/>
+          <div style={{position:"relative",width:580,maxWidth:"95vw",height:"100vh",background:"#FFFFFF",display:"flex",flexDirection:"column",boxShadow:"-12px 0 40px rgba(15,15,20,0.12)",borderLeft:"1px solid #EBEAE5"}}>
+
+            {/* Header hero */}
+            <div style={{padding:"22px 24px 18px",borderBottom:"1px solid #EBEAE5",flexShrink:0}}>
+              <div style={{display:"flex",gap:14,alignItems:"flex-start",marginBottom:14}}>
+                <Avatar name={fullName} size={52}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:22,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.02em",lineHeight:1.15}}>{fullName}</div>
+                  {resa.entreprise && <div style={{fontSize:13,color:"#6B6B72",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>{resa.entreprise}</div>}
+                  <div style={{display:"inline-flex",alignItems:"center",gap:7,marginTop:7}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:st.color,flexShrink:0}}/>
+                    <span style={{fontSize:11.5,fontWeight:500,color:st.color,textTransform:"uppercase",letterSpacing:"0.06em",fontFamily:"'Geist','system-ui',sans-serif"}}>{st.label}</span>
                   </div>
                 </div>
-                <button onClick={()=>{setSelResaGeneral(null);setResaOnglet("infos");}} style={{width:26,height:26,borderRadius:6,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+                <button onClick={()=>{setSelResaGeneral(null);setResaOnglet("infos");}} title="Fermer" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
               </div>
+              {(resa.email || resa.telephone) && (
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {resa.email && <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:"#6B6B72",background:"#F5F4F0",padding:"4px 10px",borderRadius:6,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                    <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.6,flexShrink:0}}><path d="M1 4l6 4.5L13 4M1 3.5h12v7H1z" stroke="currentColor" strokeWidth="1.3"/></svg>
+                    {resa.email}
+                  </span>}
+                  {resa.telephone && <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:"#6B6B72",background:"#F5F4F0",padding:"4px 10px",borderRadius:6,fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>
+                    <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.6,flexShrink:0}}><path d="M2 2l2 0c0.5 0 0.9 0.3 1.1 0.8l0.7 2c0.2 0.5 0 1.1-0.4 1.4l-1 0.7c0.8 1.5 2 2.7 3.5 3.5l0.7-1c0.3-0.4 0.9-0.6 1.4-0.4l2 0.7c0.5 0.2 0.8 0.6 0.8 1.1l0 2c0 0.7-0.6 1.2-1.3 1.2C5.8 14 0 8.2 0 1.3 0 0.6 0.5 0 1.2 0L2 2z" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>
+                    {resa.telephone}
+                  </span>}
+                </div>
+              )}
             </div>
 
-            {/* Onglets — 4 onglets identiques peu importe l'origine */}
-            <div style={{display:"flex",borderBottom:"1px solid #EBEAE5",flexShrink:0}}>
-              {([["infos","📋 Infos"],["mails","📧 Mails "+(getLinkedEmails(selResaGeneral).length>0?"("+getLinkedEmails(selResaGeneral).length+")":"")],["noteIA","✨ Note IA"],["relances","⏰ Relances"]]).map(([tab,label])=>(
-                <button key={tab} onClick={()=>setResaOnglet(tab as any)} style={{flex:1,padding:"10px 0",fontSize:11,fontWeight:resaOnglet===tab?600:400,color:resaOnglet===tab?"#1A1A1E":"#6B6E7E",background:"transparent",border:"none",borderBottom:`2px solid ${resaOnglet===tab?"#1A1A1E":"transparent"}`,cursor:"pointer",whiteSpace:"nowrap"}}>
-                  {label}
-                </button>
-              ))}
+            {/* Onglets */}
+            <div style={{display:"flex",borderBottom:"1px solid #EBEAE5",flexShrink:0,padding:"0 24px",gap:4}}>
+              {([
+                ["infos","Infos",null,<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="1.3"/><path d="M4 5h6M4 7h6M4 9h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>],
+                ["mails","Mails",linkedCount||null,<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M1 4l6 4.5L13 4M1 3.5h12v7H1z" stroke="currentColor" strokeWidth="1.3"/></svg>],
+                ["noteIA","Note IA",null,<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1v2M7 11v2M2.5 2.5l1.5 1.5M10 10l1.5 1.5M1 7h2M11 7h2M2.5 11.5l1.5-1.5M10 4l1.5-1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
+                ["relances","Relances",relancesCount||null,<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
+              ] as const).map(([tab,label,cnt,icon])=>{
+                const active = resaOnglet === tab;
+                return (
+                  <button key={tab} onClick={()=>setResaOnglet(tab as any)} style={{padding:"10px 14px",fontSize:12.5,fontWeight:active?500:400,color:active?"#1A1A1E":"#6B6B72",background:"transparent",border:"none",borderBottom:`2px solid ${active?"#B8924F":"transparent"}`,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",marginBottom:-1,display:"inline-flex",alignItems:"center",gap:6}}>
+                    {icon}
+                    {label}
+                    {cnt!=null && <span style={{fontSize:10.5,padding:"1px 6px",background:active?"rgba(184,146,79,0.12)":"#F5F4F0",color:active?"#B8924F":"#A5A4A0",borderRadius:100,fontVariantNumeric:"tabular-nums",fontWeight:500}}>{cnt}</span>}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Corps scrollable */}
-            <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+            <div style={{flex:1,overflowY:"auto",padding:"22px 24px 24px"}}>
 
               {/* ── Onglet INFOS ── */}
               {resaOnglet==="infos"&&(
-                <div style={{display:"flex",flexDirection:"column",gap:16}}>
-                  {/* Statuts */}
-                  <div>
-                    <div style={{fontSize:9,fontWeight:700,color:"#6B6E7E",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:9}}>Statut</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                      {statuts.map(s=>(
-                        <button key={s.id} onClick={()=>{const upd=resas.map(r=>r.id===selResaGeneral.id?{...r,statut:s.id}:r);saveResas(upd);setSelResaGeneral({...selResaGeneral,statut:s.id});}} style={{padding:"6px 15px",borderRadius:100,border:"none",background:(selResaGeneral.statut||"nouveau")===s.id?s.bg:"#F5F4F0",color:(selResaGeneral.statut||"nouveau")===s.id?s.color:"#6B6E7E",fontSize:12,fontWeight:(selResaGeneral.statut||"nouveau")===s.id?700:500,cursor:"pointer"}}>{s.label}</button>
-                      ))}
+                <div>
+                  {/* Changer le statut */}
+                  <div style={{marginBottom:22}}>
+                    <div style={grpLabel}>Changer le statut</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {statuts.map(s=>{
+                        const active = (resa.statut||"nouveau")===s.id;
+                        return (
+                          <button key={s.id} onClick={()=>{const upd=resas.map(r=>r.id===resa.id?{...r,statut:s.id}:r);saveResas(upd);setSelResaGeneral({...resa,statut:s.id});}} style={{padding:"6px 12px",borderRadius:100,border:active?`1px solid ${s.color}55`:"1px solid transparent",background:active?s.bg:"#F5F4F0",color:active?s.color:"#6B6B72",fontFamily:"'Geist','system-ui',sans-serif",fontSize:11.5,fontWeight:500,cursor:"pointer",transition:"all .12s ease",display:"inline-flex",alignItems:"center",gap:6}}>
+                            <div style={{width:7,height:7,borderRadius:"50%",background:s.color}}/>
+                            {s.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
-                  {/* Grille infos */}
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                    {([["🎉","Type",selResaGeneral.typeEvenement],["👥","Personnes",selResaGeneral.nombrePersonnes?selResaGeneral.nombrePersonnes+" pers.":null],["📅","Date",fmtDateFr(selResaGeneral.dateDebut)],["🕐","Horaires",selResaGeneral.heureDebut+(selResaGeneral.heureFin?" → "+selResaGeneral.heureFin:"")],["📍","Espace",ESPACES.find(e=>e.id===selResaGeneral.espaceId)?.nom],["💰","Budget",selResaGeneral.budget]]).map(([icon,k,v])=>(
-                      <div key={k} style={{background:"#F5F4F0",borderRadius:10,padding:"13px 15px"}}>
-                        <div style={{fontSize:10,color:"#6B6E7E",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.04em"}}>{icon} {k}</div>
-                        <div style={{fontSize:14,fontWeight:500,color:v?"#1A1A1E":"#C5C3BE",fontStyle:v?"normal":"italic"}}>{v||"Non renseigné"}</div>
+
+                  {/* Grille infos hairline */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderTop:"1px solid #EBEAE5",marginBottom:22}}>
+                    {([
+                      [<IcCal/>, "Date", resa.dateDebut?fmtDateFr(resa.dateDebut):null],
+                      [<IcClock/>, "Horaires", (resa.heureDebut||resa.heureFin)?`${resa.heureDebut||"?"}${resa.heureFin?" → "+resa.heureFin:""}`:null],
+                      [<IcPeople/>, "Personnes", resa.nombrePersonnes||null],
+                      [<IcType/>, "Type", resa.typeEvenement||null],
+                      [<IcPin/>, "Espace", espaceNom||null],
+                      [<IcMoney/>, "Budget", resa.budget||null],
+                    ] as const).map(([icon,k,v],i)=>(
+                      <div key={String(k)} style={{padding:"14px 0",borderBottom:"1px solid #EBEAE5",paddingRight:i%2===0?16:0,paddingLeft:i%2===1?16:0,borderRight:i%2===0?"1px solid #EBEAE5":"none"}}>
+                        <div style={infoLabelStyle}>{icon}{k}</div>
+                        <div style={k==="Budget"&&v?{...infoValueStyle,color:"#B8924F"}:(v?infoValueStyle:infoValueEmpty)}>{v||"Non renseigné"}</div>
                       </div>
                     ))}
                   </div>
-                  {/* Notes */}
-                  {selResaGeneral.notes&&(
-                    <div style={{background:"#F5F4F0",borderRadius:10,padding:"13px 15px"}}>
-                      <div style={{fontSize:10,color:"#6B6E7E",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em"}}>📝 Notes</div>
-                      <div style={{fontSize:13,color:"#6B6E7E",lineHeight:1.65}}>{selResaGeneral.notes}</div>
+
+                  {/* Notes du client */}
+                  {resa.notes&&(
+                    <div style={{background:"#F5F4F0",borderRadius:10,padding:"14px 16px",marginBottom:18}}>
+                      <div style={grpLabel}>Notes du client</div>
+                      <div style={{fontSize:13,color:"#1A1A1E",lineHeight:1.6,fontFamily:"'Geist','system-ui',sans-serif"}}>{resa.notes}</div>
                     </div>
                   )}
+
                   {/* Note directeur */}
-                  <div style={{borderRadius:10,border:"1px solid #EBEAE5",overflow:"hidden"}}>
-                    <div style={{padding:"11px 15px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5"}}>
-                      <div style={{fontSize:11,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:6}}><span>📝</span> Note directeur</div>
+                  <div style={{border:"1px solid #EBEAE5",borderRadius:10,overflow:"hidden",marginBottom:8}}>
+                    <div style={{padding:"10px 14px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5",fontSize:11.5,fontWeight:500,color:"#1A1A1E",display:"flex",alignItems:"center",gap:6,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{color:"#B8924F"}}><path d="M2 11l1-3 7-7 2 2-7 7-3 1z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 3l2 2" stroke="currentColor" strokeWidth="1.3"/></svg>
+                      Note directeur
+                      <span style={{marginLeft:"auto",fontSize:10,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:500}}>Privé</span>
                     </div>
-                    <div style={{padding:"12px 15px",background:"#FFFFFF"}}>
-                      <textarea value={selResaGeneral.noteDirecteur||""} onChange={e=>{const upd=resas.map(r=>r.id===selResaGeneral.id?{...r,noteDirecteur:e.target.value}:r);saveResas(upd);setSelResaGeneral({...selResaGeneral,noteDirecteur:e.target.value});}} placeholder="Note confidentielle réservée à la direction…" rows={3} style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1px solid #EBEAE5",background:"#F5F4F0",color:"#1A1A1E",fontSize:12,lineHeight:1.7,resize:"vertical",outline:"none",fontFamily:"inherit"}}/>
+                    <div style={{padding:"12px 14px",background:"#FFFFFF"}}>
+                      <textarea value={resa.noteDirecteur||""} onChange={e=>{const upd=resas.map(r=>r.id===resa.id?{...r,noteDirecteur:e.target.value}:r);saveResas(upd);setSelResaGeneral({...resa,noteDirecteur:e.target.value});}} placeholder="Note confidentielle réservée à la direction…" rows={3} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid #EBEAE5",background:"#FAFAF7",color:"#1A1A1E",fontSize:13,lineHeight:1.6,resize:"vertical",outline:"none",fontFamily:"'Geist','system-ui',sans-serif"}}/>
                     </div>
                   </div>
                 </div>
@@ -4674,36 +4747,35 @@ FORMAT
 
               {/* ── Onglet MAILS ── */}
               {resaOnglet==="mails"&&(()=>{
-                const linked = getLinkedEmails(selResaGeneral);
-                const replies = Object.entries(sentReplies).filter(([id])=>emailResaLinks[id]===selResaGeneral.id||linked.some(m=>m.id===id)).map(([id,r])=>({...r,id,isSent:true}));
-                return linked.length===0&&replies.length===0?(
-                  <div style={{textAlign:"center",padding:"40px 16px",color:"#6B6E7E"}}>
-                    <div style={{fontSize:32,marginBottom:10}}>✉</div>
-                    <div style={{fontSize:13}}>Aucun mail associé</div>
-                    <div style={{fontSize:11,marginTop:4}}>à l'adresse {selResaGeneral.email}</div>
+                const linked = getLinkedEmails(resa);
+                return linked.length===0?(
+                  <div style={{textAlign:"center",padding:"48px 16px",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                    <svg width="32" height="32" viewBox="0 0 14 14" fill="none" style={{color:"#C5C3BE",marginBottom:10}}><path d="M1 4l6 4.5L13 4M1 3.5h12v7H1z" stroke="currentColor" strokeWidth="1"/></svg>
+                    <div style={{fontSize:13,color:"#6B6B72"}}>Aucun mail associé</div>
+                    <div style={{fontSize:11.5,marginTop:4}}>à l'adresse {resa.email||"—"}</div>
                   </div>
                 ):(
-                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
                     {linked.map(m=>(
                       <div key={m.id}>
-                        <div style={{background:"#F5F4F0",borderRadius:10,padding:"13px 15px",border:"1px solid #EBEAE5"}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                            <div style={{display:"flex",alignItems:"center",gap:6}}>
-                              <span style={{fontSize:11,background:"#EFF6FF",color:"#1D4ED8",padding:"2px 7px",borderRadius:100,fontWeight:600}}>📥 Reçu</span>
-                              <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>{m.from}</span>
+                        <div style={{background:"#FFFFFF",borderRadius:10,padding:"13px 15px",border:"1px solid #EBEAE5"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,gap:10}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                              <span style={{fontSize:10,background:"#EDF2F8",color:"#2D5AA8",padding:"2px 7px",borderRadius:100,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:"'Geist','system-ui',sans-serif"}}>Reçu</span>
+                              <span style={{fontSize:13,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.from}</span>
                             </div>
-                            <span style={{fontSize:11,color:"#6B6E7E",flexShrink:0}}>{m.date}</span>
+                            <span style={{fontSize:11,color:"#A5A4A0",flexShrink:0,fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>{m.date}</span>
                           </div>
-                          <div style={{fontSize:12,color:"#6B6E7E",lineHeight:1.5,marginBottom:10}}>{(m.snippet||"").slice(0,120)}{(m.snippet||"").length>120?"…":""}</div>
-                          <button onClick={()=>{ouvrirMailDepuisEvenement(m,selResaGeneral);}} style={{width:"100%",padding:"7px",borderRadius:7,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer"}}>Ouvrir le mail →</button>
+                          <div style={{fontSize:12.5,color:"#6B6B72",lineHeight:1.55,marginBottom:10,fontFamily:"'Geist','system-ui',sans-serif"}}>{(m.snippet||"").slice(0,120)}{(m.snippet||"").length>120?"…":""}</div>
+                          <button onClick={()=>{ouvrirMailDepuisEvenement(m,resa);}} style={{width:"100%",padding:"8px",borderRadius:8,border:"1px solid #E0DED7",background:"transparent",color:"#6B6B72",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>Ouvrir le mail →</button>
                         </div>
                         {sentReplies[m.id]&&(
-                          <div style={{marginLeft:20,marginTop:4,background:"#F0FDF4",borderRadius:10,padding:"11px 14px",border:"1px solid #BBF7D0"}}>
+                          <div style={{marginLeft:20,marginTop:6,background:"#F6F9F3",borderRadius:10,padding:"11px 14px",border:"1px solid rgba(107,138,91,0.22)"}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                              <span style={{fontSize:11,background:"#D1FAE5",color:"#3F5B32",padding:"2px 7px",borderRadius:100,fontWeight:600}}>📤 Vous</span>
-                              <span style={{fontSize:11,color:"#6B6E7E"}}>{sentReplies[m.id].date}</span>
+                              <span style={{fontSize:10,background:"#EDF2E8",color:"#3F5B32",padding:"2px 7px",borderRadius:100,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:"'Geist','system-ui',sans-serif"}}>Vous</span>
+                              <span style={{fontSize:11,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>{sentReplies[m.id].date}</span>
                             </div>
-                            <div style={{fontSize:12,color:"#374151",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{sentReplies[m.id].text.slice(0,200)}{sentReplies[m.id].text.length>200?"…":""}</div>
+                            <div style={{fontSize:12.5,color:"#374151",lineHeight:1.55,whiteSpace:"pre-wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>{sentReplies[m.id].text.slice(0,200)}{sentReplies[m.id].text.length>200?"…":""}</div>
                           </div>
                         )}
                       </div>
@@ -4715,19 +4787,19 @@ FORMAT
               {/* ── Onglet NOTE IA ── */}
               {resaOnglet==="noteIA"&&(
                 <div>
-                  {noteIA[selResaGeneral.id]
+                  {noteIA[resa.id]
                     ? <div>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                          <span style={{fontSize:11,color:"#9CA3AF",fontStyle:"italic"}}>Générée le {noteIA[selResaGeneral.id].date}</span>
-                          <button onClick={()=>generateNoteIA(selResaGeneral)} disabled={!!genNoteIA} style={{fontSize:11,padding:"5px 12px",borderRadius:6,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:genNoteIA?"wait":"pointer"}}>↺ Régénérer</button>
+                          <span style={{fontSize:11.5,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>Générée le {noteIA[resa.id].date}</span>
+                          <button onClick={()=>generateNoteIA(resa)} disabled={!!genNoteIA} style={{fontSize:12,padding:"6px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#6B6B72",cursor:genNoteIA?"wait":"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>↺ Régénérer</button>
                         </div>
-                        <div style={{fontSize:13,color:"#1A1A1E",lineHeight:1.75,whiteSpace:"pre-wrap"}}>{noteIA[selResaGeneral.id].text}</div>
+                        <div style={{fontSize:13.5,color:"#1A1A1E",lineHeight:1.75,whiteSpace:"pre-wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>{noteIA[resa.id].text}</div>
                       </div>
-                    : <div style={{textAlign:"center",padding:"40px 0"}}>
-                        <div style={{fontSize:32,marginBottom:10}}>✨</div>
-                        <div style={{fontSize:13,color:"#6B6E7E",marginBottom:16}}>Générez une note de briefing basée sur les échanges emails</div>
-                        <button onClick={()=>generateNoteIA(selResaGeneral)} disabled={!!genNoteIA} style={{padding:"10px 20px",borderRadius:8,border:"none",background:"#1A1A1E",color:"#B8924F",fontSize:12,fontWeight:600,cursor:genNoteIA?"wait":"pointer",display:"flex",alignItems:"center",gap:8,margin:"0 auto"}}>
-                          {genNoteIA?<><Spin s={12}/> Génération…</>:"✨ Générer la note"}
+                    : <div style={{textAlign:"center",padding:"48px 0",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                        <svg width="32" height="32" viewBox="0 0 14 14" fill="none" style={{color:"#B8924F",marginBottom:10,opacity:0.6}}><path d="M7 1v2M7 11v2M2.5 2.5l1.5 1.5M10 10l1.5 1.5M1 7h2M11 7h2M2.5 11.5l1.5-1.5M10 4l1.5-1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                        <div style={{fontSize:13,color:"#6B6B72",marginBottom:16}}>Générez une note de briefing basée sur les échanges emails</div>
+                        <button onClick={()=>generateNoteIA(resa)} disabled={!!genNoteIA} style={{padding:"10px 18px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:genNoteIA?"wait":"pointer",display:"inline-flex",alignItems:"center",gap:8,fontFamily:"'Geist','system-ui',sans-serif",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
+                          {genNoteIA?<><Spin s={12}/> Génération…</>:<><span style={{fontSize:13}}>✦</span> Générer la note</>}
                         </button>
                       </div>
                   }
@@ -4738,85 +4810,201 @@ FORMAT
               {resaOnglet==="relances"&&(
                 <div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                    <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Relances planifiées</div>
-                    <button onClick={()=>setShowRelanceForm(selResaGeneral.id)} style={{fontSize:11,padding:"6px 12px",borderRadius:6,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer"}}>+ Ajouter</button>
+                    <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",letterSpacing:"-0.005em"}}>Relances planifiées</div>
+                    <button onClick={()=>setShowRelanceForm(resa.id)} style={{fontSize:12,padding:"6px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>+ Ajouter</button>
                   </div>
-                  {relances.filter(r=>r.resaId===selResaGeneral.id).length===0
-                    ? <div style={{textAlign:"center",padding:"30px 0",color:"#9CA3AF",fontSize:13}}>Aucune relance planifiée</div>
-                    : [...relances.filter(r=>r.resaId===selResaGeneral.id)].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(rel=>(
-                        <div key={rel.id} style={{padding:"10px 14px",background:"#F5F4F0",borderRadius:8,border:"1px solid #EBEAE5",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                          <div>
-                            <div style={{fontSize:12,fontWeight:600,color:"#1A1A1E"}}>{rel.date}{rel.heure&&` à ${rel.heure}`}</div>
-                            {rel.note&&<div style={{fontSize:11,color:"#6B6E7E"}}>{rel.note}</div>}
+                  {relances.filter(r=>r.resaId===resa.id).length===0
+                    ? <div style={{textAlign:"center",padding:"32px 0",color:"#A5A4A0",fontSize:13,fontFamily:"'Geist','system-ui',sans-serif"}}>Aucune relance planifiée</div>
+                    : [...relances.filter(r=>r.resaId===resa.id)].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(rel=>{
+                        const isOverdue = rel.date < new Date().toISOString().slice(0,10);
+                        return (
+                          <div key={rel.id} style={{padding:"11px 14px",background:"#FFFFFF",borderRadius:10,border:`1px solid ${isOverdue?"#FAEDEB":"#EBEAE5"}`,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                            <div>
+                              <div style={{fontSize:12.5,fontWeight:500,color:isOverdue?"#A84B45":"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>{fmtDateFr(rel.date)}{rel.heure&&` à ${rel.heure}`}{isOverdue&&" · en retard"}</div>
+                              {rel.note&&<div style={{fontSize:11.5,color:"#6B6B72",marginTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>{rel.note}</div>}
+                            </div>
+                            <button onClick={()=>saveRelances(relances.filter(r=>r.id!==rel.id))} title="Supprimer" style={{background:"none",border:"none",color:"#A5A4A0",cursor:"pointer",fontSize:14,padding:"2px 6px",borderRadius:4,transition:"color .12s ease"}} onMouseEnter={e=>e.currentTarget.style.color="#A84B45"} onMouseLeave={e=>e.currentTarget.style.color="#A5A4A0"}>✕</button>
                           </div>
-                          <button onClick={()=>saveRelances(relances.filter(r=>r.id!==rel.id))} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"2px 4px"}}>✕</button>
-                        </div>
-                      ))
+                        );
+                      })
                   }
                   {/* Formulaire ajout relance */}
-                  {showRelanceForm===selResaGeneral.id&&(
-                    <div style={{background:"#F5F4F0",borderRadius:10,padding:"16px",border:"1px solid #EBEAE5",marginTop:12}}>
-                      <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",marginBottom:12}}>⏰ Programmer une relance</div>
+                  {showRelanceForm===resa.id&&(
+                    <div style={{background:"#FAFAF7",borderRadius:10,padding:"14px 16px",border:"1px solid #EBEAE5",marginTop:12}}>
+                      <div style={{fontSize:12.5,fontWeight:500,color:"#1A1A1E",marginBottom:12,fontFamily:"'Geist','system-ui',sans-serif"}}>Programmer une relance</div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-                        <div><label style={{fontSize:10,color:"#6B6E7E",display:"block",marginBottom:4}}>Date</label><DatePicker value={relanceDate} onChange={v=>setRelanceDate(v)}/></div>
-                        <div><label style={{fontSize:10,color:"#6B6E7E",display:"block",marginBottom:4}}>Heure</label><TimePicker value={relanceHeure} onChange={v=>setRelanceHeure(v)} placeholder="Heure"/></div>
+                        <div><label style={{fontSize:10.5,color:"#6B6B72",display:"block",marginBottom:5,fontFamily:"'Geist','system-ui',sans-serif"}}>Date</label><DatePicker value={relanceDate} onChange={v=>setRelanceDate(v)}/></div>
+                        <div><label style={{fontSize:10.5,color:"#6B6B72",display:"block",marginBottom:5,fontFamily:"'Geist','system-ui',sans-serif"}}>Heure</label><TimePicker value={relanceHeure} onChange={v=>setRelanceHeure(v)} placeholder="Heure"/></div>
                       </div>
-                      <div style={{marginBottom:12}}><label style={{fontSize:10,color:"#6B6E7E",display:"block",marginBottom:4}}>Note (optionnel)</label><input value={relanceNote} onChange={e=>setRelanceNote(e.target.value)} placeholder="Ex: Rappeler pour le devis…" style={{...inp}}/></div>
+                      <div style={{marginBottom:12}}><label style={{fontSize:10.5,color:"#6B6B72",display:"block",marginBottom:5,fontFamily:"'Geist','system-ui',sans-serif"}}>Note (optionnel)</label><input value={relanceNote} onChange={e=>setRelanceNote(e.target.value)} placeholder="Ex: Rappeler pour le devis…" style={{width:"100%",padding:"9px 12px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,color:"#1A1A1E",outline:"none"}}/></div>
                       <div style={{display:"flex",gap:8}}>
-                        <button onClick={()=>{if(!relanceDate)return;const rel={id:"rel_"+Date.now(),resaId:selResaGeneral.id,resaNom:selResaGeneral.nom,resaEmail:selResaGeneral.email,date:relanceDate,heure:relanceHeure,note:relanceNote};saveRelances([...relances,rel]);setShowRelanceForm(null);setRelanceDate("");setRelanceHeure("");setRelanceNote("");toast("Relance programmée !");}} style={{...gold,fontSize:12,padding:"8px 16px"}}>Confirmer</button>
-                        <button onClick={()=>setShowRelanceForm(null)} style={{...out,fontSize:12}}>Annuler</button>
+                        <button onClick={()=>{if(!relanceDate)return;const rel={id:"rel_"+Date.now(),resaId:resa.id,resaNom:fullName,resaEmail:resa.email,date:relanceDate,heure:relanceHeure,note:relanceNote};saveRelances([...relances,rel]);setShowRelanceForm(null);setRelanceDate("");setRelanceHeure("");setRelanceNote("");toast("Relance programmée !");}} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,fontWeight:500,cursor:"pointer"}}>Confirmer</button>
+                        <button onClick={()=>setShowRelanceForm(null)} style={{padding:"8px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,cursor:"pointer"}}>Annuler</button>
                       </div>
                     </div>
                   )}
-                  <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(selResaGeneral);}} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"#1A1A1E",color:"#B8924F",fontSize:12,fontWeight:600,cursor:"pointer",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>✨ Générer une relance IA</button>
+                  <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(resa);}} style={{width:"100%",padding:"10px",borderRadius:10,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontSize:12.5,fontWeight:500,cursor:"pointer",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Geist','system-ui',sans-serif"}}><span style={{fontSize:13,color:"#B8924F"}}>✦</span> Générer une relance IA</button>
                 </div>
               )}
             </div>
 
-            {/* Actions bas — identiques peu importe l'origine */}
-            <div style={{padding:"14px 24px",borderTop:"1px solid #EBEAE5",display:"flex",flexDirection:"column",gap:8,flexShrink:0}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <button onClick={()=>setEditResaPanel({...selResaGeneral})} style={{...out,fontSize:12,padding:"9px",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✏️ Modifier</button>
-                <button onClick={()=>setShowRelanceForm(selResaGeneral.id)} style={{padding:"9px",borderRadius:8,border:"1px solid #FDE68A",background:"#FFFBEB",color:"#92400E",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>⏰ Relance date</button>
-                <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(selResaGeneral);}} style={{padding:"9px",borderRadius:8,border:"none",background:"#1A1A1E",color:"#B8924F",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✨ Mail relance IA</button>
-                <button onClick={()=>openSendMail(selResaGeneral)} style={{...gold,fontSize:12,padding:"9px",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>📤 Envoyer mail</button>
+            {/* Footer hiérarchisé */}
+            <div style={{padding:"14px 24px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7",display:"flex",flexDirection:"column",gap:8,flexShrink:0}}>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>openSendMail(resa)} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",boxShadow:"0 1px 2px rgba(184,146,79,0.2)",justifyContent:"center"}}>
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M1 7L13 1L9.5 13L7 8L1 7z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                  Envoyer un mail
+                </button>
+                <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(resa);}} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",justifyContent:"center"}}>
+                  <span style={{fontSize:13,color:"#B8924F"}}>✦</span> Relance IA
+                </button>
               </div>
-              <button onClick={()=>{if(!window.confirm(`Supprimer l'événement de ${selResaGeneral.nom||"ce client"} ? Cette action est irréversible.`))return;saveResas(resas.filter(r=>r.id!==selResaGeneral.id));setSelResaGeneral(null);toast("Supprimé");}} style={{width:"100%",padding:"9px",borderRadius:8,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",fontSize:12,cursor:"pointer"}}>Supprimer l'événement</button>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                <button onClick={()=>setEditResaPanel({...resa,prenom:prenom,nom:nom})} style={{padding:"8px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><path d="M2 11l1-3 7-7 2 2-7 7-3 1z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 3l2 2" stroke="currentColor" strokeWidth="1.3"/></svg>
+                  Modifier
+                </button>
+                <button onClick={()=>setShowRelanceForm(resa.id)} style={{padding:"8px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  Programmer une relance
+                </button>
+              </div>
+              <button onClick={()=>{if(!window.confirm(`Supprimer l'événement de ${fullName||"ce client"} ? Cette action est irréversible.`))return;saveResas(resas.filter(r=>r.id!==resa.id));setSelResaGeneral(null);toast("Supprimé");}} style={{padding:"8px 12px",border:"none",background:"transparent",color:"#A84B45",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,fontWeight:400,cursor:"pointer",borderRadius:6,transition:"background .12s ease"}} onMouseEnter={e=>e.currentTarget.style.background="#FAEDEB"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>Supprimer l'événement</button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Formulaire modification événement (inline dans la modale) */}
-      {editResaPanel&&selResaGeneral&&(
+        );
+      })()}
+      {/* Formulaire modification événement — v3 */}
+      {editResaPanel&&selResaGeneral&&(()=>{
+        const grpLabel:any = {fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase" as const,letterSpacing:"0.08em",marginBottom:9,fontFamily:"'Geist','system-ui',sans-serif"};
+        const fieldLabel:any = {fontSize:12,color:"#6B6B72",marginBottom:5,display:"inline-flex",alignItems:"center",gap:5,fontWeight:400,fontFamily:"'Geist','system-ui',sans-serif"};
+        const inputStyle:any = {width:"100%",padding:"9px 12px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13.5,color:"#1A1A1E",outline:"none"};
+        return (
         <div style={{position:"fixed",inset:0,zIndex:601,display:"flex",alignItems:"stretch",justifyContent:"flex-end"}}>
-          <div style={{position:"absolute",inset:0,background:"rgba(27,30,43,0.55)"}}/>
-          <div style={{position:"relative",width:420,maxWidth:"95vw",height:"100vh",background:"#FFFFFF",display:"flex",flexDirection:"column",overflowY:"auto",boxShadow:"-8px 0 40px rgba(0,0,0,0.2)",borderLeft:"1px solid #EBEAE5"}}>
-            <div style={{padding:"16px 18px 12px",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-              <div style={{fontSize:15,fontWeight:600,color:"#1A1A1E"}}>✏️ Modifier l'événement</div>
-              <button onClick={()=>setEditResaPanel(null)} style={{width:28,height:28,borderRadius:6,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-            </div>
-            <div style={{padding:18,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",flex:1}}>
-              {([["nom","👤 Nom"],["email","📧 Email"],["telephone","📞 Téléphone"],["entreprise","🏢 Entreprise"],["nombrePersonnes","👥 Nb personnes"]]).map(([k,l])=>(
-                <div key={k}><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>{l}</label><input value={editResaPanel[k]||""} onChange={e=>setEditResaPanel({...editResaPanel,[k]:e.target.value})} style={{...inp}}/></div>
-              ))}
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📅 Date</label><DatePicker value={editResaPanel.dateDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,dateDebut:v})}/></div>
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🕐 Heure début</label><TimePicker value={editResaPanel.heureDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,heureDebut:v})} placeholder="Heure début"/></div>
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🕕 Heure fin</label><TimePicker value={editResaPanel.heureFin||""} onChange={v=>setEditResaPanel({...editResaPanel,heureFin:v})} placeholder="Heure fin"/></div>
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📍 Espace</label><select value={editResaPanel.espaceId||espacesDyn[0]?.id||""} onChange={e=>setEditResaPanel({...editResaPanel,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🎉 Type</label><input value={editResaPanel.typeEvenement||""} onChange={e=>setEditResaPanel({...editResaPanel,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inp}}/></div>
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>💰 Budget</label><input value={editResaPanel.budget||""} onChange={e=>setEditResaPanel({...editResaPanel,budget:e.target.value})} placeholder="Ex: 5 000€…" style={{...inp}}/></div>
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🏷 Statut</label><select value={editResaPanel.statut||"nouveau"} onChange={e=>setEditResaPanel({...editResaPanel,statut:e.target.value})} style={{...inp}}>{statuts.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📝 Notes</label><textarea value={editResaPanel.notes||""} onChange={e=>setEditResaPanel({...editResaPanel,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
-              <div style={{display:"flex",gap:8,paddingTop:4}}>
-                <button onClick={()=>{if(!editResaPanel.nom)return;const upd=resas.map(r=>r.id===editResaPanel.id?editResaPanel:r);saveResas(upd);setSelResaGeneral(editResaPanel);setEditResaPanel(null);toast("Mis à jour !");}} style={{flex:1,...gold,padding:"10px"}}>Enregistrer</button>
-                <button onClick={()=>setEditResaPanel(null)} style={{...out}}>Annuler</button>
+          <div style={{position:"absolute",inset:0,background:"rgba(27,30,43,0.55)",backdropFilter:"blur(3px)",WebkitBackdropFilter:"blur(3px)"}}/>
+          <div style={{position:"relative",width:520,maxWidth:"95vw",height:"100vh",background:"#FFFFFF",display:"flex",flexDirection:"column",boxShadow:"-12px 0 40px rgba(15,15,20,0.15)",borderLeft:"1px solid #EBEAE5"}}>
+            {/* Header */}
+            <div style={{padding:"16px 22px",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:36,height:36,borderRadius:10,background:"#F4EEDF",color:"#B8924F",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <svg width="18" height="18" viewBox="0 0 14 14" fill="none"><path d="M2 11l1-3 7-7 2 2-7 7-3 1z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 3l2 2" stroke="currentColor" strokeWidth="1.4"/></svg>
+                </div>
+                <div>
+                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",lineHeight:1.2}}>Modifier l'événement</div>
+                  <div style={{fontSize:11.5,color:"#6B6B72",marginTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Éditer les informations de la demande</div>
+                </div>
               </div>
+              <button onClick={()=>setEditResaPanel(null)} title="Annuler" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>×</button>
+            </div>
+            {/* Body */}
+            <div style={{flex:1,overflowY:"auto",padding:"20px 22px 18px"}}>
+              {/* CLIENT */}
+              <div style={{marginBottom:18}}>
+                <div style={grpLabel}>Client</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
+                  <div>
+                    <label style={fieldLabel}>Prénom</label>
+                    <input value={editResaPanel.prenom||""} onChange={e=>setEditResaPanel({...editResaPanel,prenom:e.target.value})} placeholder="Prénom" style={inputStyle}/>
+                  </div>
+                  <div>
+                    <label style={fieldLabel}>Nom</label>
+                    <input value={editResaPanel.nom||""} onChange={e=>setEditResaPanel({...editResaPanel,nom:e.target.value})} placeholder="Nom" style={inputStyle}/>
+                  </div>
+                  <div>
+                    <label style={fieldLabel}>Société</label>
+                    <input value={editResaPanel.entreprise||""} onChange={e=>setEditResaPanel({...editResaPanel,entreprise:e.target.value})} placeholder="Optionnel" style={inputStyle}/>
+                  </div>
+                </div>
+              </div>
+              {/* CONTACT */}
+              <div style={{marginBottom:18}}>
+                <div style={grpLabel}>Contact</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
+                  <div>
+                    <label style={fieldLabel}>Email</label>
+                    <input value={editResaPanel.email||""} onChange={e=>setEditResaPanel({...editResaPanel,email:e.target.value})} placeholder="nom@exemple.com" style={inputStyle}/>
+                  </div>
+                  <div>
+                    <label style={fieldLabel}>Téléphone</label>
+                    <input value={editResaPanel.telephone||""} onChange={e=>setEditResaPanel({...editResaPanel,telephone:e.target.value})} placeholder="+33 6 12 34 56 78" style={{...inputStyle,fontVariantNumeric:"tabular-nums"}}/>
+                  </div>
+                </div>
+              </div>
+              {/* QUAND */}
+              <div style={{marginBottom:18}}>
+                <div style={grpLabel}>Quand</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
+                  <div>
+                    <label style={fieldLabel}>Date</label>
+                    <DatePicker value={editResaPanel.dateDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,dateDebut:v})}/>
+                  </div>
+                  <div>
+                    <label style={fieldLabel}>Heure de début</label>
+                    <TimePicker value={editResaPanel.heureDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,heureDebut:v})} placeholder="Heure de début"/>
+                  </div>
+                  <div>
+                    <label style={fieldLabel}>Heure de fin</label>
+                    <TimePicker value={editResaPanel.heureFin||""} onChange={v=>setEditResaPanel({...editResaPanel,heureFin:v})} placeholder="Heure de fin"/>
+                  </div>
+                </div>
+              </div>
+              {/* INVITÉS */}
+              <div style={{marginBottom:18}}>
+                <div style={grpLabel}>Invités</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
+                  <div>
+                    <label style={fieldLabel}>Nombre de personnes</label>
+                    <input type="number" min="1" value={editResaPanel.nombrePersonnes||""} onChange={e=>setEditResaPanel({...editResaPanel,nombrePersonnes:e.target.value})} style={{...inputStyle,fontVariantNumeric:"tabular-nums"}}/>
+                  </div>
+                  <div>
+                    <label style={fieldLabel}>Type d'événement</label>
+                    <input value={editResaPanel.typeEvenement||""} onChange={e=>setEditResaPanel({...editResaPanel,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={inputStyle}/>
+                  </div>
+                </div>
+              </div>
+              {/* LIEU & BUDGET */}
+              <div style={{marginBottom:18}}>
+                <div style={grpLabel}>Lieu & budget</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
+                  <div>
+                    <label style={fieldLabel}>Espace</label>
+                    <select value={editResaPanel.espaceId||espacesDyn[0]?.id||""} onChange={e=>setEditResaPanel({...editResaPanel,espaceId:e.target.value})} style={inputStyle}>
+                      {ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={fieldLabel}>Budget client</label>
+                    <input value={editResaPanel.budget||""} onChange={e=>setEditResaPanel({...editResaPanel,budget:e.target.value})} placeholder="Ex: 5 000€…" style={inputStyle}/>
+                  </div>
+                </div>
+              </div>
+              {/* STATUT */}
+              <div style={{marginBottom:18}}>
+                <div style={grpLabel}>Statut</div>
+                <select value={editResaPanel.statut||"nouveau"} onChange={e=>setEditResaPanel({...editResaPanel,statut:e.target.value})} style={inputStyle}>
+                  {statuts.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+              </div>
+              {/* NOTES */}
+              <div>
+                <div style={grpLabel}>Notes</div>
+                <textarea value={editResaPanel.notes||""} onChange={e=>setEditResaPanel({...editResaPanel,notes:e.target.value})} rows={3} placeholder="Informations complémentaires, demandes spécifiques…" style={{...inputStyle,resize:"vertical",minHeight:70,lineHeight:1.55}}/>
+              </div>
+            </div>
+            {/* Footer */}
+            <div style={{padding:"14px 22px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+              <div style={{flex:1}}/>
+              <button onClick={()=>setEditResaPanel(null)} style={{padding:"9px 13px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,fontWeight:500,cursor:"pointer"}}>Annuler</button>
+              <button onClick={()=>{if(!editResaPanel.nom?.trim()&&!editResaPanel.prenom?.trim()){toast("Prénom ou nom requis","err");return;}const upd=resas.map(r=>r.id===editResaPanel.id?editResaPanel:r);saveResas(upd);setSelResaGeneral(editResaPanel);setEditResaPanel(null);toast("Mis à jour !");}} style={{padding:"9px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Enregistrer
+              </button>
             </div>
           </div>
         </div>
-      )}
-
+        );
+      })()}
       {/* ══ MODALE RADAR — CRÉER RÉSERVATION ══ */}
       {radarResaModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99998,padding:24}}>
@@ -4897,60 +5085,148 @@ FORMAT
         </div>
       )}
       {showNewEvent&&(
-        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"#111111",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99999,padding:32}}>
-          <div style={{background:"#FFFFFF",borderRadius:16,width:"min(560px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 100px rgba(0,0,0,.4)",border:"1px solid #D1D5DB"}}>
-            <div style={{padding:"20px 24px",borderBottom:"1px solid #E5E7EB",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-              <div style={{fontSize:16,fontWeight:700,color:"#111111"}}>🗂 Nouvel événement</div>
-              <button onClick={()=>setShowNewEvent(false)} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"#F3F4F6",color:"#111111",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-            </div>
-            <div style={{flex:1,overflowY:"auto",padding:24,display:"flex",flexDirection:"column",gap:14}}>
-              {/* Champs obligatoires */}
-              <div style={{background:"#EFF6FF",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#1D4ED8"}}>
-                Les champs marqués <strong>*</strong> sont obligatoires
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(26,26,30,0.45)",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99999,padding:32}}>
+          <div style={{background:"#FFFFFF",borderRadius:14,width:"min(620px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(15,15,20,0.18), 0 0 0 1px rgba(15,15,20,0.05)",overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{padding:"16px 22px",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:36,height:36,borderRadius:10,background:"#EDF2E8",color:"#3F5B32",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <svg width="18" height="18" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                </div>
+                <div>
+                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",lineHeight:1.2}}>Nouvelle demande</div>
+                  <div style={{fontSize:11.5,color:"#6B6B72",marginTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Saisie manuelle — indépendante d'un email</div>
+                </div>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                <div style={{gridColumn:"1/-1"}}>
-                  <label style={{fontSize:11,color:newEventErrors.nom?"#DC2626":"#A5A4A0",display:"block",marginBottom:4,fontWeight:600}}>👤 Prénom / Nom *</label>
-                  <input value={newEvent.nom||""} onChange={e=>setNewEvent({...newEvent,nom:e.target.value})} style={{...inpLight,borderColor:newEventErrors.nom?"#FCA5A5":"#EBEAE5"}} placeholder="Ex: Jean Dupont"/>
-                  {newEventErrors.nom&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {newEventErrors.nom}</div>}
-                </div>
-                <div>
-                  <label style={{fontSize:11,color:newEventErrors.dateDebut?"#DC2626":"#A5A4A0",display:"block",marginBottom:4,fontWeight:600}}>📅 Date de l'événement *</label>
-                  <DatePicker value={newEvent.dateDebut||""} onChange={v=>setNewEvent({...newEvent,dateDebut:v})} light={true}/>
-                  {newEventErrors.dateDebut&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {newEventErrors.dateDebut}</div>}
-                </div>
-                <div>
-                  <label style={{fontSize:11,color:newEventErrors.heureDebut?"#DC2626":"#A5A4A0",display:"block",marginBottom:4,fontWeight:600}}>🕐 Heure de début *</label>
-                  <TimePicker value={newEvent.heureDebut||""} onChange={v=>setNewEvent({...newEvent,heureDebut:v})} placeholder="Heure début" light={true}/>
-                  {newEventErrors.heureDebut&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {newEventErrors.heureDebut}</div>}
-                </div>
-                <div>
-                  <label style={{fontSize:11,color:newEventErrors.heureFin?"#DC2626":"#A5A4A0",display:"block",marginBottom:4,fontWeight:600}}>🕕 Heure de fin *</label>
-                  <TimePicker value={newEvent.heureFin||""} onChange={v=>setNewEvent({...newEvent,heureFin:v})} placeholder="Heure fin" light={true}/>
-                  {newEventErrors.heureFin&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {newEventErrors.heureFin}</div>}
-                </div>
-                <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>📧 Email</label><input value={newEvent.email||""} onChange={e=>setNewEvent({...newEvent,email:e.target.value})} style={{...inpLight}}/></div>
-                <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>📞 Téléphone</label><input value={newEvent.telephone||""} onChange={e=>setNewEvent({...newEvent,telephone:e.target.value})} style={{...inpLight}}/></div>
-                <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>🏢 Entreprise</label><input value={newEvent.entreprise||""} onChange={e=>setNewEvent({...newEvent,entreprise:e.target.value})} style={{...inpLight}}/></div>
-                <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>👥 Nb personnes</label><input type="number" value={newEvent.nombrePersonnes||""} onChange={e=>setNewEvent({...newEvent,nombrePersonnes:e.target.value})} style={{...inpLight}}/></div>
-                <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>🎉 Type d'événement</label><input value={newEvent.typeEvenement||""} onChange={e=>setNewEvent({...newEvent,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inpLight}}/></div>
-                <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>💰 Budget client</label><input value={newEvent.budget||""} onChange={e=>setNewEvent({...newEvent,budget:e.target.value})} placeholder="Ex: 5 000€…" style={{...inpLight}}/></div>
-                <div><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>📍 Espace</label><select value={newEvent.espaceId||espacesDyn[0]?.id||""} onChange={e=>setNewEvent({...newEvent,espaceId:e.target.value})} style={{...inpLight}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
-                <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:4}}>📝 Notes</label><textarea value={newEvent.notes||""} onChange={e=>setNewEvent({...newEvent,notes:e.target.value})} rows={3} style={{...inpLight,resize:"none",lineHeight:1.6}}/></div>
-              </div>
+              <button onClick={()=>setShowNewEvent(false)} title="Annuler" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>×</button>
             </div>
-            <div style={{padding:"16px 24px",borderTop:"1px solid #EBEAE5",display:"flex",gap:8,flexShrink:0}}>
+            {/* Body */}
+            <div style={{flex:1,overflowY:"auto",padding:"20px 22px 18px"}}>
+              {(()=>{
+                const grpLabel:any = {fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9,fontFamily:"'Geist','system-ui',sans-serif"};
+                const fieldLabel = (hasErr:boolean) => ({fontSize:12,color:hasErr?"#A84B45":"#6B6B72",marginBottom:5,display:"inline-flex",alignItems:"center",gap:5,fontWeight:400,fontFamily:"'Geist','system-ui',sans-serif"});
+                const req:any = {color:"#A84B45",fontSize:12,fontWeight:500};
+                const inputStyle:any = {width:"100%",padding:"9px 12px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13.5,color:"#1A1A1E",outline:"none"};
+                const errMsg = (k:string) => newEventErrors[k] ? <div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {newEventErrors[k]}</div> : null;
+                return (
+                <>
+                  {/* CLIENT */}
+                  <div style={{marginBottom:18}}>
+                    <div style={grpLabel}>Client</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
+                      <div>
+                        <label style={fieldLabel(!!newEventErrors.prenom)}>Prénom<span style={req}>*</span></label>
+                        <input value={newEvent.prenom||""} onChange={e=>setNewEvent({...newEvent,prenom:e.target.value})} placeholder="Prénom" style={{...inputStyle,borderColor:newEventErrors.prenom?"#A84B45":"#EBEAE5"}}/>
+                        {errMsg("prenom")}
+                      </div>
+                      <div>
+                        <label style={fieldLabel(!!newEventErrors.nom)}>Nom<span style={req}>*</span></label>
+                        <input value={newEvent.nom||""} onChange={e=>setNewEvent({...newEvent,nom:e.target.value})} placeholder="Nom" style={{...inputStyle,borderColor:newEventErrors.nom?"#A84B45":"#EBEAE5"}}/>
+                        {errMsg("nom")}
+                      </div>
+                      <div>
+                        <label style={fieldLabel(false)}>Société</label>
+                        <input value={newEvent.entreprise||""} onChange={e=>setNewEvent({...newEvent,entreprise:e.target.value})} placeholder="Optionnel" style={inputStyle}/>
+                      </div>
+                    </div>
+                  </div>
+                  {/* CONTACT */}
+                  <div style={{marginBottom:18}}>
+                    <div style={grpLabel}>Contact</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
+                      <div>
+                        <label style={fieldLabel(false)}>Email</label>
+                        <input value={newEvent.email||""} onChange={e=>setNewEvent({...newEvent,email:e.target.value})} placeholder="nom@exemple.com" style={inputStyle}/>
+                      </div>
+                      <div>
+                        <label style={fieldLabel(false)}>Téléphone</label>
+                        <input value={newEvent.telephone||""} onChange={e=>setNewEvent({...newEvent,telephone:e.target.value})} placeholder="+33 6 12 34 56 78" style={{...inputStyle,fontVariantNumeric:"tabular-nums"}}/>
+                      </div>
+                    </div>
+                  </div>
+                  {/* QUAND */}
+                  <div style={{marginBottom:18}}>
+                    <div style={grpLabel}>Quand</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
+                      <div>
+                        <label style={fieldLabel(!!newEventErrors.dateDebut)}>Date<span style={req}>*</span></label>
+                        <DatePicker value={newEvent.dateDebut||""} onChange={v=>setNewEvent({...newEvent,dateDebut:v})} light={true}/>
+                        {errMsg("dateDebut")}
+                      </div>
+                      <div>
+                        <label style={fieldLabel(!!newEventErrors.heureDebut)}>Heure de début<span style={req}>*</span></label>
+                        <TimePicker value={newEvent.heureDebut||""} onChange={v=>setNewEvent({...newEvent,heureDebut:v})} placeholder="Heure de début" light={true}/>
+                        {errMsg("heureDebut")}
+                      </div>
+                      <div>
+                        <label style={fieldLabel(!!newEventErrors.heureFin)}>Heure de fin<span style={req}>*</span></label>
+                        <TimePicker value={newEvent.heureFin||""} onChange={v=>setNewEvent({...newEvent,heureFin:v})} placeholder="Heure de fin" light={true}/>
+                        {errMsg("heureFin")}
+                      </div>
+                    </div>
+                  </div>
+                  {/* INVITÉS */}
+                  <div style={{marginBottom:18}}>
+                    <div style={grpLabel}>Invités</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
+                      <div>
+                        <label style={fieldLabel(false)}>Nombre de personnes</label>
+                        <input type="number" min="1" value={newEvent.nombrePersonnes||""} onChange={e=>setNewEvent({...newEvent,nombrePersonnes:e.target.value})} placeholder="Ex: 50" style={{...inputStyle,fontVariantNumeric:"tabular-nums"}}/>
+                      </div>
+                      <div>
+                        <label style={fieldLabel(false)}>Type d'événement</label>
+                        <input value={newEvent.typeEvenement||""} onChange={e=>setNewEvent({...newEvent,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={inputStyle}/>
+                      </div>
+                    </div>
+                  </div>
+                  {/* LIEU & BUDGET */}
+                  <div style={{marginBottom:18}}>
+                    <div style={grpLabel}>Lieu & budget</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
+                      <div>
+                        <label style={fieldLabel(false)}>Espace</label>
+                        <select value={newEvent.espaceId||espacesDyn[0]?.id||""} onChange={e=>setNewEvent({...newEvent,espaceId:e.target.value})} style={inputStyle}>
+                          {ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={fieldLabel(false)}>Budget client</label>
+                        <input value={newEvent.budget||""} onChange={e=>setNewEvent({...newEvent,budget:e.target.value})} placeholder="Ex: 5 000€, 45€/pers…" style={inputStyle}/>
+                      </div>
+                    </div>
+                  </div>
+                  {/* NOTES */}
+                  <div>
+                    <div style={grpLabel}>Notes</div>
+                    <textarea value={newEvent.notes||""} onChange={e=>setNewEvent({...newEvent,notes:e.target.value})} rows={3} placeholder="Informations complémentaires, demandes spécifiques…" style={{...inputStyle,resize:"vertical",minHeight:70,lineHeight:1.55}}/>
+                  </div>
+                </>
+                );
+              })()}
+            </div>
+            {/* Footer */}
+            <div style={{padding:"14px 22px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+              <div style={{fontSize:11.5,color:"#A5A4A0",display:"inline-flex",alignItems:"center",gap:9,flexWrap:"wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                <span><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>⌘</kbd><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>↩</kbd> créer</span>
+                <span style={{color:"#E0DED7"}}>·</span>
+                <span><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>Esc</kbd> annuler</span>
+              </div>
+              <div style={{flex:1}}/>
+              <button onClick={()=>setShowNewEvent(false)} style={{padding:"9px 13px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,fontWeight:500,cursor:"pointer"}}>Annuler</button>
               <button onClick={()=>{
                 const errs:any={};
-                if(!newEvent.nom?.trim()) errs.nom="Le prénom/nom est obligatoire";
-                if(!newEvent.dateDebut) errs.dateDebut="La date est obligatoire";
-                if(!newEvent.heureDebut) errs.heureDebut="L'heure de début est obligatoire";
-                if(!newEvent.heureFin) errs.heureFin="L'heure de fin est obligatoire";
+                if(!newEvent.prenom?.trim()) errs.prenom="Prénom obligatoire";
+                if(!newEvent.nom?.trim()) errs.nom="Nom obligatoire";
+                if(!newEvent.dateDebut) errs.dateDebut="Date obligatoire";
+                if(!newEvent.heureDebut) errs.heureDebut="Heure de début obligatoire";
+                if(!newEvent.heureFin) errs.heureFin="Heure de fin obligatoire";
                 if(Object.keys(errs).length>0){ setNewEventErrors(errs); return; }
-                const r={...newEvent,id:"r"+Date.now(),statut:"nouveau",nombrePersonnes:parseInt(newEvent.nombrePersonnes)||newEvent.nombrePersonnes};
-                saveResas([...resas,r]); setShowNewEvent(false); setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setNewEventErrors({}); toast("Événement créé !");
-              }} style={{flex:1,...gold,padding:"11px",fontSize:13}}>✅ Créer l'événement</button>
-              <button onClick={()=>setShowNewEvent(false)} style={{...out,padding:"11px 18px",fontSize:13}}>Annuler</button>
+                const r={...newEvent,id:"r"+Date.now(),statut:newEvent.statut||"nouveau",nombrePersonnes:parseInt(newEvent.nombrePersonnes)||newEvent.nombrePersonnes};
+                saveResas([...resas,r]); setShowNewEvent(false); setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setNewEventErrors({}); toast("Demande créée !");
+              }} style={{padding:"9px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Créer la demande
+              </button>
             </div>
           </div>
         </div>
