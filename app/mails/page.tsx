@@ -719,8 +719,9 @@ export default function App() {
   const [search, setSearch] = useState("");
   // Planning form dans mail
   const [showPlanForm, setShowPlanForm] = useState(false);
-  const [planForm, setPlanForm] = useState({});
-  const [planErrors, setPlanErrors] = useState({});
+  const [planForm, setPlanForm] = useState<any>({});
+  const [planErrors, setPlanErrors] = useState<Record<string,string>>({});
+  const [planFormAI, setPlanFormAI] = useState<Record<string,boolean>>({});
   // Suggestions de modifications de fiche événement par l'IA
   type SuggestionModif = {
     champ: string;
@@ -2108,6 +2109,15 @@ Retourne UNIQUEMENT ce JSON valide :
 
   const openPlanForm = () => {
     const pers = parseInt(String(extracted?.nombrePersonnes || "0"), 10);
+    // Split "Prénom Nom" depuis ce que l'IA ou le From a extrait
+    const splitNom = (full: string) => {
+      const parts = (full || "").trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0) return { prenom: "", nom: "" };
+      if (parts.length === 1) return { prenom: "", nom: parts[0] };
+      return { prenom: parts[0], nom: parts.slice(1).join(" ") };
+    };
+    const rawFull = extracted?.nom || sel?.from || "";
+    const { prenom, nom } = splitNom(rawFull);
     // Attribution dynamique selon type d'événement (assis vs debout) et nombre de personnes
     const getEspaceAuto = () => {
       if (extracted?.espaceDetecte) return extracted.espaceDetecte;
@@ -2134,7 +2144,8 @@ Retourne UNIQUEMENT ce JSON valide :
     const max = extracted?.nombrePersonnes;
     const fourchette = (min && max && min !== max) ? `Fourchette : ${min}–${max} personnes. ` : "";
     const f = {
-      nom:            extracted?.nom            || sel?.from      || "",
+      prenom:         prenom,
+      nom:            nom,
       email:          extracted?.email          || sel?.fromEmail || "",
       telephone:      extracted?.telephone      || "",
       entreprise:     extracted?.entreprise     || "",
@@ -2150,19 +2161,34 @@ Retourne UNIQUEMENT ce JSON valide :
       noteDirecteur:  "",
       _emailId:       sel?.id,
     };
+    // Marquer les champs pré-remplis par l'IA (pour afficher le badge ✦ IA)
+    const aiFields = {
+      prenom:         Boolean(extracted?.nom),
+      nom:            Boolean(extracted?.nom),
+      entreprise:     Boolean(extracted?.entreprise),
+      dateDebut:      Boolean(extracted?.dateDebut),
+      heureDebut:     Boolean(extracted?.heureDebut),
+      heureFin:       Boolean(extracted?.heureFin),
+      nombrePersonnes:Boolean(extracted?.nombrePersonnes),
+      typeEvenement:  Boolean(extracted?.typeEvenement),
+      espaceId:       Boolean(extracted?.espaceDetecte),
+      budget:         Boolean(extracted?.budget),
+      notes:          Boolean(extracted?.notes) || Boolean(fourchette),
+    };
     // P7 — Proposer de restaurer un brouillon si disponible pour ce même email
     try {
       const draft = JSON.parse(localStorage.getItem("arc_draft_planform") || "null");
       if (draft && draft._emailId === sel?.id && draft.nom && window.confirm(`Un brouillon existe pour "${draft.nom}". Restaurer ?`)) {
-        setPlanForm(draft); setPlanErrors({}); setShowPlanForm(true); return;
+        setPlanForm(draft); setPlanErrors({}); setPlanFormAI({}); setShowPlanForm(true); return;
       }
     } catch {}
-    setPlanForm(f); setPlanErrors({}); setShowPlanForm(true);
+    setPlanForm(f); setPlanErrors({}); setPlanFormAI(aiFields); setShowPlanForm(true);
     try { localStorage.setItem("arc_draft_planform", JSON.stringify(f)); } catch {}
   };
 
   const submitPlanForm = () => {
     const errs: Record<string, string> = {};
+    if (!planForm.prenom?.trim())         errs.prenom         = "Prénom obligatoire";
     if (!planForm.nom?.trim())            errs.nom            = "Nom obligatoire";
     if (!planForm.dateDebut)              errs.dateDebut      = "Date obligatoire";
     if (!planForm.nombrePersonnes)        errs.nombrePersonnes= "Nombre de personnes obligatoire";
@@ -3595,56 +3621,157 @@ FORMAT
                     );
                   })()}
 
-                  {/* Formulaire planning */}
-                  {showPlanForm && (
-                    <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:14,padding:"20px",marginBottom:16}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                        <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",letterSpacing:"-0.01em"}}>📅 Ajouter au planning</div>
-                        <button onClick={()=>setShowPlanForm(false)} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:18}}>×</button>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                        {/* Champs obligatoires */}
-                        {[
-                          ["dateDebut","📅 Date de l'événement *","date",true],
-                          ["heureDebut","🕐 Heure de début *","time",true],
-                          ["heureFin","🕕 Heure de fin *","time",true],
-                        ].map(([k,l,type,required])=>(
-                          <div key={k}>
-                            <label style={{fontSize:11,color:planErrors[k]?"#DC2626":"#A5A4A0",display:"block",marginBottom:4,fontWeight:planErrors[k]?600:400}}>{l}</label>
-                            {type==="date"?<DatePicker value={planForm[k]||""} onChange={v=>setPlanForm({...planForm,[k]:v})}/>:<TimePicker value={planForm[k]||""} onChange={v=>setPlanForm({...planForm,[k]:v})} placeholder={l.replace(" *","")}/>}
-                            {planErrors[k]&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {planErrors[k]}</div>}
+                  {/* Formulaire planning — v3 Apple Mail 2026 */}
+                  {showPlanForm && (()=>{
+                    const espaceNom = ESPACES.find(e=>e.id===planForm.espaceId)?.nom || "";
+                    const grpLabel = {fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase" as const,letterSpacing:"0.08em",marginBottom:9,fontFamily:"'Geist','system-ui',sans-serif"};
+                    const fieldLabel = (hasErr:boolean) => ({fontSize:12,color:hasErr?"#A84B45":"#6B6B72",marginBottom:5,display:"inline-flex",alignItems:"center",gap:5,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:400});
+                    const req = {color:"#A84B45",fontSize:12,fontWeight:500};
+                    const aiBadge = {display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#B8924F",background:"rgba(184,146,79,0.12)",padding:"1px 6px",borderRadius:100,marginLeft:"auto",fontWeight:500,letterSpacing:"0.02em",textTransform:"uppercase" as const,fontFamily:"'Geist','system-ui',sans-serif"};
+                    const inputStyle = {width:"100%",padding:"9px 12px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13.5,color:"#1A1A1E",outline:"none",transition:"border-color .12s ease"};
+                    return (
+                    <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:14,overflow:"hidden",marginBottom:18,boxShadow:"0 1px 3px rgba(15,15,20,0.06)"}}>
+                      {/* Header : icône + titre Fraunces + sous-titre IA */}
+                      <div style={{padding:"16px 22px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #EBEAE5"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:12}}>
+                          <div style={{width:36,height:36,borderRadius:10,background:"rgba(184,146,79,0.12)",color:"#B8924F",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            <svg width="18" height="18" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M1.5 5.5h11M4.5 1v2.5M9.5 1v2.5M7 8v3M5.5 9.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                           </div>
-                        ))}
-                        {/* Nombre de personnes — champ numérique libre */}
-                        <div>
-                          <label style={{fontSize:11,color:planErrors["nombrePersonnes"]?"#DC2626":"#A5A4A0",display:"block",marginBottom:4,fontWeight:planErrors["nombrePersonnes"]?600:400}}>👥 Nombre de personnes *</label>
-                          <input type="number" min="1" value={planForm.nombrePersonnes||""} onChange={e=>setPlanForm({...planForm,nombrePersonnes:e.target.value})} placeholder="Ex: 50" style={{...inp}}/>
-                          {planErrors["nombrePersonnes"]&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {planErrors["nombrePersonnes"]}</div>}
+                          <div>
+                            <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",lineHeight:1.2}}>Créer l'événement</div>
+                            <div style={{fontSize:11.5,color:"#6B6B72",marginTop:2,display:"inline-flex",alignItems:"center",gap:5,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                              <span style={{fontSize:11,color:"#B8924F"}}>✦</span>
+                              Pré-rempli par ARCHANGE — vérifiez et complétez
+                            </div>
+                          </div>
                         </div>
-                        {/* Champs optionnels */}
-                        <div>
-                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🎉 Type d'événement</label>
-                          <input value={planForm.typeEvenement||""} onChange={e=>setPlanForm({...planForm,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inp}}/>
+                        <button onClick={()=>setShowPlanForm(false)} title="Annuler" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                      </div>
+
+                      {/* Aperçu sage temps réel */}
+                      {(planForm.prenom || planForm.nom || planForm.nombrePersonnes || planForm.dateDebut) && (
+                        <div style={{margin:"16px 22px 0",padding:"12px 16px",background:"#F6F9F3",border:"1px solid rgba(107,138,91,0.22)",borderRadius:10,display:"flex",alignItems:"flex-start",gap:10}}>
+                          <span style={{color:"#3F5B32",fontSize:13,marginTop:1,flexShrink:0}}>✦</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:10,fontWeight:500,color:"#3F5B32",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3,fontFamily:"'Geist','system-ui',sans-serif"}}>Aperçu de l'événement</div>
+                            <div style={{fontSize:13,color:"#6B6B72",lineHeight:1.55,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                              {(planForm.prenom || planForm.nom) && <span style={{color:"#1A1A1E",fontWeight:500}}>{[planForm.prenom,planForm.nom].filter(Boolean).join(" ")}</span>}
+                              {planForm.entreprise && <span style={{color:"#A5A4A0"}}> ({planForm.entreprise})</span>}
+                              {planForm.nombrePersonnes && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>·</span><span style={{color:"#1A1A1E",fontWeight:500}}>{planForm.nombrePersonnes} personnes</span></>}
+                              {planForm.dateDebut && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>·</span><span style={{color:"#1A1A1E",fontWeight:500,fontVariantNumeric:"tabular-nums"}}>{planForm.dateDebut}</span></>}
+                              {planForm.heureDebut && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>·</span><span style={{fontVariantNumeric:"tabular-nums"}}>{planForm.heureDebut}{planForm.heureFin?` → ${planForm.heureFin}`:""}</span></>}
+                              {espaceNom && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>·</span><span>{espaceNom}</span></>}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>💰 Budget client</label>
-                          <input value={planForm.budget||""} onChange={e=>setPlanForm({...planForm,budget:e.target.value})} placeholder="Ex: 5 000€, 45€/pers…" style={{...inp}}/>
+                      )}
+
+                      {/* Corps : groupes logiques */}
+                      <div style={{padding:"20px 22px 18px"}}>
+
+                        {/* GROUPE CLIENT */}
+                        <div style={{marginBottom:18}}>
+                          <div style={grpLabel}>Client</div>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
+                            <div>
+                              <label style={fieldLabel(!!planErrors.prenom)}>Prénom<span style={req}>*</span>{planFormAI.prenom&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <input value={planForm.prenom||""} onChange={e=>setPlanForm({...planForm,prenom:e.target.value})} placeholder="Prénom" style={{...inputStyle,borderColor:planErrors.prenom?"#A84B45":"#EBEAE5"}}/>
+                              {planErrors.prenom&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.prenom}</div>}
+                            </div>
+                            <div>
+                              <label style={fieldLabel(!!planErrors.nom)}>Nom<span style={req}>*</span>{planFormAI.nom&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <input value={planForm.nom||""} onChange={e=>setPlanForm({...planForm,nom:e.target.value})} placeholder="Nom" style={{...inputStyle,borderColor:planErrors.nom?"#A84B45":"#EBEAE5"}}/>
+                              {planErrors.nom&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.nom}</div>}
+                            </div>
+                            <div>
+                              <label style={fieldLabel(false)}>Société{planFormAI.entreprise&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <input value={planForm.entreprise||""} onChange={e=>setPlanForm({...planForm,entreprise:e.target.value})} placeholder="Optionnel" style={inputStyle}/>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📍 Espace</label>
-                          <select value={planForm.espaceId||espacesDyn[0]?.id||""} onChange={e=>setPlanForm({...planForm,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select>
+
+                        {/* GROUPE QUAND */}
+                        <div style={{marginBottom:18}}>
+                          <div style={grpLabel}>Quand</div>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
+                            <div>
+                              <label style={fieldLabel(!!planErrors.dateDebut)}>Date<span style={req}>*</span>{planFormAI.dateDebut&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <DatePicker value={planForm.dateDebut||""} onChange={v=>setPlanForm({...planForm,dateDebut:v})}/>
+                              {planErrors.dateDebut&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.dateDebut}</div>}
+                            </div>
+                            <div>
+                              <label style={fieldLabel(!!planErrors.heureDebut)}>Heure de début<span style={req}>*</span>{planFormAI.heureDebut&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <TimePicker value={planForm.heureDebut||""} onChange={v=>setPlanForm({...planForm,heureDebut:v})} placeholder="Heure de début"/>
+                              {planErrors.heureDebut&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.heureDebut}</div>}
+                            </div>
+                            <div>
+                              <label style={fieldLabel(!!planErrors.heureFin)}>Heure de fin<span style={req}>*</span>{planFormAI.heureFin&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <TimePicker value={planForm.heureFin||""} onChange={v=>setPlanForm({...planForm,heureFin:v})} placeholder="Heure de fin"/>
+                              {planErrors.heureFin&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.heureFin}</div>}
+                            </div>
+                          </div>
                         </div>
-                        <div style={{gridColumn:"1/-1"}}>
-                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📝 Notes</label>
-                          <input value={planForm.notes||""} onChange={e=>setPlanForm({...planForm,notes:e.target.value})} style={{...inp}}/>
+
+                        {/* GROUPE INVITÉS */}
+                        <div style={{marginBottom:18}}>
+                          <div style={grpLabel}>Invités</div>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
+                            <div>
+                              <label style={fieldLabel(!!planErrors.nombrePersonnes)}>Nombre de personnes<span style={req}>*</span>{planFormAI.nombrePersonnes&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <input type="number" min="1" value={planForm.nombrePersonnes||""} onChange={e=>setPlanForm({...planForm,nombrePersonnes:e.target.value})} placeholder="Ex: 50" style={{...inputStyle,fontVariantNumeric:"tabular-nums",borderColor:planErrors.nombrePersonnes?"#A84B45":"#EBEAE5"}}/>
+                              {planErrors.nombrePersonnes&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.nombrePersonnes}</div>}
+                            </div>
+                            <div>
+                              <label style={fieldLabel(false)}>Type d'événement{planFormAI.typeEvenement&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <input value={planForm.typeEvenement||""} onChange={e=>setPlanForm({...planForm,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={inputStyle}/>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* GROUPE LIEU & BUDGET */}
+                        <div style={{marginBottom:18}}>
+                          <div style={grpLabel}>Lieu & budget</div>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
+                            <div>
+                              <label style={fieldLabel(false)}>Espace{planFormAI.espaceId&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <select value={planForm.espaceId||espacesDyn[0]?.id||""} onChange={e=>setPlanForm({...planForm,espaceId:e.target.value})} style={inputStyle}>
+                                {ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label style={fieldLabel(false)}>Budget client{planFormAI.budget&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <input value={planForm.budget||""} onChange={e=>setPlanForm({...planForm,budget:e.target.value})} placeholder="Ex: 5 000€, 45€/pers…" style={inputStyle}/>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* GROUPE NOTES */}
+                        <div>
+                          <div style={grpLabel}>Notes</div>
+                          <div>
+                            <label style={{...fieldLabel(false),marginBottom:0,display:planFormAI.notes?"inline-flex":"none"}}>{planFormAI.notes&&<span style={aiBadge}>✦ IA</span>}</label>
+                            <textarea value={planForm.notes||""} onChange={e=>setPlanForm({...planForm,notes:e.target.value})} rows={3} placeholder="Informations complémentaires, demandes spécifiques…" style={{...inputStyle,resize:"vertical",minHeight:64,lineHeight:1.55}}/>
+                          </div>
                         </div>
                       </div>
-                      <div style={{display:"flex",gap:8,marginTop:16}}>
-                        <button onClick={submitPlanForm} style={{...gold,flex:1,padding:"10px"}}>Confirmer et ajouter</button>
-                        <button onClick={()=>setShowPlanForm(false)} style={{...out}}>Annuler</button>
+
+                      {/* Footer : raccourcis à gauche, actions à droite */}
+                      <div style={{padding:"14px 22px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7",display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{fontSize:11.5,color:"#A5A4A0",display:"inline-flex",alignItems:"center",gap:9,flexWrap:"wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                          <span><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>⌘</kbd><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>↩</kbd> créer</span>
+                          <span style={{color:"#E0DED7"}}>·</span>
+                          <span><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>Esc</kbd> annuler</span>
+                        </div>
+                        <div style={{flex:1}}/>
+                        <button onClick={()=>setShowPlanForm(false)} style={{padding:"9px 13px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,fontWeight:500,cursor:"pointer",transition:"all .14s ease"}}>Annuler</button>
+                        <button onClick={submitPlanForm} style={{padding:"9px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",boxShadow:"0 1px 2px rgba(184,146,79,0.2)",transition:"all .14s ease"}}>
+                          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          Créer l'événement
+                        </button>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
 
 
                   {/* ── Corps email — Reader v3 ── */}
