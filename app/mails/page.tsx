@@ -277,7 +277,7 @@ function humanError(e: any): string {
   if (msg.includes("500") || msg.includes("internal server")) return "Une erreur est survenue côté serveur. Réessayez dans un moment.";
   if (msg.includes("503") || msg.includes("unavailable")) return "Le service est temporairement indisponible. Réessayez dans quelques minutes.";
   if (msg.includes("gmail_auth_expired") || msg.includes("session gmail")) return "Session Gmail expirée. Déconnectez-vous puis reconnectez-vous.";
-  if (msg.includes("ia indisponible") || msg.includes("erreur ia") || msg.includes("anthropic")) return "L'assistant IA est temporairement indisponible. Réessayez dans un moment.";
+  if (msg.includes("ia indisponible") || msg.includes("erreur ia") || msg.includes("anthropic")) return "ARCHANGE est temporairement indisponible. Réessayez dans un moment.";
   // Fallback — garder le message original si non reconnu, mais le nettoyer
   return e?.message || "Une erreur inattendue est survenue. Réessayez.";
 }
@@ -804,8 +804,10 @@ export default function App() {
   const [editResaPanel, setEditResaPanel] = useState<any>(null);
   // Planning view mode
   const [calView, setCalView] = useState<"mois"|"semaine"|"jour">("mois");
-  const [planFilter, setPlanFilter] = useState("all"); // filtre Planning indépendant
+  const [planFilter, setPlanFilter] = useState("all"); // filtre Planning legacy (rétrocompat)
   const [planEspaceFilter, setPlanEspaceFilter] = useState("all"); // filtre espace Planning v3
+  const [filtresStatutsEvents, setFiltresStatutsEvents] = useState<string[]>([]); // Point 2 — multi-select Événements
+  const [filtresStatutsPlanning, setFiltresStatutsPlanning] = useState<string[]>([]); // Point 2 — multi-select Planning
   const [calWeekStart, setCalWeekStart] = useState(()=>{ const d=new Date(); d.setDate(d.getDate()-((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d; });
   // Sources IA sections open/collapsed state
   const [srcSections, setSrcSections] = useState({liens:false, menus:true, conditions:false, espaces:false, ton:false});
@@ -1722,16 +1724,21 @@ export default function App() {
     if (sel?.id === id) setSel(null);
     toast("Email reporté ⏰");
   };
-  // Réveil des emails snoozés
+  // Réveil des emails snoozés — au mount + toutes les 60s pour réveil automatique en session longue
   useEffect(() => {
-    const now = new Date().toISOString();
-    const toWake = emails.filter(m => m.snoozedUntil && m.snoozedUntil <= now);
-    if (toWake.length > 0) {
-      const upd = emails.map(m => m.snoozedUntil && m.snoozedUntil <= now ? { ...m, snoozedUntil: null, unread: true } : m);
-      saveEmails(upd);
-      toast(`${toWake.length} email${toWake.length > 1 ? "s" : ""} reporté${toWake.length > 1 ? "s" : ""} reveillé${toWake.length > 1 ? "s" : ""} ⏰`);
-    }
-  }, []);
+    const checkWake = () => {
+      const now = new Date().toISOString();
+      const toWake = emails.filter(m => m.snoozedUntil && m.snoozedUntil <= now);
+      if (toWake.length > 0) {
+        const upd = emails.map(m => m.snoozedUntil && m.snoozedUntil <= now ? { ...m, snoozedUntil: null, unread: true } : m);
+        saveEmails(upd);
+        toast(`${toWake.length} email${toWake.length > 1 ? "s" : ""} reporté${toWake.length > 1 ? "s" : ""} de retour dans la boîte`);
+      }
+    };
+    checkWake();
+    const t = setInterval(checkWake, 60_000);
+    return () => clearInterval(t);
+  }, [emails.length]);
 
   // ─── Sélection multiple ─────────────────────────────────────────────────────
   const toggleSelect = (id: string) => {
@@ -1767,10 +1774,16 @@ export default function App() {
   const filtered = React.useMemo(() => {
     const q = search.toLowerCase();
     let res = emails.filter(m => {
-      // Archivés/snoozés
-      if (m.snoozedUntil && m.snoozedUntil > new Date().toISOString()) return false;
-      if (showArchived) return !!m.archived;
-      if (m.archived) return false;
+      // Filtre "Reportés" — Point 4 : affiche UNIQUEMENT les mails snoozés
+      if (mailFilter === "reported") {
+        if (!m.snoozedUntil || m.snoozedUntil <= new Date().toISOString()) return false;
+        if (m.archived) return false;
+      } else {
+        // Comportement normal : masquer les snoozés et archivés
+        if (m.snoozedUntil && m.snoozedUntil > new Date().toISOString()) return false;
+        if (showArchived) return !!m.archived;
+        if (m.archived) return false;
+      }
       // 3 — Filtre par tag personnalisé
       if (tagFilter && !(emailTags[m.id]||[]).includes(tagFilter)) return false;
       // Recherche full-text (from + subject + body + snippet)
@@ -1976,7 +1989,7 @@ export default function App() {
         newReply = reponse.value;
         setReply(newReply); setEditReply(newReply);
       } else {
-        const msg = reponse.status === "rejected" ? (reponse.reason?.message || "Erreur IA") : "Réponse vide";
+        const msg = reponse.status === "rejected" ? (reponse.reason?.message || "Erreur ARCHANGE") : "Réponse vide";
         toast("ARCHANGE n'a pas pu rédiger la réponse. " + humanError({message: msg}), "err");
       }
 
@@ -2626,7 +2639,7 @@ FORMAT
     {id:"mails",    label:"Mails",       badge:emails.filter(m=>m.unread).length||null},
     {id:"planning", label:"Planning"},
     {id:"stats",    label:"Stats"},
-    {id:"sources",  label:"Sources IA",  badge:(!menusCtx&&!conditionsCtx&&!tonCtx&&!espacesCtx)?"!":null},
+    {id:"sources",  label:"Sources ARCHANGE",  badge:(!menusCtx&&!conditionsCtx&&!tonCtx&&!espacesCtx)?"!":null},
   ];
 
   const inp = {padding:"8px 12px",borderRadius:3,border:"1px solid #EBEAE5",background:"#F5F4F0",color:"#1A1A1E",fontSize:13,width:"100%",outline:"none",transition:"border-color .15s",fontFamily:"'Geist','system-ui',sans-serif"};
@@ -2637,13 +2650,13 @@ FORMAT
 
   return (
     <div style={{display:"flex",height:"100vh",overflow:"hidden",fontFamily:"'Geist','system-ui',sans-serif",background:"#F5F4F0"}}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Geist:wght@300;400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#E0DED7;border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:#B8924F;}.mail-row:hover .mail-actions{opacity:1!important}.mail-row:hover .mail-checkbox{opacity:1!important}.celeste-nav-btn:hover{background:#EBEAE5!important;}.fade-in{animation:fadeIn .25s ease}@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}.snooze-wrap:hover .snooze-menu{display:block!important}.snooze-menu button:hover{background:#FAFAF7!important}.celeste-email-item:hover{background:#FAFAF7!important}@keyframes celesteBlink{0%,50%{opacity:1}51%,100%{opacity:0}}"}</style>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Geist:wght@300;400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#E0DED7;border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:#B8924F;}.mail-row:hover .mail-actions{opacity:1!important}.mail-row:hover .mail-checkbox{opacity:1!important}.celeste-nav-btn:hover{background:#EBEAE5!important;}.fade-in{animation:fadeIn .25s ease}@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}.snooze-wrap:hover .snooze-menu{display:block!important}.snooze-menu button:hover{background:#FAFAF7!important}.celeste-email-item:hover{background:#FAFAF7!important}.plan-statut-wrap>div>button:hover{background:#FAFAF7!important}@keyframes celesteBlink{0%,50%{opacity:1}51%,100%{opacity:0}}"}</style>
 
       {/* Écran de chargement initial */}
       {initializing && (
         <div style={{position:"fixed",inset:0,background:"#1A1A1E",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:9999}}>
           <div style={{fontSize:11,fontWeight:700,color:"#1A1A1E",letterSpacing:"0.28em",textTransform:"uppercase"}}>ARCHANGE</div>
-          <div style={{fontSize:8,color:"#6B6E7E",letterSpacing:"0.18em",textTransform:"uppercase",marginTop:-8}}>{nomEtab} · AGENT IA</div>
+          <div style={{fontSize:8,color:"#6B6E7E",letterSpacing:"0.18em",textTransform:"uppercase",marginTop:-8}}>{nomEtab} · AGENT ARCHANGE</div>
           <Spin s={18}/>
           <div style={{fontSize:11,color:"#6B6E7E",letterSpacing:"0.08em"}}>Chargement en cours…</div>
         </div>
@@ -2741,11 +2754,14 @@ FORMAT
           // Filtrage par recherche
           const q = searchEvt.toLowerCase();
           const matchesSearch = (r: any) => !q || r.nom?.toLowerCase().includes(q) || r.entreprise?.toLowerCase().includes(q) || r.typeEvenement?.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q) || r.dateDebut?.includes(q);
-          // Filtrage par filtre actif (statut sélectionné dans sidebar)
+          // Filtrage par statut (multi-select) — Point 2
           const inStatusFilter = (r: any) => {
-            if (generalFilter === "all" || generalFilter === "arelancer") return true;
-            if (generalFilter === "__none__") return !r.statut || !statuts.find(s=>s.id===r.statut);
-            return (r.statut||"nouveau") === generalFilter;
+            // Cas "Relances" traité séparément via generalFilter (onglet spécial sidebar)
+            if (generalFilter === "arelancer") return true;
+            // Si aucun filtre multi actif ET generalFilter="all" → tous les statuts
+            if (filtresStatutsEvents.length === 0) return true;
+            // Sinon : l'événement doit avoir l'un des statuts cochés
+            return filtresStatutsEvents.includes(r.statut || "nouveau");
           };
           const filteredResas = resas.filter(r => matchesSearch(r) && inStatusFilter(r));
           // Styles communs
@@ -2815,37 +2831,37 @@ FORMAT
               </div>
               {subCollapsed?(
                 <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center"}}>
-                  <button onClick={()=>setGeneralFilter("all")} title="Tous" style={{width:32,height:32,borderRadius:8,border:"none",background:generalFilter==="all"?"rgba(184,146,79,0.15)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:10,height:10,borderRadius:"50%",background:"#C5C3BE"}}/></button>
-                  {statuts.map(s=>(
-                    <button key={s.id} onClick={()=>setGeneralFilter(s.id)} title={s.label} style={{width:32,height:32,borderRadius:8,border:"none",background:generalFilter===s.id?"rgba(184,146,79,0.15)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:10,height:10,borderRadius:"50%",background:s.color}}/></button>
-                  ))}
+                  <button onClick={()=>{setFiltresStatutsEvents([]);setGeneralFilter("all");}} title="Tous" style={{width:32,height:32,borderRadius:8,border:"none",background:(filtresStatutsEvents.length===0&&generalFilter==="all")?"rgba(184,146,79,0.15)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:10,height:10,borderRadius:"50%",background:"#C5C3BE"}}/></button>
+                  {statuts.map(s=>{const active=filtresStatutsEvents.includes(s.id);return (
+                    <button key={s.id} onClick={()=>{const next=active?filtresStatutsEvents.filter(x=>x!==s.id):[...filtresStatutsEvents,s.id];setFiltresStatutsEvents(next);if(generalFilter==="arelancer")setGeneralFilter("all");}} title={s.label} style={{width:32,height:32,borderRadius:8,border:active?`1px solid ${s.color}55`:"none",background:active?"rgba(184,146,79,0.15)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:10,height:10,borderRadius:"50%",background:s.color}}/></button>
+                  );})}
                   <button onClick={()=>setGeneralFilter("arelancer")} title="Relances" style={{width:32,height:32,borderRadius:8,border:"none",background:generalFilter==="arelancer"?"rgba(184,146,79,0.15)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:kpi.enRetard.length>0?"#A84B45":"#6B6B72"}}><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3l1.8 1.3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg></button>
                 </div>
               ):(
                 <>
                   <div style={{padding:"0 10px 10px",flex:1,overflowY:"auto"}}>
-                    <button onClick={()=>setGeneralFilter("all")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:generalFilter==="all"?"#FFFFFF":"transparent",color:generalFilter==="all"?"#1A1A1E":"#6B6B72",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:generalFilter==="all"?500:400,boxShadow:generalFilter==="all"?"0 1px 2px rgba(15,15,20,0.04)":"none",transition:"background .12s ease"}}>
+                    <button onClick={()=>{setFiltresStatutsEvents([]);setGeneralFilter("all");}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:(filtresStatutsEvents.length===0&&generalFilter==="all")?"#FFFFFF":"transparent",color:(filtresStatutsEvents.length===0&&generalFilter==="all")?"#1A1A1E":"#6B6B72",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:(filtresStatutsEvents.length===0&&generalFilter==="all")?500:400,boxShadow:(filtresStatutsEvents.length===0&&generalFilter==="all")?"0 1px 2px rgba(15,15,20,0.04)":"none",transition:"background .12s ease"}}>
                       <div style={{width:9,height:9,borderRadius:"50%",background:"#C5C3BE",flexShrink:0}}/>
                       <span style={{flex:1}}>Tous</span>
-                      <span style={{fontSize:11,color:generalFilter==="all"?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{resas.length}</span>
+                      <span style={{fontSize:11,color:(filtresStatutsEvents.length===0&&generalFilter==="all")?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{resas.length}</span>
                     </button>
                     {statuts.map((s,idx)=>{
                       const count=resas.filter(r=>(r.statut||"nouveau")===s.id).length;
-                      const active=generalFilter===s.id;
+                      const active=filtresStatutsEvents.includes(s.id);
                       return (
                         <div key={s.id}
                           draggable
                           onDragStart={()=>setDragStatutIdx(idx)}
                           onDragOver={e=>{e.preventDefault();}}
                           onDrop={e=>{e.preventDefault();if(dragStatutIdx===null||dragStatutIdx===idx) return;const arr=[...statuts];const [moved]=arr.splice(dragStatutIdx,1);arr.splice(idx,0,moved);saveStatuts(arr); setDragStatutIdx(null);}}
-                          style={{display:"flex",alignItems:"center",gap:10,padding:"8px 11px",borderRadius:8,background:active?"#FFFFFF":"transparent",marginBottom:2,cursor:"grab",userSelect:"none",opacity:dragStatutIdx===idx?0.4:1,boxShadow:active?"0 1px 2px rgba(15,15,20,0.04)":"none"}}>
-                          <button onClick={()=>setGeneralFilter(s.id)} style={{display:"flex",alignItems:"center",gap:10,background:"none",border:"none",color:active?"#1A1A1E":"#6B6B72",fontSize:12.5,textAlign:"left",cursor:"pointer",flex:1,padding:0,fontWeight:active?500:400,fontFamily:"'Geist','system-ui',sans-serif"}}>
-                            <div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+                          style={{display:"flex",alignItems:"center",gap:10,padding:"8px 11px",borderRadius:8,background:active?"#FFFFFF":"transparent",marginBottom:2,cursor:"grab",userSelect:"none",opacity:dragStatutIdx===idx?0.4:1,boxShadow:active?"0 1px 2px rgba(15,15,20,0.04)":"none",border:active?`1px solid ${s.color}30`:"1px solid transparent"}}>
+                          <button onClick={()=>{const next=active?filtresStatutsEvents.filter(x=>x!==s.id):[...filtresStatutsEvents,s.id];setFiltresStatutsEvents(next);if(generalFilter==="arelancer")setGeneralFilter("all");}} style={{display:"flex",alignItems:"center",gap:10,background:"none",border:"none",color:active?"#1A1A1E":"#6B6B72",fontSize:12.5,textAlign:"left",cursor:"pointer",flex:1,padding:0,fontWeight:active?500:400,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                            <div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0,boxShadow:active?`0 0 0 2px ${s.color}30`:"none"}}/>
                             <span>{s.label}</span>
                           </button>
                           <div style={{display:"flex",alignItems:"center",gap:5}}>
                             {count>0&&<span style={{fontSize:11,color:active?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{count}</span>}
-                            <button onClick={e=>{e.stopPropagation();const ok=window.confirm('Supprimer "'+s.label+'" ? Les événements avec ce statut passeront à "Nouveau".');if(!ok) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);if(generalFilter===s.id)setGeneralFilter("all");toast("Statut supprimé");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(27,30,43,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(168,75,69,0.8)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(27,30,43,0.2)")}>✕</button>
+                            <button onClick={e=>{e.stopPropagation();const ok=window.confirm('Supprimer "'+s.label+'" ? Les événements avec ce statut passeront à "Nouveau".');if(!ok) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);setFiltresStatutsEvents(filtresStatutsEvents.filter(x=>x!==s.id));setFiltresStatutsPlanning(filtresStatutsPlanning.filter(x=>x!==s.id));toast("Statut supprimé");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(27,30,43,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(168,75,69,0.8)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(27,30,43,0.2)")}>✕</button>
                           </div>
                         </div>
                       );
@@ -2890,9 +2906,9 @@ FORMAT
                 <div>
                   <h1 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:28,fontWeight:400,color:"#1A1A1E",letterSpacing:"-0.02em",lineHeight:1.1,margin:0}}>Événements</h1>
                   <div style={{fontSize:12.5,color:"#6B6B72",marginTop:4,fontFamily:"'Geist','system-ui',sans-serif"}}>
-                    {generalFilter==="all"?`${resas.length} demande${resas.length!==1?"s":""}`:
-                     generalFilter==="arelancer"?`${relances.length} relance${relances.length!==1?"s":""}`:
-                     `${resas.filter(r=>(r.statut||"nouveau")===generalFilter).length} demande${resas.filter(r=>(r.statut||"nouveau")===generalFilter).length!==1?"s":""} · ${statuts.find(s=>s.id===generalFilter)?.label||""}`}
+                    {generalFilter==="arelancer"?`${relances.length} relance${relances.length!==1?"s":""}`:
+                     filtresStatutsEvents.length===0?`${resas.length} demande${resas.length!==1?"s":""}`:
+                     `${filteredResas.length} demande${filteredResas.length!==1?"s":""} · Filtré par ${filtresStatutsEvents.length} statut${filtresStatutsEvents.length!==1?"s":""}`}
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -2912,6 +2928,20 @@ FORMAT
                 <input value={searchEvt} onChange={e=>setSearchEvt(e.target.value)} placeholder="Rechercher par nom, entreprise, type, date…" style={{width:"100%",padding:"10px 14px 10px 38px",border:"1px solid #EBEAE5",borderRadius:10,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,color:"#1A1A1E",outline:"none",transition:"border-color .12s ease"}}/>
                 {searchEvt&&<button onClick={()=>setSearchEvt("")} style={{position:"absolute",right:36,top:"50%",transform:"translateY(calc(-50% - 9px))",background:"none",border:"none",color:"#A5A4A0",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>×</button>}
               </div>
+              {/* Barre des filtres statuts actifs — Point 2 */}
+              {filtresStatutsEvents.length>0 && (
+                <div style={{padding:"0 28px 14px",flexShrink:0,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                  <span style={{fontSize:11.5,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500,marginRight:2}}>Filtres actifs</span>
+                  {filtresStatutsEvents.map(sid=>{const s=statuts.find(x=>x.id===sid);if(!s)return null;return (
+                    <button key={sid} onClick={()=>setFiltresStatutsEvents(filtresStatutsEvents.filter(x=>x!==sid))} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:100,border:`1px solid ${s.color}33`,background:s.bg||"#F5F4F0",color:s.color,fontSize:11.5,fontWeight:500,cursor:"pointer",fontFamily:"inherit",transition:"all .12s ease"}}>
+                      <div style={{width:6,height:6,borderRadius:"50%",background:s.color}}/>
+                      {s.label}
+                      <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{marginLeft:2,opacity:0.7}}><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                    </button>
+                  );})}
+                  <button onClick={()=>setFiltresStatutsEvents([])} style={{padding:"4px 10px",borderRadius:100,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#6B6B72",fontSize:11.5,fontWeight:500,cursor:"pointer",fontFamily:"inherit",marginLeft:4}}>Réinitialiser les filtres</button>
+                </div>
+              )}
               {/* Hero dashboard 4 KPI */}
               <div style={{padding:"0 28px 22px",flexShrink:0,display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:12}}>
                 <div style={{background:"linear-gradient(180deg, #FEF7F6 0%, #FFFFFF 100%)",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease",position:"relative",overflow:"hidden"}}>
@@ -3138,7 +3168,7 @@ FORMAT
                     {id:"all", label:"Tous les mails", count:emails.filter(m=>m.unread&&!m.archived).length||null,
                       icon:<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="9" rx="1" stroke="currentColor" strokeWidth="1.1"/><path d="M1 4l6 4.5L13 4" stroke="currentColor" strokeWidth="1.1"/></svg>},
                   ].map(item=>(
-                    <button key={item.id} onClick={()=>{setMailFilter("all");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="all"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="all"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="all"&&!showArchived?500:400,transition:"background .12s ease"}}>
+                    <button key={item.id} onClick={()=>{setMailFilter("all");setShowArchived(false);setTagFilter(null);setSearch("");}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="all"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="all"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="all"&&!showArchived?500:400,transition:"background .12s ease"}}>
                       <span style={{color:mailFilter==="all"&&!showArchived?"#1A1A1E":"#6B6E7E",display:"inline-flex"}}>{item.icon}</span>
                       <span style={{flex:1}}>{item.label}</span>
                       <span style={{fontSize:11,color:mailFilter==="all"&&!showArchived?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{item.count||""}</span>
@@ -3173,6 +3203,14 @@ FORMAT
                     <span style={{flex:1}}>Brouillons</span>
                     <span style={{fontSize:11,color:localDrafts.length>0?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{localDrafts.length||""}</span>
                   </button>
+                  {/* Reportés — Point 4 */}
+                  {(()=>{const reportedCount=emails.filter(m=>m.snoozedUntil&&m.snoozedUntil>new Date().toISOString()&&!m.archived).length;return (
+                    <button onClick={()=>{setMailFilter("reported");setShowArchived(false);setTagFilter(null);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="reported"?"#F5F4F0":"transparent",color:mailFilter==="reported"?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="reported"?500:400,transition:"background .12s ease"}}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{color:mailFilter==="reported"?"#1A1A1E":"#6B6E7E"}}><circle cx="7" cy="7.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 5v3l2 1M4 2.5L2 4M10 2.5L12 4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                      <span style={{flex:1}}>Reportés</span>
+                      {reportedCount>0&&<span style={{fontSize:11,color:mailFilter==="reported"?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{reportedCount}</span>}
+                    </button>
+                  );})()}
                   {/* 3 — Filtres par tag personnalisé */}
                   {customTags.length>0&&<>
                     <div style={{height:1,background:"#EBEAE5",margin:"10px 4px"}}/>
@@ -3215,7 +3253,7 @@ FORMAT
                     <div style={{textAlign:"center",padding:"60px 24px",color:"#6B6E7E"}}>
                       <div style={{fontSize:36,marginBottom:12}}>◆</div>
                       <div style={{fontSize:14,color:"#1A1A1E",marginBottom:6}}>Aucune demande en attente</div>
-                      <div style={{fontSize:12}}>Les demandes de réservation détectées par l'IA apparaîtront ici</div>
+                      <div style={{fontSize:12}}>Les demandes de réservation détectées par ARCHANGE apparaîtront ici</div>
                     </div>
                   ):(()=>{
                     let lastType: string|null = null;
@@ -3383,57 +3421,80 @@ FORMAT
                 </div>
               )}
 
-              {/* ── Vue standard ── */}
+              {/* Vue standard */}
               {mailFilter!=="envoyes"&&mailFilter!=="brouillons"&&<>
-              {/* Header liste */}
-              <div style={{padding:"16px 18px 10px",borderBottom:"1px solid #EBEAE5",flexShrink:0}}>
-                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
-                  <h2 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:22,fontWeight:500,letterSpacing:"-0.2px",color:"#1A1A1E",margin:0}}>
-                    {showArchived?"Archives":mailFilter==="nonlus"?"Non lus":mailFilter==="atraiter"?"À traiter":mailFilter==="star"?"Favoris":mailFilter==="flag"?"Flaggés":"Réception"}
-                  </h2>
-                  <span style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}>{filtered.length} message{filtered.length!==1?"s":""}</span>
+              {/* Header liste — v3 Apple Mail 2026 */}
+              <div style={{borderBottom:"1px solid #EBEAE5",flexShrink:0,background:"#FFFFFF"}}>
+                {/* 1. Barre de recherche */}
+                <div style={{padding:"12px 16px 10px",position:"relative"}}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:28,top:"50%",transform:"translateY(-50%)",color:"#A5A4A0",pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  <input value={search} onChange={e=>{setSearch(e.target.value);setDeepResults([]);}} placeholder="Rechercher un mail…" style={{width:"100%",padding:"8px 32px 8px 34px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FAFAF7",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,color:"#1A1A1E",outline:"none",transition:"all .12s ease"}} onFocus={e=>{e.currentTarget.style.borderColor="#B8924F";e.currentTarget.style.background="#FFFFFF";}} onBlur={e=>{e.currentTarget.style.borderColor="#EBEAE5";e.currentTarget.style.background="#FAFAF7";}}/>
+                  {search&&<button onClick={()=>{setSearch("");setDeepResults([]);}} title="Effacer" style={{position:"absolute",right:22,top:"50%",transform:"translateY(-50%)",width:20,height:20,background:"transparent",border:"none",color:"#A5A4A0",cursor:"pointer",borderRadius:4,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:14,lineHeight:1}} onMouseEnter={e=>{e.currentTarget.style.background="#EBEAE5";e.currentTarget.style.color="#1A1A1E";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color="#A5A4A0";}}>×</button>}
                 </div>
-                {/* Recherche style Céleste */}
-                <div style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:"#FAFAF7",border:"1px solid #EBEAE5",borderRadius:2,marginBottom:search&&filtered.length===0?4:8}}>
-                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#6B6E7E" strokeWidth="1.3"><circle cx="5" cy="5" r="3.5"/><path d="M8 8l3 3"/></svg>
-                  <input value={search} onChange={e=>{setSearch(e.target.value);setDeepResults([]);}} placeholder="Rechercher un contact, une date…" style={{border:"none",background:"transparent",outline:"none",fontSize:12,color:"#1A1A1E",width:"100%",fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}/>
-                  {search&&<button onClick={()=>{setSearch("");setDeepResults([]);}} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:13,padding:0}}>×</button>}
-                </div>
-                {/* Proposition recherche approfondie Gmail */}
+                {/* Recherche approfondie Gmail */}
                 {search&&filtered.length===0&&deepResults.length===0&&!deepSearching&&(
-                  <div style={{padding:"6px 0 8px",display:"flex",alignItems:"center",gap:6}}>
-                    <button onClick={()=>lancerDeepSearch(search)} style={{display:"flex",alignItems:"center",gap:5,fontSize:10,padding:"4px 10px",borderRadius:2,border:"1px solid #EBEAE5",background:"transparent",color:"#B8924F",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>
-                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#B8924F" strokeWidth="1.3"><circle cx="5" cy="5" r="3.5"/><path d="M8 8l3 3"/></svg>
+                  <div style={{padding:"0 16px 8px"}}>
+                    <button onClick={()=>lancerDeepSearch(search)} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#B8924F",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>
+                      <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                       Chercher dans tout Gmail
                     </button>
                   </div>
                 )}
                 {deepSearching&&(
-                  <div style={{padding:"6px 0 8px",display:"flex",alignItems:"center",gap:6}}>
-                    <Spin s={10}/>
-                    <span style={{fontSize:10,color:"#6B6E7E",fontFamily:"'Geist','system-ui',sans-serif",fontStyle:"italic"}}>Recherche dans tous vos emails…</span>
+                  <div style={{padding:"0 16px 8px",display:"flex",alignItems:"center",gap:8}}>
+                    <Spin s={11}/>
+                    <span style={{fontSize:11.5,color:"#6B6B72",fontFamily:"'Geist','system-ui',sans-serif"}}>Recherche dans tous vos emails…</span>
                   </div>
                 )}
-                {/* Contrôles */}
-                <div style={{display:"flex",alignItems:"center",gap:4}}>
-                  <select value={sortOrder} onChange={e=>setSortOrder(e.target.value as any)} style={{fontSize:10,border:"1px solid #EBEAE5",borderRadius:2,padding:"3px 6px",background:"#F5F4F0",color:"#6B6E7E",cursor:"pointer",flex:1,fontFamily:"'Geist','system-ui',sans-serif"}}>
-                    <option value="date_desc">↓ Plus récents</option>
-                    <option value="date_asc">↑ Plus anciens</option>
-                    <option value="from">A→Z Expéditeur</option>
-                    <option value="subject">A→Z Objet</option>
-                  </select>
-                  <button onClick={()=>setShowArchived(v=>!v)} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:`1px solid ${showArchived?"#B8924F":"#EBEAE5"}`,background:showArchived?"rgba(184,146,79,0.1)":"transparent",color:showArchived?"#B8924F":"#6B6E7E",cursor:"pointer",whiteSpace:"nowrap"}}>📦</button>
-                  <button onClick={selectedIds.size>0?clearSelection:selectAll} style={{fontSize:10,padding:"3px 8px",borderRadius:2,border:`1px solid ${selectedIds.size>0?"#7BA8C4":"#EBEAE5"}`,background:selectedIds.size>0?"rgba(123,168,196,0.1)":"transparent",color:selectedIds.size>0?"#3B6FCC":"#6B6E7E",cursor:"pointer",whiteSpace:"nowrap"}}>
-                    {selectedIds.size>0?`✓ ${selectedIds.size}`:"Tous"}
-                  </button>
+                {/* 2. Ligne de contexte : catégorie + compteur */}
+                <div style={{padding:"2px 18px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                  <div style={{display:"flex",alignItems:"baseline",gap:10,minWidth:0}}>
+                    <h2 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,letterSpacing:"-0.01em",color:"#1A1A1E",margin:0,whiteSpace:"nowrap"}}>
+                      {(()=>{
+                        if(showArchived) return "Archives";
+                        if(mailFilter==="reported") return "Reportés";
+                        if(mailFilter==="nonlus") return "Non lus";
+                        if(mailFilter==="atraiter") return "À traiter";
+                        if(mailFilter==="star") return "Favoris";
+                        if(mailFilter==="flag") return "Flaggés";
+                        if(mailFilter==="priorites") return "Radar ARCHANGE";
+                        if(tagFilter){const t=customTags.find(x=>x.id===tagFilter);return t?.label||"Tag";}
+                        return "Tous les mails";
+                      })()}
+                    </h2>
+                    <span style={{fontSize:11.5,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>
+                      {(()=>{
+                        // Pour "Tous les mails" : nombre de non-lus, sinon total
+                        if(mailFilter==="all"&&!showArchived&&!tagFilter){
+                          const unread=emails.filter(m=>m.unread&&!m.archived&&(!m.snoozedUntil||m.snoozedUntil<=new Date().toISOString())).length;
+                          return unread>0?`${unread} non lu${unread!==1?"s":""}`:"tout lu";
+                        }
+                        return `${filtered.length} message${filtered.length!==1?"s":""}`;
+                      })()}
+                    </span>
+                  </div>
                 </div>
+                {/* 3. Barre tri + actions */}
+                <div style={{padding:"0 16px 10px",display:"flex",alignItems:"center",gap:6}}>
+                  <button onClick={selectedIds.size>0?clearSelection:selectAll} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:`1px solid ${selectedIds.size>0?"#B8924F":"#EBEAE5"}`,background:selectedIds.size>0?"#F4EEDF":"#FFFFFF",color:selectedIds.size>0?"#B8924F":"#6B6B72",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,fontVariantNumeric:"tabular-nums"}}>
+                    {selectedIds.size>0?`${selectedIds.size} sélectionné${selectedIds.size>1?"s":""}`:"Tout sélectionner"}
+                  </button>
+                  <div style={{flex:1}}/>
+                  <select value={sortOrder} onChange={e=>setSortOrder(e.target.value as any)} style={{fontSize:11.5,border:"1px solid #EBEAE5",borderRadius:7,padding:"5px 26px 5px 10px",background:"#FFFFFF url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'%3E%3Cpath d='M2 3.5L5 6.5L8 3.5' stroke='%236B6B72' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\") no-repeat right 8px center",color:"#1A1A1E",cursor:"pointer",appearance:"none",WebkitAppearance:"none",fontFamily:"'Geist','system-ui',sans-serif",outline:"none",fontWeight:500}}>
+                    <option value="date_desc">Plus récent</option>
+                    <option value="date_asc">Plus ancien</option>
+                    <option value="from">Expéditeur (A→Z)</option>
+                    <option value="subject">Objet (A→Z)</option>
+                  </select>
+                </div>
+                {/* Actions groupées (si sélection) */}
                 {selectedIds.size>0&&(
-                  <div style={{display:"flex",gap:4,paddingTop:6,flexWrap:"wrap"}}>
-                    <button onClick={bulkMarkRead} style={{fontSize:10,padding:"2px 7px",borderRadius:2,border:"1px solid #EBEAE5",background:"#F5F4F0",color:"#4A4A52",cursor:"pointer"}}>● Lu</button>
-                    <button onClick={bulkMarkUnread} style={{fontSize:10,padding:"2px 7px",borderRadius:2,border:"1px solid #EBEAE5",background:"#F5F4F0",color:"#4A4A52",cursor:"pointer"}}>○ Non lu</button>
-                    <button onClick={bulkATraiter} style={{fontSize:10,padding:"2px 7px",borderRadius:2,border:"1px solid #EBEAE5",background:"#F5F4F0",color:"#4A4A52",cursor:"pointer"}}>📋</button>
-                    <button onClick={bulkArchive} style={{fontSize:10,padding:"2px 7px",borderRadius:2,border:"1px solid #EBEAE5",background:"#F5F4F0",color:"#4A4A52",cursor:"pointer"}}>📦</button>
-                    <button onClick={bulkDelete} style={{fontSize:10,padding:"2px 7px",borderRadius:2,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",cursor:"pointer"}}>✕</button>
+                  <div style={{display:"flex",gap:4,padding:"0 16px 10px",flexWrap:"wrap"}}>
+                    <button onClick={bulkMarkRead} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.3"/></svg>Marquer lu</button>
+                    <button onClick={bulkMarkUnread} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" fill="currentColor"/></svg>Non lu</button>
+                    <button onClick={bulkATraiter} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><rect x="2.5" y="1.5" width="9" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M5 5h4M5 7.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>À traiter</button>
+                    <button onClick={bulkArchive} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="3" rx="0.7" stroke="currentColor" strokeWidth="1.2"/><rect x="2.5" y="5.5" width="9" height="7" rx="0.7" stroke="currentColor" strokeWidth="1.2"/></svg>Archiver</button>
+                    <button onClick={bulkDelete} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid rgba(168,75,69,0.3)",background:"#FFFFFF",color:"#A84B45",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><path d="M2.5 4h9M5.5 4V2.5h3V4M4 4l0.5 8a1 1 0 001 1h3a1 1 0 001-1L10 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>Supprimer</button>
                   </div>
                 )}
               </div>
@@ -3507,33 +3568,68 @@ FORMAT
                         {/* Flags fonctionnels */}
                         {em.aTraiter&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:100,background:"rgba(184,146,79,0.1)",color:"#B8924F",border:"1px solid rgba(184,146,79,0.25)",letterSpacing:"0.05em",textTransform:"uppercase",fontWeight:600}}>À traiter</span>}
                         {(em.flags||[]).includes("star")&&<span style={{fontSize:12,color:"#B8924F"}}>✦</span>}
-                        {em.snoozedUntil&&<span style={{fontSize:11,color:"#7C3AED"}}>⏰</span>}
+                        {em.snoozedUntil&&(()=>{const d=new Date(em.snoozedUntil);const label=d.toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" · "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}).replace(":","h");return <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,padding:"2px 7px",borderRadius:100,background:"rgba(184,146,79,0.1)",color:"#B8924F",border:"1px solid rgba(184,146,79,0.25)",fontWeight:500,fontVariantNumeric:"tabular-nums"}}><svg width="9" height="9" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M7 5.5v2l1.5 1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>{label}</span>;})()}
                         {/* 5 — Indicateur brouillon de réponse en cours */}
                         {(()=>{try{return localStorage.getItem(`draft_reply_${em.id}`);}catch{return null;}})()&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:100,background:"#EFF6FF",color:"#3B82F6",border:"1px solid #BFDBFE",letterSpacing:"0.04em",textTransform:"uppercase",fontWeight:600}}>Brouillon</span>}
                         {/* 3 — Badges tags personnalisés */}
                         {(emailTags[em.id]||[]).map((tid:string)=>{const t=customTags.find(x=>x.id===tid);return t?<span key={tid} style={{fontSize:9.5,padding:"2px 8px",borderRadius:100,background:t.color+"1A",color:t.color,border:`1px solid ${t.color}40`,fontWeight:600,letterSpacing:"0.03em"}}>{t.label}</span>:null;})}
                       </div>
                     </div>
-                    {/* Barre d'actions au survol */}
-                    <div className="mail-actions" style={{display:"flex",gap:2,opacity:0,transition:"opacity .15s",borderTop:"1px solid #EBEAE5",padding:"4px 10px",background:isActive?"rgba(245,244,240,0.6)":"rgba(250,250,247,0.6)",justifyContent:"flex-end",alignItems:"center",borderRadius:"0 0 10px 10px"}}>
-                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title="Favori" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:(em.flags||[]).includes("star")?1:0.4,padding:"4px 6px",borderRadius:6}}>✦</button>
-                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title="À traiter" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:em.aTraiter?1:0.4,padding:"4px 6px",borderRadius:6}}>📋</button>
-                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title="Lu/Non lu" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:0.45,padding:"4px 6px",borderRadius:6,color:"#1A1A1E"}}>●</button>
-                      <button onClick={e=>{e.stopPropagation();archiveEmail(em.id);}} title="Archiver" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:0.55,padding:"4px 6px",borderRadius:6}}>📦</button>
+                    {/* Barre d'actions au survol — v3 */}
+                    <div className="mail-actions" style={{display:"flex",gap:3,opacity:0,transition:"opacity .15s ease",borderTop:"1px solid #EBEAE5",padding:"5px 10px",background:isActive?"rgba(245,244,240,0.7)":"rgba(250,250,247,0.7)",justifyContent:"flex-end",alignItems:"center",borderRadius:"0 0 10px 10px"}}>
+                      {(()=>{const starred=(em.flags||[]).includes("star");return (
+                      <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title={starred?"Retirer des favoris":"Ajouter aux favoris"} style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:starred?"rgba(184,146,79,0.12)":"transparent",color:starred?"#B8924F":"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease,color .12s ease"}} onMouseEnter={e=>{if(!starred)e.currentTarget.style.background="rgba(184,146,79,0.08)";e.currentTarget.style.color="#B8924F";}} onMouseLeave={e=>{if(!starred){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#6B6B72";}}}>
+                        <svg width="13" height="13" viewBox="0 0 14 14" fill={starred?"currentColor":"none"}><path d="M7 1.5l1.8 3.7 4 0.6-2.9 2.8 0.7 4L7 10.7l-3.6 1.9 0.7-4L1.2 5.8l4-0.6L7 1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+                      </button>
+                      );})()}
+                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title={em.aTraiter?"Retirer de À traiter":"Marquer À traiter"} style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:em.aTraiter?"rgba(107,138,91,0.14)":"transparent",color:em.aTraiter?"#3F5B32":"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"all .12s ease"}} onMouseEnter={e=>{if(!em.aTraiter)e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{if(!em.aTraiter)e.currentTarget.style.background="transparent";}}>
+                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="2.5" y="1.5" width="9" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M5 5h4M5 7.5h4M5 10h2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                      </button>
+                      <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title={em.unread?"Marquer comme lu":"Marquer comme non lu"} style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:"transparent",color:em.unread?"#1A1A1E":"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none">{em.unread?<circle cx="7" cy="7" r="3" fill="currentColor"/>:<circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.2"/>}</svg>
+                      </button>
+                      <button onClick={e=>{e.stopPropagation();archiveEmail(em.id);}} title="Archiver" style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:"transparent",color:"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="3" rx="0.7" stroke="currentColor" strokeWidth="1.2"/><rect x="2.5" y="5.5" width="9" height="7" rx="0.7" stroke="currentColor" strokeWidth="1.2"/><path d="M5.5 8h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                      </button>
+                      {/* SNOOZE — menu moderne v3 */}
                       <div style={{position:"relative"}} className="snooze-wrap">
-                        <button onClick={e=>{e.stopPropagation(); const el=e.currentTarget.nextElementSibling as HTMLElement; if(el) el.style.display=el.style.display==="block"?"none":"block";}} title="Reporter" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:0.55,padding:"4px 6px",borderRadius:6}}>⏰</button>
-                        <div className="snooze-menu" style={{display:"none",position:"absolute",bottom:"100%",right:0,background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:8,boxShadow:"0 4px 16px rgba(15,15,20,0.08)",zIndex:100,minWidth:150,padding:5}}>
-                          {[{label:"Dans 1 heure",hours:1},{label:"Ce soir 18h",tonight:18},{label:"Demain matin",days:1},{label:"Dans 3 jours",days:3},{label:"Dans 1 semaine",days:7}].map(opt=>{
+                        <button onClick={e=>{e.stopPropagation(); const el=e.currentTarget.nextElementSibling as HTMLElement; if(el) el.style.display=el.style.display==="block"?"none":"block";}} title="Reporter" style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:em.snoozedUntil?"rgba(184,146,79,0.14)":"transparent",color:em.snoozedUntil?"#B8924F":"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}} onMouseEnter={e=>{if(!em.snoozedUntil)e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{if(!em.snoozedUntil)e.currentTarget.style.background="transparent";}}>
+                          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7.5" r="4.5" stroke="currentColor" strokeWidth="1.2"/><path d="M7 5.5v2l1.5 1M3.5 2.5L2 4M10.5 2.5L12 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                        </button>
+                        <div className="snooze-menu" style={{display:"none",position:"absolute",bottom:"calc(100% + 4px)",right:0,background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:10,boxShadow:"0 8px 24px rgba(15,15,20,0.1), 0 0 0 1px rgba(15,15,20,0.02)",zIndex:100,minWidth:200,padding:5,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                          <div style={{padding:"6px 10px 4px",fontSize:10.5,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500}}>Reporter à</div>
+                          {[
+                            {label:"Ce soir",sub:"18h",tonight:18},
+                            {label:"Demain matin",sub:"9h",days:1,h:9},
+                            {label:"Dans 3 jours",sub:"9h",days:3,h:9},
+                            {label:"La semaine prochaine",sub:"lundi 9h",nextMonday:true},
+                          ].map(opt=>{
                             const d = new Date();
-                            if(opt.hours) d.setHours(d.getHours()+opt.hours);
-                            else if(opt.tonight) { d.setDate(d.getDate()+(d.getHours()>=opt.tonight?1:0)); d.setHours(opt.tonight,0,0,0); }
-                            else if(opt.days) { d.setDate(d.getDate()+opt.days); d.setHours(8,0,0,0); }
-                            return <button key={opt.label} onClick={e=>{e.stopPropagation();snoozeEmail(em.id,d.toISOString());}} style={{display:"block",width:"100%",textAlign:"left",padding:"7px 11px",fontSize:12,color:"#4A4A52",background:"none",border:"none",cursor:"pointer",borderRadius:5}}>{opt.label}</button>;
+                            if((opt as any).tonight) { d.setDate(d.getDate()+(d.getHours()>=(opt as any).tonight?1:0)); d.setHours((opt as any).tonight,0,0,0); }
+                            else if((opt as any).days) { d.setDate(d.getDate()+(opt as any).days); d.setHours((opt as any).h||9,0,0,0); }
+                            else if((opt as any).nextMonday) { const cd=new Date(); const addDays=((8-cd.getDay())%7)||7; d.setDate(d.getDate()+addDays); d.setHours(9,0,0,0); }
+                            const label=d.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})+" · "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}).replace(":","h");
+                            return <button key={opt.label} onClick={e=>{e.stopPropagation();snoozeEmail(em.id,d.toISOString()); const menu=(e.currentTarget.closest(".snooze-menu") as HTMLElement); if(menu) menu.style.display="none";}} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,width:"100%",padding:"7px 10px",fontSize:12.5,color:"#1A1A1E",background:"none",border:"none",cursor:"pointer",borderRadius:6,fontFamily:"inherit",textAlign:"left"}}>
+                              <span style={{fontWeight:500}}>{opt.label}</span>
+                              <span style={{fontSize:11,color:"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{label}</span>
+                            </button>;
                           })}
+                          <div style={{height:1,background:"#EBEAE5",margin:"4px 2px"}}/>
+                          <div style={{padding:"4px 10px 5px"}}>
+                            <label style={{fontSize:10.5,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500,display:"block",marginBottom:4}}>Choisir une date</label>
+                            <input type="datetime-local" onClick={e=>e.stopPropagation()} onChange={e=>{if(!e.target.value)return;const d=new Date(e.target.value);if(isNaN(d.getTime()))return;snoozeEmail(em.id,d.toISOString()); const menu=(e.currentTarget.closest(".snooze-menu") as HTMLElement); if(menu) menu.style.display="none";}} style={{width:"100%",padding:"7px 10px",border:"1px solid #EBEAE5",borderRadius:7,background:"#FFFFFF",fontFamily:"inherit",fontSize:12,color:"#1A1A1E",outline:"none",fontVariantNumeric:"tabular-nums"}}/>
+                          </div>
                         </div>
                       </div>
+                      {em.snoozedUntil && (
+                        <button onClick={e=>{e.stopPropagation();const upd=emails.map(m=>m.id===em.id?{...m,snoozedUntil:null}:m);saveEmails(upd);toast("Report annulé");}} title="Annuler le report" style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:"transparent",color:"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+                          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M4 4l-2 3 2 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      )}
                       <div style={{flex:1}}/>
-                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer" style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#A84B45",padding:"4px 7px",borderRadius:6,opacity:0.75}}>✕</button>
+                      <button onClick={e=>{e.stopPropagation();deleteEmailWithUndo(em);}} title="Supprimer" style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:"transparent",color:"#A84B45",display:"inline-flex",alignItems:"center",justifyContent:"center",opacity:0.75,transition:"all .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.background="#FAEDEB";e.currentTarget.style.opacity="1";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.opacity="0.75";}}>
+                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 4h9M5.5 4V2.5h3V4M4 4l0.5 8a1 1 0 001 1h3a1 1 0 001-1L10 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
                     </div>
                   </div>
                 );})}
@@ -3640,7 +3736,7 @@ FORMAT
                       <button onClick={()=>setShowTagMenu(showTagMenu===sel.id?null:sel.id)} title="Tags" style={{width:30,height:30,borderRadius:6,border:"none",background:showTagMenu===sel.id?"rgba(184,146,79,0.1)":"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>🏷️</button>
                       {showTagMenu===sel.id&&(
                         <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",zIndex:300,background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:10,boxShadow:"0 8px 24px rgba(15,15,20,0.10)",minWidth:200,padding:8}}>
-                          {customTags.length===0&&<div style={{fontSize:11.5,color:"#A5A4A0",padding:"6px 10px"}}>Aucun tag — créez-en dans Sources IA</div>}
+                          {customTags.length===0&&<div style={{fontSize:11.5,color:"#A5A4A0",padding:"6px 10px"}}>Aucun tag — créez-en dans Sources ARCHANGE</div>}
                           {customTags.map(t=>{const applied=(emailTags[sel.id]||[]).includes(t.id);return(
                             <div key={t.id} onClick={()=>{const cur=emailTags[sel.id]||[];saveEmailTags({...emailTags,[sel.id]:applied?cur.filter((x:string)=>x!==t.id):[...cur,t.id]});}} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",borderRadius:6,cursor:"pointer",background:applied?"rgba(184,146,79,0.08)":"transparent",transition:"background .12s ease"}}>
                               <span style={{width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0,boxShadow:applied?"0 0 0 2px #1A1A1E":undefined}}/>
@@ -3828,17 +3924,17 @@ FORMAT
                           <div style={grpLabel}>Client</div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
                             <div>
-                              <label style={fieldLabel(!!planErrors.prenom)}>Prénom<span style={req}>*</span>{planFormAI.prenom&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <label style={fieldLabel(!!planErrors.prenom)}>Prénom<span style={req}>*</span>{planFormAI.prenom&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                               <input value={planForm.prenom||""} onChange={e=>setPlanForm({...planForm,prenom:e.target.value})} placeholder="Prénom" style={{...inputStyle,borderColor:planErrors.prenom?"#A84B45":"#EBEAE5"}}/>
                               {planErrors.prenom&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.prenom}</div>}
                             </div>
                             <div>
-                              <label style={fieldLabel(!!planErrors.nom)}>Nom<span style={req}>*</span>{planFormAI.nom&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <label style={fieldLabel(!!planErrors.nom)}>Nom<span style={req}>*</span>{planFormAI.nom&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                               <input value={planForm.nom||""} onChange={e=>setPlanForm({...planForm,nom:e.target.value})} placeholder="Nom" style={{...inputStyle,borderColor:planErrors.nom?"#A84B45":"#EBEAE5"}}/>
                               {planErrors.nom&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.nom}</div>}
                             </div>
                             <div>
-                              <label style={fieldLabel(false)}>Société{planFormAI.entreprise&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <label style={fieldLabel(false)}>Société{planFormAI.entreprise&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                               <input value={planForm.entreprise||""} onChange={e=>setPlanForm({...planForm,entreprise:e.target.value})} placeholder="Optionnel" style={inputStyle}/>
                             </div>
                           </div>
@@ -3849,17 +3945,17 @@ FORMAT
                           <div style={grpLabel}>Quand</div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
                             <div>
-                              <label style={fieldLabel(!!planErrors.dateDebut)}>Date<span style={req}>*</span>{planFormAI.dateDebut&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <label style={fieldLabel(!!planErrors.dateDebut)}>Date<span style={req}>*</span>{planFormAI.dateDebut&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                               <DatePicker value={planForm.dateDebut||""} onChange={v=>setPlanForm({...planForm,dateDebut:v})}/>
                               {planErrors.dateDebut&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.dateDebut}</div>}
                             </div>
                             <div>
-                              <label style={fieldLabel(!!planErrors.heureDebut)}>Heure de début<span style={req}>*</span>{planFormAI.heureDebut&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <label style={fieldLabel(!!planErrors.heureDebut)}>Heure de début<span style={req}>*</span>{planFormAI.heureDebut&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                               <TimePicker value={planForm.heureDebut||""} onChange={v=>setPlanForm({...planForm,heureDebut:v})} placeholder="Heure de début"/>
                               {planErrors.heureDebut&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.heureDebut}</div>}
                             </div>
                             <div>
-                              <label style={fieldLabel(!!planErrors.heureFin)}>Heure de fin<span style={req}>*</span>{planFormAI.heureFin&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <label style={fieldLabel(!!planErrors.heureFin)}>Heure de fin<span style={req}>*</span>{planFormAI.heureFin&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                               <TimePicker value={planForm.heureFin||""} onChange={v=>setPlanForm({...planForm,heureFin:v})} placeholder="Heure de fin"/>
                               {planErrors.heureFin&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.heureFin}</div>}
                             </div>
@@ -3871,12 +3967,12 @@ FORMAT
                           <div style={grpLabel}>Invités</div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
                             <div>
-                              <label style={fieldLabel(!!planErrors.nombrePersonnes)}>Nombre de personnes<span style={req}>*</span>{planFormAI.nombrePersonnes&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <label style={fieldLabel(!!planErrors.nombrePersonnes)}>Nombre de personnes<span style={req}>*</span>{planFormAI.nombrePersonnes&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                               <input type="number" min="1" value={planForm.nombrePersonnes||""} onChange={e=>setPlanForm({...planForm,nombrePersonnes:e.target.value})} placeholder="Ex: 50" style={{...inputStyle,fontVariantNumeric:"tabular-nums",borderColor:planErrors.nombrePersonnes?"#A84B45":"#EBEAE5"}}/>
                               {planErrors.nombrePersonnes&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.nombrePersonnes}</div>}
                             </div>
                             <div>
-                              <label style={fieldLabel(false)}>Type d'événement{planFormAI.typeEvenement&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <label style={fieldLabel(false)}>Type d'événement{planFormAI.typeEvenement&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                               <input value={planForm.typeEvenement||""} onChange={e=>setPlanForm({...planForm,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={inputStyle}/>
                             </div>
                           </div>
@@ -3887,15 +3983,29 @@ FORMAT
                           <div style={grpLabel}>Lieu & budget</div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
                             <div>
-                              <label style={fieldLabel(false)}>Espace{planFormAI.espaceId&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <label style={fieldLabel(false)}>Espace{planFormAI.espaceId&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                               <select value={planForm.espaceId||espacesDyn[0]?.id||""} onChange={e=>setPlanForm({...planForm,espaceId:e.target.value})} style={inputStyle}>
                                 {ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}
                               </select>
                             </div>
                             <div>
-                              <label style={fieldLabel(false)}>Budget client{planFormAI.budget&&<span style={aiBadge}>✦ IA</span>}</label>
+                              <label style={fieldLabel(false)}>Budget client{planFormAI.budget&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                               <input value={planForm.budget||""} onChange={e=>setPlanForm({...planForm,budget:e.target.value})} placeholder="Ex: 5 000€, 45€/pers…" style={inputStyle}/>
                             </div>
+                          </div>
+                        </div>
+
+                        {/* GROUPE STATUT — Point 1 */}
+                        <div style={{marginBottom:18}}>
+                          <div style={grpLabel}>Statut</div>
+                          <div>
+                            <label style={fieldLabel(false)}>
+                              État de la demande
+                              {extracted?.statutSuggere && planForm.statut===extracted.statutSuggere && <span style={aiBadge}>✦ ARCHANGE</span>}
+                            </label>
+                            <select value={planForm.statut||"nouveau"} onChange={e=>setPlanForm({...planForm,statut:e.target.value})} style={inputStyle}>
+                              {statuts.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+                            </select>
                           </div>
                         </div>
 
@@ -3903,7 +4013,7 @@ FORMAT
                         <div>
                           <div style={grpLabel}>Notes</div>
                           <div>
-                            <label style={{...fieldLabel(false),marginBottom:0,display:planFormAI.notes?"inline-flex":"none"}}>{planFormAI.notes&&<span style={aiBadge}>✦ IA</span>}</label>
+                            <label style={{...fieldLabel(false),marginBottom:0,display:planFormAI.notes?"inline-flex":"none"}}>{planFormAI.notes&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
                             <textarea value={planForm.notes||""} onChange={e=>setPlanForm({...planForm,notes:e.target.value})} rows={3} placeholder="Informations complémentaires, demandes spécifiques…" style={{...inputStyle,resize:"vertical",minHeight:64,lineHeight:1.55}}/>
                           </div>
                         </div>
@@ -4098,10 +4208,8 @@ FORMAT
 
           const resasForDate = (ds:string) => resas.filter(r => {
             if(r.dateDebut!==ds) return false;
-            if(planFilter!=="all") {
-              if(planFilter==="__none__") { if(r.statut&&statuts.find(s=>s.id===r.statut)) return false; }
-              else if((r.statut||"nouveau")!==planFilter) return false;
-            }
+            // Filtre statut multi — Point 2
+            if(filtresStatutsPlanning.length > 0 && !filtresStatutsPlanning.includes(r.statut||"nouveau")) return false;
             if(planEspaceFilter!=="all" && r.espaceId!==planEspaceFilter) return false;
             return true;
           });
@@ -4232,11 +4340,31 @@ FORMAT
                     <span style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",marginLeft:6,fontVariantNumeric:"tabular-nums"}}>{periodLabel}</span>
                   </div>
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    <select value={planFilter} onChange={e=>setPlanFilter(e.target.value)} style={{padding:"7px 28px 7px 12px",borderRadius:8,border:`1px solid ${planFilter!=="all"?"#B8924F":"#EBEAE5"}`,background:`${planFilter!=="all"?"#F4EEDF":"#FFFFFF"} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'%3E%3Cpath d='M2 3.5L5 6.5L8 3.5' stroke='%236B6B72' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center`,appearance:"none",WebkitAppearance:"none",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,color:planFilter!=="all"?"#B8924F":"#1A1A1E",cursor:"pointer",outline:"none",fontWeight:planFilter!=="all"?500:400}}>
-                      <option value="all">Tous les statuts</option>
-                      {statuts.map(s=>(<option key={s.id} value={s.id}>{s.label}</option>))}
-                      <option value="__none__">Sans statut</option>
-                    </select>
+                    <div style={{position:"relative"}} className="plan-statut-wrap">
+                      <button onClick={e=>{const el=e.currentTarget.nextElementSibling as HTMLElement;if(el)el.style.display=el.style.display==="block"?"none":"block";}} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${filtresStatutsPlanning.length>0?"#B8924F":"#E0DED7"}`,background:filtresStatutsPlanning.length>0?"#F4EEDF":"#FFFFFF",color:filtresStatutsPlanning.length>0?"#B8924F":"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,fontWeight:filtresStatutsPlanning.length>0?500:400,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+                        <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2 3h10M4 7h6M6 11h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                        {filtresStatutsPlanning.length===0?"Tous les statuts":`${filtresStatutsPlanning.length} statut${filtresStatutsPlanning.length>1?"s":""}`}
+                        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:0.6}}><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                      <div style={{display:"none",position:"absolute",top:"calc(100% + 6px)",right:0,background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:10,boxShadow:"0 6px 24px rgba(15,15,20,0.08)",zIndex:50,minWidth:220,padding:6,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                        {statuts.map(s=>{const active=filtresStatutsPlanning.includes(s.id);return (
+                          <button key={s.id} onClick={()=>{const next=active?filtresStatutsPlanning.filter(x=>x!==s.id):[...filtresStatutsPlanning,s.id];setFiltresStatutsPlanning(next);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"7px 10px",borderRadius:6,border:"none",background:active?"#F5F4F0":"transparent",color:"#1A1A1E",fontFamily:"inherit",fontSize:12.5,textAlign:"left",cursor:"pointer",transition:"background .12s ease"}}>
+                            <div style={{width:14,height:14,borderRadius:4,border:`1.5px solid ${active?s.color:"#C5C3BE"}`,background:active?s.color:"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                              {active&&<svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-4" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            </div>
+                            <div style={{width:7,height:7,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+                            <span style={{flex:1,fontWeight:active?500:400}}>{s.label}</span>
+                          </button>
+                        );})}
+                        {filtresStatutsPlanning.length>0 && <>
+                          <div style={{height:1,background:"#EBEAE5",margin:"4px 2px"}}/>
+                          <button onClick={()=>setFiltresStatutsPlanning([])} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",borderRadius:6,border:"none",background:"transparent",color:"#6B6B72",fontFamily:"inherit",fontSize:12,textAlign:"left",cursor:"pointer"}}>
+                            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                            Réinitialiser les filtres
+                          </button>
+                        </>}
+                      </div>
+                    </div>
                     <select value={planEspaceFilter} onChange={e=>setPlanEspaceFilter(e.target.value)} style={{padding:"7px 28px 7px 12px",borderRadius:8,border:`1px solid ${planEspaceFilter!=="all"?"#B8924F":"#EBEAE5"}`,background:`${planEspaceFilter!=="all"?"#F4EEDF":"#FFFFFF"} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'%3E%3Cpath d='M2 3.5L5 6.5L8 3.5' stroke='%236B6B72' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center`,appearance:"none",WebkitAppearance:"none",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,color:planEspaceFilter!=="all"?"#B8924F":"#1A1A1E",cursor:"pointer",outline:"none",fontWeight:planEspaceFilter!=="all"?500:400}}>
                       <option value="all">Tous les espaces</option>
                       {ESPACES.map(e=>(<option key={e.id} value={e.id}>{e.nom}</option>))}
@@ -4440,7 +4568,7 @@ FORMAT
 
             {/* ── Header fixe — titre + stats ── */}
             <div style={{padding:"24px 28px 16px",flexShrink:0,borderBottom:"1px solid #EBEAE5",background:"#F5F4F0"}}>
-              <div style={{fontSize:22,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.02em"}}>Sources IA</div>
+              <div style={{fontSize:22,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.02em"}}>Sources ARCHANGE</div>
               <div style={{fontSize:12,color:"#6B6E7E",marginTop:4,marginBottom:14}}>Tout ce que vous écrivez ici est transmis à ARCHANGE à chaque génération.</div>
 
               {/* C4 — Bandeau onboarding si aucune source n'est configurée */}
@@ -4484,7 +4612,7 @@ FORMAT
                     <span style={{fontSize:13,fontWeight:700,color:"#1A1A1E"}}>Identité de l'établissement</span>
                     <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#FEF3C7",color:"#92400E",fontWeight:600}}>Multi-compte</span>
                   </div>
-                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Nom, adresse, email — personnalise toute l'IA et la sidebar</div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Nom, adresse, email — personnalise tout ARCHANGE et la sidebar</div>
                 </div>
                 <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["etablissement"]?"▲":"▼"}</span>
               </div>
@@ -4493,7 +4621,7 @@ FORMAT
                   <div>
                     <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>🏷 Nom de l'établissement</label>
                     <input value={nomEtab} onChange={e=>setNomEtab(e.target.value)} onBlur={()=>saveNomEtab(nomEtab)} placeholder="Ex : Brasserie RÊVA, Le Comptoir du Port…" style={{...inp,fontSize:14,fontWeight:600}}/>
-                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>Utilisé dans tous les prompts IA et la signature email</div>
+                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>Utilisé dans tous les prompts ARCHANGE et la signature email</div>
                   </div>
                   <div>
                     <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📍 Adresse</label>
@@ -4629,7 +4757,7 @@ FORMAT
                   </div>
 
                   <div style={{fontSize:11,color:"#6B6E7E",padding:"8px 12px",background:"#F5F4F0",borderRadius:8}}>
-                    💡 Les espaces ci-dessus remplacent les salles codées en dur. L'IA les utilisera pour les attributions et les réponses.
+                    💡 Les espaces ci-dessus remplacent les salles codées en dur. ARCHANGE les utilisera pour les attributions et les réponses.
                   </div>
                 </div>
               )}
@@ -4735,6 +4863,8 @@ FORMAT
                             if (filtered.length>0) newEmailTags[eid]=filtered;
                           });
                           saveEmailTags(newEmailTags);
+                          // Point 6 — Si ce tag était filtré, reset le filtre
+                          if (tagFilter===t.id) setTagFilter(null);
                           toast("Tag supprimé");
                         }} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"2px 4px",borderRadius:4,lineHeight:1}}>✕</button>
                       </div>
@@ -4832,7 +4962,7 @@ FORMAT
               {([
                 ["infos","Infos",null,<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="1.3"/><path d="M4 5h6M4 7h6M4 9h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>],
                 ["mails","Mails",linkedCount||null,<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M1 4l6 4.5L13 4M1 3.5h12v7H1z" stroke="currentColor" strokeWidth="1.3"/></svg>],
-                ["noteIA","Note IA",null,<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1v2M7 11v2M2.5 2.5l1.5 1.5M10 10l1.5 1.5M1 7h2M11 7h2M2.5 11.5l1.5-1.5M10 4l1.5-1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
+                ["noteIA","Note ARCHANGE",null,<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1v2M7 11v2M2.5 2.5l1.5 1.5M10 10l1.5 1.5M1 7h2M11 7h2M2.5 11.5l1.5-1.5M10 4l1.5-1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
                 ["relances","Relances",relancesCount||null,<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
               ] as const).map(([tab,label,cnt,icon])=>{
                 const active = resaOnglet === tab;
@@ -5018,7 +5148,7 @@ FORMAT
                   Envoyer un mail
                 </button>
                 <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(resa);}} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",justifyContent:"center"}}>
-                  <span style={{fontSize:13,color:"#B8924F"}}>✦</span> Relance IA
+                  <span style={{fontSize:13,color:"#B8924F"}}>✦</span> Relance ARCHANGE
                 </button>
               </div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -5513,7 +5643,7 @@ FORMAT
             {/* Header */}
             <div style={{padding:"20px 24px",borderBottom:"1px solid #E5E7EB",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
               <div>
-                <div style={{fontSize:16,fontWeight:700,color:"#111111"}}>✨ Mail de relance IA</div>
+                <div style={{fontSize:16,fontWeight:700,color:"#111111"}}>✨ Mail de relance ARCHANGE</div>
                 <div style={{fontSize:12,color:"#9CA3AF",marginTop:3}}>{showRelanceIA.nom}{showRelanceIA.email ? " · " + showRelanceIA.email : ""}</div>
               </div>
               <button onClick={()=>{setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"#F3F4F6",color:"#111111",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:300}}>×</button>
