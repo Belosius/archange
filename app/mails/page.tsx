@@ -3558,48 +3558,98 @@ FORMAT
                     )}
                   </div>
 
-                  {/* ── Encart Lecture par Archange — style Céleste ── */}
+                  {/* ── Encart Lecture par Archange — v3 Apple Mail 2026 ── */}
                   {extracted?.isReservation && !showPlanForm && (()=>{
                     const alreadyIn = resas.find(r =>
                       emailResaLinks[sel?.id || ""] === r.id ||
                       (r.email && extracted.email && r.email.toLowerCase() === extracted.email.toLowerCase())
                     );
                     const espace = ESPACES.find(e=>e.id===extracted.espaceDetecte);
+                    const labelStyle = {fontSize:10.5,color:"#A5A4A0",textTransform:"uppercase" as const,letterSpacing:"0.06em",fontWeight:500,fontFamily:"'Geist','system-ui',sans-serif"};
+                    const valueStyle = {fontSize:14,color:"#1A1A1E",fontWeight:500,letterSpacing:"-0.005em",fontFamily:"'Geist','system-ui',sans-serif",lineHeight:1.35};
                     return (
-                      <div style={{marginBottom:16,padding:"18px 20px",background:"#FAFAF7",border:"1px solid #EBEAE5",borderLeft:"3px solid #B8924F",borderRadius:"0 4px 4px 0"}}>
-                        {/* En-tête Archange */}
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B8924F" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B8924F" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B8924F"/><path d="M12 9.6 L 12 18.2" stroke="#B8924F" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B8924F"/></svg>
-                            <span style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#1A1A1E",fontWeight:500,fontFamily:"'Geist','system-ui',sans-serif"}}>Lecture par Archange</span>
-                            {extracted.confiance&&(()=>{
-                              const conf = extracted.confiance;
-                              const isHaute = conf === "haute";
-                              const isFaible = conf === "faible";
-                              const bg = isFaible ? "rgba(168,75,69,0.1)" : isHaute ? "rgba(5,150,105,0.1)" : "rgba(184,146,79,0.15)";
-                              const col = isFaible ? "#991B1B" : isHaute ? "#3F5B32" : "#B8924F";
-                              const brd = isFaible ? "rgba(168,75,69,0.3)" : isHaute ? "rgba(5,150,105,0.3)" : "rgba(184,146,79,0.3)";
-                              const tip = isFaible
-                                ? "ARCHANGE a extrait ces informations avec incertitude. Vérifiez chaque champ avant de créer l'événement."
-                                : isHaute
-                                ? "ARCHANGE a extrait ces informations avec une bonne certitude."
-                                : "ARCHANGE a extrait ces informations partiellement. Vérifiez les champs importants.";
-                              return <span title={tip} style={{fontSize:9,padding:"1px 6px",borderRadius:1,background:bg,color:col,border:`1px solid ${brd}`,letterSpacing:"0.06em",textTransform:"uppercase",cursor:"help"}}>
-                                {isFaible?"⚠ ":isHaute?"✓ ":""}Confiance {conf}
-                              </span>;
-                            })()}
+                      <div style={{marginBottom:18,background:"linear-gradient(180deg, #F6F9F3 0%, #FFFFFF 62%)",border:"1px solid rgba(107,138,91,0.22)",borderRadius:14,overflow:"hidden",boxShadow:"0 2px 6px rgba(107,138,91,0.06)"}}>
+                        {/* En-tête — Réservation détectée + confiance en bars */}
+                        <div style={{padding:"12px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid rgba(107,138,91,0.15)"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,fontSize:10.5,fontWeight:500,color:"#3F5B32",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                            <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2.5" width="12" height="10" rx="1.2" stroke="#3F5B32" strokeWidth="1.1"/><path d="M1 6h12M4.5 1v2.5M9.5 1v2.5" stroke="#3F5B32" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                            Réservation détectée
                           </div>
-                          {!alreadyIn&&<button onClick={openPlanForm} style={{fontSize:10,padding:"5px 12px",borderRadius:2,border:"1px solid #EBEAE5",background:"#1A1A1E",color:"#F5F4F0",cursor:"pointer",letterSpacing:"0.04em",fontFamily:"'Geist','system-ui',sans-serif"}}>+ Planning</button>}
-                          {alreadyIn&&<button onClick={()=>{setSelResaGeneral(alreadyIn);setView("general");}} style={{fontSize:10,padding:"5px 12px",borderRadius:2,border:"1px solid #EBEAE5",background:"transparent",color:"#B8924F",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>Voir l'événement →</button>}
+                          {extracted.confiance&&(()=>{
+                            const conf = extracted.confiance;
+                            const isHaute = conf === "haute";
+                            const isFaible = conf === "faible";
+                            const nbBars = isHaute ? 4 : isFaible ? 2 : 3;
+                            const barColor = isFaible ? "#A84B45" : "#6B8A5B";
+                            const tip = isFaible
+                              ? "ARCHANGE a extrait ces informations avec incertitude. Vérifiez chaque champ avant de créer l'événement."
+                              : isHaute
+                              ? "ARCHANGE a extrait ces informations avec une bonne certitude."
+                              : "ARCHANGE a extrait ces informations partiellement. Vérifiez les champs importants.";
+                            return (
+                              <div title={tip} style={{display:"flex",alignItems:"center",gap:7,fontSize:11,color:"#6B6B72",cursor:"help",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                                <span style={{display:"inline-flex",gap:2}}>
+                                  {[0,1,2,3].map(i => (
+                                    <span key={i} style={{width:3,height:9,background:i<nbBars?barColor:"#E0DED7",borderRadius:1}}/>
+                                  ))}
+                                </span>
+                                Confiance {conf}
+                              </div>
+                            );
+                          })()}
                         </div>
-                        {/* Grille infos */}
-                        <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"7px 18px",fontSize:13}}>
-                          {extracted.nom&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Client</div><div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#1A1A1E"}}>{extracted.nom}{extracted.entreprise?` — ${extracted.entreprise}`:""}</div></>}
-                          {extracted.typeEvenement&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Événement</div><div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#1A1A1E"}}>{extracted.typeEvenement}</div></>}
-                          {extracted.nombrePersonnes&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Convives</div><div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#1A1A1E"}}>{extracted.nombrePersonnesMin&&extracted.nombrePersonnesMin!==extracted.nombrePersonnes?`${extracted.nombrePersonnesMin}–${extracted.nombrePersonnes}`:extracted.nombrePersonnes} personnes</div></>}
-                          {extracted.dateDebut&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Date</div><div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#1A1A1E"}}>{extracted.dateDebut}{extracted.heureDebut?` · ${extracted.heureDebut}${extracted.heureFin?` → ${extracted.heureFin}`:""}`:"" }</div></>}
-                          {espace&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Espace suggéré</div><div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#B8924F",fontWeight:500}}>{espace.nom} · disponible</div></>}
-                          {extracted.budget&&<><div style={{fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",color:"#6B6E7E",paddingTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Budget</div><div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#1A1A1E"}}>{extracted.budget}</div></>}
+                        {/* Grille infos — 3 colonnes aérées */}
+                        <div style={{padding:"18px 22px",display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:"14px 20px"}}>
+                          {extracted.nom&&(
+                            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                              <span style={labelStyle}>Client</span>
+                              <span style={valueStyle}>{extracted.nom}{extracted.entreprise?` — ${extracted.entreprise}`:""}</span>
+                            </div>
+                          )}
+                          {extracted.typeEvenement&&(
+                            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                              <span style={labelStyle}>Événement</span>
+                              <span style={valueStyle}>{extracted.typeEvenement}</span>
+                            </div>
+                          )}
+                          {extracted.nombrePersonnes&&(
+                            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                              <span style={labelStyle}>Convives</span>
+                              <span style={valueStyle}>{extracted.nombrePersonnesMin&&extracted.nombrePersonnesMin!==extracted.nombrePersonnes?`${extracted.nombrePersonnesMin}–${extracted.nombrePersonnes}`:extracted.nombrePersonnes} personnes</span>
+                            </div>
+                          )}
+                          {extracted.dateDebut&&(
+                            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                              <span style={labelStyle}>Date</span>
+                              <span style={valueStyle}>{extracted.dateDebut}{extracted.heureDebut?` · ${extracted.heureDebut}${extracted.heureFin?` → ${extracted.heureFin}`:""}`:""}</span>
+                            </div>
+                          )}
+                          {espace&&(
+                            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                              <span style={labelStyle}>Espace suggéré</span>
+                              <span style={{...valueStyle,color:"#B8924F"}}>{espace.nom} · disponible</span>
+                            </div>
+                          )}
+                          {extracted.budget&&(
+                            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                              <span style={labelStyle}>Budget</span>
+                              <span style={valueStyle}>{extracted.budget}</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Footer — action unique "Ajouter au planning" */}
+                        <div style={{padding:"14px 18px",borderTop:"1px solid rgba(107,138,91,0.12)",background:"rgba(255,255,255,0.6)",display:"flex",alignItems:"center",gap:10}}>
+                          {!alreadyIn&&(
+                            <button onClick={openPlanForm} style={{padding:"9px 14px",borderRadius:10,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",transition:"all .14s ease"}}>
+                              <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.2" fill="none"/><path d="M1.5 5.5h11M4.5 1v2.5M9.5 1v2.5M7 8v3M5.5 9.5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                              Ajouter au planning
+                            </button>
+                          )}
+                          {alreadyIn&&(
+                            <button onClick={()=>{setSelResaGeneral(alreadyIn);setView("general");}} style={{padding:"9px 14px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,transition:"all .14s ease"}}>
+                              Voir l'événement →
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
