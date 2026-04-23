@@ -4632,29 +4632,44 @@ FORMAT
         </div>
       )}
 
-      {/* ══ MODALE RADAR — GÉNÉRER RÉPONSE ══ */}
+      {/* ══ MODALE RADAR — GÉNÉRER RÉPONSE v3 ══ */}
       {radarReplyModal&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99998,padding:24}}>
-          <div style={{background:"#FFFFFF",borderRadius:16,width:"min(600px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,.3)"}}>
-            <div style={{padding:"18px 22px",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-              <div>
-                <div style={{fontSize:15,fontWeight:600,color:"#1A1A1E"}}>✨ Réponse ARCHANGE</div>
-                <div style={{fontSize:12,color:"#6B6E7E",marginTop:2}}>{radarReplyModal.m?.from}</div>
+        <div style={{position:"fixed",inset:0,background:"rgba(26,26,30,0.45)",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99998,padding:24}}>
+          <div style={{background:"#FFFFFF",borderRadius:16,width:"min(620px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(15,15,20,0.18), 0 0 0 1px rgba(184,146,79,0.15)",overflow:"hidden"}}>
+            {/* Header doré cohérent avec Réponse ARCHANGE inline */}
+            <div style={{padding:"14px 22px",borderBottom:"1px solid rgba(184,146,79,0.15)",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:"linear-gradient(180deg, rgba(184,146,79,0.06) 0%, #FFFFFF 100%)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                <span style={{fontSize:16,color:"#B8924F",lineHeight:1,flexShrink:0}}>✦</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:500,color:"#B8924F",letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Réponse ARCHANGE</div>
+                  <div style={{fontSize:12.5,color:"#1A1A1E",marginTop:2,fontFamily:"'Geist','system-ui',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{radarReplyModal.m?.from}</div>
+                </div>
               </div>
-              <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} style={{width:30,height:30,borderRadius:7,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} title="Fermer" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease",flexShrink:0}}>×</button>
             </div>
-            <div style={{flex:1,overflowY:"auto",padding:20}}>
+            {/* Body */}
+            <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
               {radarReplyLoading
-                ? <div style={{display:"flex",alignItems:"center",gap:10,color:"#6B6E7E",padding:"40px 0",justifyContent:"center"}}><Spin s={16}/> Génération en cours…</div>
+                ? <div style={{display:"flex",alignItems:"center",gap:12,color:"#6B6E7E",padding:"48px 0",justifyContent:"center",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13}}><Spin s={16}/> Archange rédige la réponse…</div>
                 : radarReplyText
-                  ? <textarea value={radarReplyText} onChange={e=>setRadarReplyText(e.target.value)} rows={14} style={{...inp,lineHeight:1.75,resize:"vertical",fontFamily:"inherit"}}/>
-                  : <div style={{color:"#6B6E7E",textAlign:"center",padding:"40px 0",fontSize:13}}>La réponse apparaîtra ici…</div>
+                  ? <textarea value={radarReplyText} onChange={e=>setRadarReplyText(e.target.value)} rows={14} style={{width:"100%",padding:"14px 16px",fontFamily:"'Geist','system-ui',sans-serif",fontSize:14,color:"#1A1A1E",lineHeight:1.65,border:"1px solid #EBEAE5",borderRadius:10,outline:"none",resize:"vertical",background:"#FAFAF7",transition:"border-color .12s ease"}}/>
+                  : <div style={{padding:"40px 0",display:"flex",flexDirection:"column",alignItems:"center",gap:12,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                      <div style={{color:"#6B6E7E",textAlign:"center",fontSize:13,lineHeight:1.5,maxWidth:340}}>La réponse générée par Archange apparaîtra ici. Vous pourrez l'éditer avant de la copier ou de la marquer en brouillon.</div>
+                    </div>
               }
             </div>
-            <div style={{padding:"14px 20px",borderTop:"1px solid #EBEAE5",display:"flex",gap:8,flexShrink:0}}>
-              <button onClick={()=>{navigator.clipboard.writeText(radarReplyText);toast("Copié !");}} disabled={!radarReplyText||radarReplyLoading} style={{flex:1,...out,padding:"10px",opacity:!radarReplyText||radarReplyLoading?0.5:1}}>Copier</button>
-              <button onClick={()=>{if(radarReplyModal?.m) {setDrafted(prev=>new Set([...prev,radarReplyModal.m.id]));} setRadarReplyModal(null);setRadarReplyText("");toast("Brouillon marqué !");}} disabled={!radarReplyText||radarReplyLoading} style={{flex:1,...gold,padding:"10px",opacity:!radarReplyText||radarReplyLoading?0.5:1}}>Marquer brouillon</button>
-              <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} style={{...out}}>Fermer</button>
+            {/* Footer avec hiérarchie claire : primary doré + ghost + text */}
+            <div style={{padding:"14px 22px",borderTop:"1px solid #EBEAE5",display:"flex",gap:8,flexShrink:0,background:"#FAFAF7",alignItems:"center"}}>
+              <button onClick={()=>{navigator.clipboard.writeText(radarReplyText);toast("Copié !");}} disabled={!radarReplyText||radarReplyLoading} style={{padding:"9px 14px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontSize:13,fontWeight:500,cursor:(!radarReplyText||radarReplyLoading)?"not-allowed":"pointer",opacity:!radarReplyText||radarReplyLoading?0.5:1,fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:6,transition:"all .14s ease"}}>
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M10.5 3.5V2a.5.5 0 00-.5-.5H2a.5.5 0 00-.5.5v8a.5.5 0 00.5.5h1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                Copier
+              </button>
+              <button onClick={()=>{if(radarReplyModal?.m) {setDrafted(prev=>new Set([...prev,radarReplyModal.m.id]));} setRadarReplyModal(null);setRadarReplyText("");toast("Brouillon marqué !");}} disabled={!radarReplyText||radarReplyLoading} style={{padding:"9px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:(!radarReplyText||radarReplyLoading)?"not-allowed":"pointer",opacity:!radarReplyText||radarReplyLoading?0.5:1,fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:6,transition:"all .14s ease",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Marquer brouillon
+              </button>
+              <div style={{flex:1}}/>
+              <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} style={{padding:"9px 12px",borderRadius:10,border:"none",background:"transparent",color:"#6B6E7E",fontSize:12.5,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",transition:"color .14s ease"}}>Fermer</button>
             </div>
           </div>
         </div>
