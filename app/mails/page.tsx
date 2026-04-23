@@ -533,11 +533,17 @@ export default function App() {
   const [mailOrigine, setMailOrigine] = useState<{type:'evenement'|'radar',resaId:string,nom:string}|null>(null);
 
   // Ouvrir un mail depuis une fiche événement
+  // handleSel fait setMailOrigine(null) en début — on le reset après
   const ouvrirMailDepuisEvenement = (email: any, resa: any) => {
-    setSel(email);
-    setMailOrigine({type:'evenement', resaId: resa.id, nom: resa.nom || resa.entreprise || "l'événement"});
     setView("mails");
     setMailFilter("all");
+    // handleSel marque comme lu + charge le corps complet + restaure le cache
+    // Note : handleSel fait setMailOrigine(null), on le replace juste après
+    handleSel(email).then?.(() => {}).catch?.(() => {});
+    // Utiliser setTimeout pour que setMailOrigine s'applique après handleSel
+    setTimeout(() => {
+      setMailOrigine({type:'evenement', resaId: resa.id, nom: resa.nom || resa.entreprise || "l'événement"});
+    }, 0);
   };
   const [reply, setReply] = useState("");
   const [genReply, setGenReply] = useState(false);
@@ -2176,6 +2182,13 @@ Retourne UNIQUEMENT ce JSON valide :
     if (sel?.id) saveEmailResaLinks({ ...emailResaLinks, [sel.id]: r.id });
     toast("Réservation ajoutée au planning !");
     setShowPlanForm(false); setExtracted(null);
+    // 2D — Proposer de voir la fiche événement créée (setTimeout pour laisser resas se mettre à jour)
+    setTimeout(() => {
+      if (window.confirm(`Événement créé pour ${r.nom}. Ouvrir la fiche ?`)) {
+        setSelResaGeneral(r);
+        setView("general");
+      }
+    }, 100);
   };
 
   const fetchLink = async (url: string, key: string) => {
@@ -3076,7 +3089,7 @@ FORMAT
                     <button onClick={()=>{ setRelanceIAText(""); setMotifSelectionne(""); setMotifPersonnalise(""); setShowRelanceIA(selResaGeneral); }} style={{padding:"9px",borderRadius:8,border:"none",background:"#1B1E2B",color:"#B89456",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>✨ Mail relance IA</button>
                     <button onClick={()=>openSendMail(selResaGeneral)} style={{...gold,fontSize:12,padding:"9px",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>📤 Envoyer mail</button>
                   </div>
-                  <button onClick={()=>{ saveResas(resas.filter(r=>r.id!==selResaGeneral.id)); setSelResaGeneral(null); toast("Supprimé"); }} style={{width:"100%",padding:"9px",borderRadius:8,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",fontSize:12,cursor:"pointer"}}>Supprimer l'événement</button>
+                  <button onClick={()=>{ if(!window.confirm(`Supprimer l'événement de ${selResaGeneral.nom||"ce client"} ? Cette action est irréversible.`)) return; saveResas(resas.filter(r=>r.id!==selResaGeneral.id)); setSelResaGeneral(null); toast("Supprimé"); }} style={{width:"100%",padding:"9px",borderRadius:8,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",fontSize:12,cursor:"pointer"}}>Supprimer l'événement</button>
                 </div>
               </div>
             )}
@@ -3333,6 +3346,7 @@ FORMAT
                               // Fix 8 — Ouvrir le lecteur complet à droite du Radar (split view)
                               // handleSel charge le corps et marque lu, sans naviguer ailleurs
                               setMailOrigine({type:'radar', resaId: resa?.id||'', nom: 'Radar ARCHANGE'});
+                              setRadarReplyModal(null); setRadarReplyText("");
                               handleSel(m);
                               setRadarSelEmail(m);
                             }}
@@ -3376,7 +3390,13 @@ FORMAT
                               <button onClick={e=>{e.stopPropagation(); setRadarResaModal({ nom: ext.nom||m.from||"", email: ext.email||m.fromEmail||"", telephone: ext.telephone||"", entreprise: ext.entreprise||"", typeEvenement: ext.typeEvenement||"", nombrePersonnes: ext.nombrePersonnes||"", espaceId: ext.espaceDetecte||resa?.espaceId||espacesDyn[0]?.id||"", dateDebut: ext.dateDebut||resa?.dateDebut||"", heureDebut: ext.heureDebut||resa?.heureDebut||"", heureFin: ext.heureFin||resa?.heureFin||"", budget: ext.budget||resa?.budget||"", notes: ext.notes||"", statut: ext.statutSuggere||"nouveau", _emailId: m.id, });}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #E6DCC9",background:"#FFFFFF",color:"#1B1E2B",fontSize:11,fontWeight:500,cursor:"pointer"}}>
                                 📅 Créer réservation
                               </button>
-                              <button onClick={e=>{e.stopPropagation(); setRadarReplyModal({m,ext}); setRadarReplyText(""); genRadarReply(m);}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #E6DCC9",background:"#FFFFFF",color:"#1B1E2B",fontSize:11,fontWeight:500,cursor:"pointer"}}>
+                              <button onClick={e=>{e.stopPropagation();
+                                // Ouvrir le lecteur complet (panel droit) plutôt qu'une modale séparée
+                                // genererReponse sera accessible depuis le lecteur avec tout le contexte
+                                setMailOrigine({type:'radar', resaId: resa?.id||'', nom: 'Radar ARCHANGE'});
+                                handleSel(m);
+                                setRadarSelEmail(m);
+                              }} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,border:"1px solid #E6DCC9",background:"#FFFFFF",color:"#1B1E2B",fontSize:11,fontWeight:500,cursor:"pointer"}}>
                                 ✨ Générer réponse
                               </button>
                               <button onClick={e=>{e.stopPropagation(); saveRadarTraites(new Set([...radarTraites,m.id])); toast("Demande archivée du Radar");}} style={{marginLeft:"auto",padding:"5px 11px",borderRadius:7,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",fontSize:11,cursor:"pointer"}} title="Archiver cette carte">
@@ -3862,7 +3882,7 @@ FORMAT
                       <button onClick={()=>{
                         if (mailOrigine.type==="evenement") {
                           const resa = resas.find(r=>r.id===mailOrigine.resaId);
-                          if(resa){ setSelResaGeneral(resa); setView("general"); }
+                          if(resa){ setSelResaGeneral(resa); setView("general"); setShowMailHistory(true); }
                         } else if (mailOrigine.type==="radar") {
                           setMailFilter("priorites");
                         }
@@ -4283,7 +4303,7 @@ FORMAT
                               <span style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:isToday?700:400,background:isToday?"#B89456":"transparent",color:isToday?"#FFFFFF":"#9E9890"}}>{day}</span>
                             </div>
                             {dr.slice(0,3).map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                              <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setGeneralFilter("infos"); setPlanningResaModal(true); }} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
+                              <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setGeneralFilter("infos"); setSelResa(null); setPlanningResaModal(true); }} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
                                 <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                                   {r.heureDebut&&<span style={{opacity:.7,marginRight:3}}>{r.heureDebut}{r.heureFin&&`→${r.heureFin}`}</span>}{r.nom}
                                 </div>
@@ -4315,7 +4335,7 @@ FORMAT
                       {weekDays.map(d=>{ const ds=fmtDate(d); const dr=resasForDate(ds); const isTd=ds===todayStr; return (
                         <div key={ds} style={{borderLeft:"1px solid #E6DCC9",minHeight:300,padding:"6px 4px",background:isTd?"rgba(232,184,109,0.03)":"transparent"}}>
                           {dr.map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                            <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setGeneralFilter("infos"); setPlanningResaModal(true); }} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
+                            <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setGeneralFilter("infos"); setSelResa(null); setPlanningResaModal(true); }} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
                               <div style={{fontWeight:600,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.nom}</div>
                               {r.heureDebut&&<div style={{fontSize:10,color:st.color,opacity:.8}}>{r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</div>}
                               {(r.entreprise||espace)&&<div style={{fontSize:9,color:st.color,opacity:.65,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
@@ -4339,7 +4359,7 @@ FORMAT
                     ):(
                       <div style={{display:"flex",flexDirection:"column",gap:12}}>
                         {dayResas.map(r=>{ const st=getStatut(r); return (
-                          <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setGeneralFilter("infos"); setPlanningResaModal(true); }} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
+                          <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setGeneralFilter("infos"); setSelResa(null); setPlanningResaModal(true); }} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                               <div>
                                 <div style={{fontSize:15,fontWeight:600,color:"#1B1E2B"}}>{r.nom}</div>
@@ -4408,7 +4428,7 @@ FORMAT
                     <div style={{display:"flex",gap:8,marginTop:16,paddingTop:16,borderTop:"1px solid #E6DCC9"}}>
                       <button onClick={()=>{ setEditResa({...selResa}); setSelResa(null); }} style={{flex:1,...out,fontSize:12}}>✏️ Modifier</button>
                       <button onClick={()=>{ setSelResaGeneral(selResa); setSelResa(null); setView("general"); setShowMailHistory(false); }} style={{...out,fontSize:12,padding:"7px 10px"}}>🗂</button>
-                      <button onClick={()=>{ saveResas(resas.filter(r=>r.id!==selResa.id)); setSelResa(null); toast("Supprimé"); }} style={{padding:"7px 10px",borderRadius:8,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",fontSize:12,cursor:"pointer"}}>🗑</button>
+                      <button onClick={()=>{ if(!window.confirm(`Supprimer l'événement de ${selResa.nom||"ce client"} ?`)) return; saveResas(resas.filter(r=>r.id!==selResa.id)); setSelResa(null); toast("Supprimé"); }} style={{padding:"7px 10px",borderRadius:8,border:"1px solid #FCA5A5",background:"transparent",color:"#DC2626",fontSize:12,cursor:"pointer"}}>🗑</button>
                     </div>
                   </div>
                 </div>
@@ -4432,7 +4452,7 @@ FORMAT
                     <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🏷 Statut</label><select value={editResa.statut||"nouveau"} onChange={e=>setEditResa({...editResa,statut:e.target.value})} style={{...inp}}>{statuts.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
                     <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📝 Notes</label><textarea value={editResa.notes||""} onChange={e=>setEditResa({...editResa,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
                     <div style={{display:"flex",gap:8,paddingTop:4}}>
-                      <button onClick={()=>{ if(!editResa.nom) return; if(editResa.id){saveResas(resas.map(r=>r.id===editResa.id?editResa:r));toast("Mis à jour");}else{saveResas([...resas,{...editResa,id:"r"+Date.now()}]);toast("Créé");} setEditResa(null); }} style={{flex:1,...gold,padding:"10px"}}>Enregistrer</button>
+                      <button onClick={()=>{ if(!editResa.nom) return; if(editResa.id){saveResas(resas.map(r=>r.id===editResa.id?editResa:r));setSelResa(editResa);toast("Mis à jour");}else{saveResas([...resas,{...editResa,id:"r"+Date.now()}]);toast("Créé");} setEditResa(null); }} style={{flex:1,...gold,padding:"10px"}}>Enregistrer</button>
                       <button onClick={()=>setEditResa(null)} style={{...out}}>Annuler</button>
                     </div>
                   </div>
