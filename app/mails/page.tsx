@@ -813,6 +813,12 @@ export default function App() {
   const loadEmailsFromApiRef = React.useRef<(withSync?: boolean) => Promise<void>>(async () => {});
 
   // ─── Priorités ARCHANGE — calcul JS pur, zéro appel API ─────────────────
+  // ─── getStatut — accessible partout dans le composant (Planning, Événements, modal) ──
+  const getStatut = React.useCallback((r: any) =>
+    statuts.find(s => s.id === (r?.statut || "nouveau")) || { bg:"#F3F4F6", color:"#6B7280", label:"—" },
+    [statuts]
+  );
+
   const prioritesArchange = React.useMemo(() => {
     const today = new Date(); today.setHours(0,0,0,0);
     const in7 = new Date(today); in7.setDate(today.getDate() + 7);
@@ -4151,8 +4157,6 @@ FORMAT
           const calDayStr = fmtDate(calDate);
           const dayResas = resasForDate(calDayStr);
 
-          const getStatut = (r) => statuts.find(s=>s.id===(r.statut||"nouveau"))||{bg:"#F3F4F6",color:"#6B7280",label:"—"};
-
           return (
             <div style={{display:"flex",flex:1,overflow:"hidden"}}>
               <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -4787,7 +4791,6 @@ FORMAT
             <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
               {/* Onglet Infos */}
               {generalFilter==="infos"&&(()=>{
-                const st = getStatut(selResaGeneral);
                 const espace = ESPACES.find(e=>e.id===selResaGeneral.espaceId);
                 return (
                   <div style={{display:"flex",flexDirection:"column",gap:16}}>
