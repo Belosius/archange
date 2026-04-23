@@ -3595,6 +3595,58 @@ FORMAT
                     );
                   })()}
 
+                  {/* Formulaire planning */}
+                  {showPlanForm && (
+                    <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:14,padding:"20px",marginBottom:16}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                        <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",letterSpacing:"-0.01em"}}>📅 Ajouter au planning</div>
+                        <button onClick={()=>setShowPlanForm(false)} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:18}}>×</button>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                        {/* Champs obligatoires */}
+                        {[
+                          ["dateDebut","📅 Date de l'événement *","date",true],
+                          ["heureDebut","🕐 Heure de début *","time",true],
+                          ["heureFin","🕕 Heure de fin *","time",true],
+                        ].map(([k,l,type,required])=>(
+                          <div key={k}>
+                            <label style={{fontSize:11,color:planErrors[k]?"#DC2626":"#A5A4A0",display:"block",marginBottom:4,fontWeight:planErrors[k]?600:400}}>{l}</label>
+                            {type==="date"?<DatePicker value={planForm[k]||""} onChange={v=>setPlanForm({...planForm,[k]:v})}/>:<TimePicker value={planForm[k]||""} onChange={v=>setPlanForm({...planForm,[k]:v})} placeholder={l.replace(" *","")}/>}
+                            {planErrors[k]&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {planErrors[k]}</div>}
+                          </div>
+                        ))}
+                        {/* Nombre de personnes — champ numérique libre */}
+                        <div>
+                          <label style={{fontSize:11,color:planErrors["nombrePersonnes"]?"#DC2626":"#A5A4A0",display:"block",marginBottom:4,fontWeight:planErrors["nombrePersonnes"]?600:400}}>👥 Nombre de personnes *</label>
+                          <input type="number" min="1" value={planForm.nombrePersonnes||""} onChange={e=>setPlanForm({...planForm,nombrePersonnes:e.target.value})} placeholder="Ex: 50" style={{...inp}}/>
+                          {planErrors["nombrePersonnes"]&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {planErrors["nombrePersonnes"]}</div>}
+                        </div>
+                        {/* Champs optionnels */}
+                        <div>
+                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🎉 Type d'événement</label>
+                          <input value={planForm.typeEvenement||""} onChange={e=>setPlanForm({...planForm,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inp}}/>
+                        </div>
+                        <div>
+                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>💰 Budget client</label>
+                          <input value={planForm.budget||""} onChange={e=>setPlanForm({...planForm,budget:e.target.value})} placeholder="Ex: 5 000€, 45€/pers…" style={{...inp}}/>
+                        </div>
+                        <div>
+                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📍 Espace</label>
+                          <select value={planForm.espaceId||espacesDyn[0]?.id||""} onChange={e=>setPlanForm({...planForm,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select>
+                        </div>
+                        <div style={{gridColumn:"1/-1"}}>
+                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📝 Notes</label>
+                          <input value={planForm.notes||""} onChange={e=>setPlanForm({...planForm,notes:e.target.value})} style={{...inp}}/>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:8,marginTop:16}}>
+                        <button onClick={submitPlanForm} style={{...gold,flex:1,padding:"10px"}}>Confirmer et ajouter</button>
+                        <button onClick={()=>setShowPlanForm(false)} style={{...out}}>Annuler</button>
+                      </div>
+                    </div>
+                  )}
+
+
                   {/* ── Corps email — Reader v3 ── */}
                   {/* 1a — Bandeau résumé IA ARCHANGE (si extraction dispo et isReservation) */}
                   {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext?.isReservation&&ext?.resume&&(
@@ -3657,58 +3709,6 @@ FORMAT
                       </div>
                     )}
                   </div>
-
-                  {/* Formulaire planning */}
-                  {showPlanForm && (
-                    <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:14,padding:"20px",marginBottom:16}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                        <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",letterSpacing:"-0.01em"}}>📅 Ajouter au planning</div>
-                        <button onClick={()=>setShowPlanForm(false)} style={{background:"none",border:"none",color:"#6B6E7E",cursor:"pointer",fontSize:18}}>×</button>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                        {/* Champs obligatoires */}
-                        {[
-                          ["dateDebut","📅 Date de l'événement *","date",true],
-                          ["heureDebut","🕐 Heure de début *","time",true],
-                          ["heureFin","🕕 Heure de fin *","time",true],
-                        ].map(([k,l,type,required])=>(
-                          <div key={k}>
-                            <label style={{fontSize:11,color:planErrors[k]?"#DC2626":"#A5A4A0",display:"block",marginBottom:4,fontWeight:planErrors[k]?600:400}}>{l}</label>
-                            {type==="date"?<DatePicker value={planForm[k]||""} onChange={v=>setPlanForm({...planForm,[k]:v})}/>:<TimePicker value={planForm[k]||""} onChange={v=>setPlanForm({...planForm,[k]:v})} placeholder={l.replace(" *","")}/>}
-                            {planErrors[k]&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {planErrors[k]}</div>}
-                          </div>
-                        ))}
-                        {/* Nombre de personnes — champ numérique libre */}
-                        <div>
-                          <label style={{fontSize:11,color:planErrors["nombrePersonnes"]?"#DC2626":"#A5A4A0",display:"block",marginBottom:4,fontWeight:planErrors["nombrePersonnes"]?600:400}}>👥 Nombre de personnes *</label>
-                          <input type="number" min="1" value={planForm.nombrePersonnes||""} onChange={e=>setPlanForm({...planForm,nombrePersonnes:e.target.value})} placeholder="Ex: 50" style={{...inp}}/>
-                          {planErrors["nombrePersonnes"]&&<div style={{fontSize:11,color:"#DC2626",marginTop:3}}>⚠ {planErrors["nombrePersonnes"]}</div>}
-                        </div>
-                        {/* Champs optionnels */}
-                        <div>
-                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>🎉 Type d'événement</label>
-                          <input value={planForm.typeEvenement||""} onChange={e=>setPlanForm({...planForm,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={{...inp}}/>
-                        </div>
-                        <div>
-                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>💰 Budget client</label>
-                          <input value={planForm.budget||""} onChange={e=>setPlanForm({...planForm,budget:e.target.value})} placeholder="Ex: 5 000€, 45€/pers…" style={{...inp}}/>
-                        </div>
-                        <div>
-                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📍 Espace</label>
-                          <select value={planForm.espaceId||espacesDyn[0]?.id||""} onChange={e=>setPlanForm({...planForm,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select>
-                        </div>
-                        <div style={{gridColumn:"1/-1"}}>
-                          <label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📝 Notes</label>
-                          <input value={planForm.notes||""} onChange={e=>setPlanForm({...planForm,notes:e.target.value})} style={{...inp}}/>
-                        </div>
-                      </div>
-                      <div style={{display:"flex",gap:8,marginTop:16}}>
-                        <button onClick={submitPlanForm} style={{...gold,flex:1,padding:"10px"}}>Confirmer et ajouter</button>
-                        <button onClick={()=>setShowPlanForm(false)} style={{...out}}>Annuler</button>
-                      </div>
-                    </div>
-                  )}
-
 
                   {/* ── Éditeur de réponse manuelle Reader v3 ── */}
                   {showReplyEditor&&(
