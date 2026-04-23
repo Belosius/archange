@@ -805,6 +805,7 @@ export default function App() {
   // Planning view mode
   const [calView, setCalView] = useState<"mois"|"semaine"|"jour">("mois");
   const [planFilter, setPlanFilter] = useState("all"); // filtre Planning indépendant
+  const [planEspaceFilter, setPlanEspaceFilter] = useState("all"); // filtre espace Planning v3
   const [calWeekStart, setCalWeekStart] = useState(()=>{ const d=new Date(); d.setDate(d.getDate()-((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d; });
   // Sources IA sections open/collapsed state
   const [srcSections, setSrcSections] = useState({liens:false, menus:true, conditions:false, espaces:false, ton:false});
@@ -2480,6 +2481,41 @@ FORMAT
     return { cetteSemaine, enRetard, aRelancerTotal: relances.length, nouvelles, totalBudget };
   }, [resas, relances, statuts]);
 
+  const computePlanningKPIs = (monthDate: Date) => {
+    const m = monthDate.getMonth(), y = monthDate.getFullYear();
+    const daysInM = new Date(y, m+1, 0).getDate();
+    const todayISO = new Date().toISOString().slice(0,10);
+    const monthResas = resas.filter(r => {
+      if (!r.dateDebut) return false;
+      try { const d = new Date(r.dateDebut); return d.getMonth()===m && d.getFullYear()===y; } catch { return false; }
+    });
+    // Jours uniques avec au moins 1 événement
+    const uniqueDays = new Set(monthResas.map(r => r.dateDebut)).size;
+    const occupation = Math.round((uniqueDays / daysInM) * 100);
+    // Confirmés = statut label contient "confirm"/"valid"
+    const confirmed = monthResas.filter(r => {
+      const st = statuts.find(s=>s.id===(r.statut||"nouveau"));
+      return st && (st.label.toLowerCase().includes("confirm") || st.label.toLowerCase().includes("valid"));
+    }).length;
+    // Prochain événement
+    const upcoming = resas
+      .filter(r => r.dateDebut && r.dateDebut >= todayISO)
+      .sort((a,b) => (a.dateDebut||"").localeCompare(b.dateDebut||"") || (a.heureDebut||"").localeCompare(b.heureDebut||""))[0];
+    // Budget prévisionnel : confirmés + en cours + devis
+    let totalBudget = 0;
+    monthResas.forEach(r => {
+      const st = statuts.find(s=>s.id===(r.statut||"nouveau"));
+      const isValid = st && (st.label.toLowerCase().includes("confirm") || st.label.toLowerCase().includes("valid") || st.label.toLowerCase().includes("en cours") || st.label.toLowerCase().includes("devis"));
+      if (!isValid) return;
+      const match = String(r.budget||"").match(/(\d[\d\s]*)/);
+      if (match) {
+        const n = parseInt(match[1].replace(/\s/g,''), 10);
+        if (!isNaN(n) && n > 0 && n < 1000000) totalBudget += n;
+      }
+    });
+    return { total: monthResas.length, confirmed, uniqueDays, daysInM, occupation, upcoming, totalBudget };
+  };
+
   const groupResasByUrgency = (list: any[]) => {
     const today = new Date(); today.setHours(0,0,0,0);
     const in7 = new Date(today); in7.setDate(in7.getDate() + 7);
@@ -4053,178 +4089,304 @@ FORMAT
           </>
         )}
 
-        {/* ══ PLANNING ══ */}
+        {/* ══ PLANNING v3 — Apple Mail 2026 ══ */}
         {view==="planning" && (()=>{
           const today = new Date();
           const todayStr = today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
-
-          // Week helpers
           const weekDays = Array.from({length:7},(_,i)=>{ const d=new Date(calWeekStart); d.setDate(d.getDate()+i); return d; });
-          const fmtDate = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-          // Filtre planning — appliqué à toutes les vues
+          const fmtDate = (d: Date) => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+
           const resasForDate = (ds:string) => resas.filter(r => {
             if(r.dateDebut!==ds) return false;
-            if(planFilter==="all") return true;
-            if(planFilter==="__none__") return !r.statut||!statuts.find(s=>s.id===r.statut);
-            return (r.statut||"nouveau")===planFilter;
+            if(planFilter!=="all") {
+              if(planFilter==="__none__") { if(r.statut&&statuts.find(s=>s.id===r.statut)) return false; }
+              else if((r.statut||"nouveau")!==planFilter) return false;
+            }
+            if(planEspaceFilter!=="all" && r.espaceId!==planEspaceFilter) return false;
+            return true;
           });
 
-          // Day view
           const calDayStr = fmtDate(calDate);
           const dayResas = resasForDate(calDayStr);
+          const kpi = computePlanningKPIs(calDate);
+
+          // Header contextuel selon la vue
+          const headSubtitle =
+            calView==="mois" ? `${kpi.total} événement${kpi.total!==1?"s":""} · ${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}` :
+            calView==="semaine" ? `Semaine du ${weekDays[0].getDate()} ${MOIS[weekDays[0].getMonth()].slice(0,3)} — ${weekDays[6].getDate()} ${MOIS[weekDays[6].getMonth()].slice(0,3)}` :
+            `${dayResas.length} événement${dayResas.length!==1?"s":""} · ${["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][calDate.getDay()]}. ${calDate.getDate()} ${MOIS[calDate.getMonth()].toLowerCase()}`;
+
+          const periodLabel =
+            calView==="mois" ? `${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}` :
+            calView==="semaine" ? `${weekDays[0].getDate()} ${MOIS[weekDays[0].getMonth()].slice(0,3)} — ${weekDays[6].getDate()} ${MOIS[weekDays[6].getMonth()].slice(0,3)} ${weekDays[6].getFullYear()}` :
+            `${["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][calDate.getDay()]}. ${calDate.getDate()} ${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}`;
+
+          // Composant carte jour (réutilise pattern vue Événements v3)
+          const DayEventCard = ({r}:{r:any}) => {
+            const st = statuts.find(s=>s.id===(r.statut||"nouveau"))||statuts[0]||{bg:"#F5F4F0",color:"#6B6B72",label:"—"};
+            const espace = ESPACES.find(e=>e.id===r.espaceId);
+            const fullName = displayNom(r);
+            return (
+              <div onClick={()=>{ setSelResaGeneral(r); setResaOnglet("infos"); }} style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .14s ease",display:"flex",alignItems:"center",gap:14,boxShadow:"0 1px 2px rgba(15,15,20,0.04)"}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:st.color,flexShrink:0}}/>
+                <Avatar name={fullName} size={38}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:5}}>
+                    <div style={{fontSize:13.5,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'Geist','system-ui',sans-serif"}}>{fullName}</div>
+                    {r.entreprise&&<div style={{fontSize:12,color:"#6B6B72",whiteSpace:"nowrap",fontFamily:"'Geist','system-ui',sans-serif"}}>· {r.entreprise}</div>}
+                  </div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                    {(r.heureDebut||r.heureFin)&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:"#6B6B72",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontVariantNumeric:"tabular-nums",fontFamily:"'Geist','system-ui',sans-serif"}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3"/></svg>{r.heureDebut||"?"}{r.heureFin?" → "+r.heureFin:""}</span>}
+                    {r.nombrePersonnes&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:"#6B6B72",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontVariantNumeric:"tabular-nums",fontFamily:"'Geist','system-ui',sans-serif"}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2.5 12c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>{r.nombrePersonnes} pers.</span>}
+                    <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:espace?"#6B6B72":"#A5A4A0",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontFamily:"'Geist','system-ui',sans-serif",opacity:espace?1:0.6}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><path d="M7 12.5s3.8-3.4 3.8-7A3.8 3.8 0 107 1.7c0 3.5 3.8 7 3.8 7z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="7" cy="5.3" r="1.3" stroke="currentColor" strokeWidth="1.3"/></svg>{espace?.nom||"Espace à définir"}</span>
+                    {r.budget&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:"#B8924F",background:"#F4EEDF",padding:"3px 9px",borderRadius:6,fontWeight:500,fontFamily:"'Geist','system-ui',sans-serif"}}>{r.budget}</span>}
+                    {r.typeEvenement&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:"#6B6B72",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontFamily:"'Geist','system-ui',sans-serif"}}>{r.typeEvenement}</span>}
+                  </div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+                  <span style={{fontSize:10.5,fontWeight:500,padding:"3px 10px",borderRadius:100,background:st.bg,color:st.color,letterSpacing:"0.02em",fontFamily:"'Geist','system-ui',sans-serif"}}>{st.label}</span>
+                </div>
+              </div>
+            );
+          };
 
           return (
-            <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+            <div style={{display:"flex",flex:1,overflow:"hidden",background:"#FAFAF7"}}>
               <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
 
+                {/* Header */}
+                <div style={{padding:"22px 28px 14px",flexShrink:0,display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:16}}>
+                  <div>
+                    <h1 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:28,fontWeight:400,color:"#1A1A1E",letterSpacing:"-0.02em",lineHeight:1.1,margin:0}}>Planning</h1>
+                    <div style={{fontSize:12.5,color:"#6B6B72",marginTop:4,fontFamily:"'Geist','system-ui',sans-serif"}}>{headSubtitle}</div>
+                  </div>
+                  <button onClick={()=>{ setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || "", dateDebut: calView==="jour"?calDayStr:""}); setNewEventErrors({}); setShowNewEvent(true); }} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"9px 14px",borderRadius:8,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",boxShadow:"0 1px 2px rgba(184,146,79,0.2)",letterSpacing:"-0.005em"}}>
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                    Nouvelle demande
+                  </button>
+                </div>
+
+                {/* Hero Dashboard 4 KPI */}
+                <div style={{padding:"0 28px 18px",flexShrink:0,display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:12}}>
+                  <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{width:26,height:26,borderRadius:7,background:"#EFEAF5",color:"#6F56A8",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M1.5 5.5h11M4.5 1v2.5M9.5 1v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                      </div>
+                      <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Ce mois</div>
+                    </div>
+                    <div style={{fontFamily:"'Fraunces',serif",fontSize:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.03em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.total}</div>
+                    <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>événement{kpi.total!==1?"s":""}, dont <strong style={{color:"#1A1A1E",fontWeight:500}}>{kpi.confirmed} confirmé{kpi.confirmed!==1?"s":""}</strong></div>
+                  </div>
+                  <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{width:26,height:26,borderRadius:7,background:"#F4EEDF",color:"#B8924F",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="1.3"/><path d="M2 5h10M5 2v10" stroke="currentColor" strokeWidth="1.3"/></svg>
+                      </div>
+                      <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Occupation</div>
+                    </div>
+                    <div style={{fontFamily:"'Fraunces',serif",fontSize:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.03em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.occupation} %</div>
+                    <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>{kpi.uniqueDays} jour{kpi.uniqueDays!==1?"s":""}</strong> sur {kpi.daysInM} avec événement</div>
+                  </div>
+                  <div onClick={()=>{if(kpi.upcoming){setCalDate(new Date(kpi.upcoming.dateDebut));setCalView("jour");}}} style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:kpi.upcoming?"pointer":"default",transition:"all .15s ease"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{width:26,height:26,borderRadius:7,background:"#EDF2E8",color:"#3F5B32",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                      </div>
+                      <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Prochain</div>
+                    </div>
+                    {kpi.upcoming ? <>
+                      <div style={{fontFamily:"'Fraunces',serif",fontSize:22,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{fmtDateFr(kpi.upcoming.dateDebut).replace(/\s\d{4}$/,"")}</div>
+                      <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>{displayNom(kpi.upcoming)}</strong>{kpi.upcoming.nombrePersonnes?` · ${kpi.upcoming.nombrePersonnes} pers.`:""}</div>
+                    </> : <>
+                      <div style={{fontFamily:"'Fraunces',serif",fontSize:22,fontWeight:500,color:"#A5A4A0",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5}}>—</div>
+                      <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>Aucun événement à venir</div>
+                    </>}
+                  </div>
+                  <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{width:26,height:26,borderRadius:7,background:"#F4EEDF",color:"#B8924F",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 3H5a2 2 0 000 4h4a2 2 0 010 4H3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M6.5 1.5v11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                      </div>
+                      <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Prévisionnel</div>
+                    </div>
+                    <div style={{fontFamily:"'Fraunces',serif",fontSize:kpi.totalBudget>999?22:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.totalBudget.toLocaleString("fr-FR")} €</div>
+                    <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>{MOIS[calDate.getMonth()]} {calDate.getFullYear()}</strong> · en cours + confirmés</div>
+                  </div>
+                </div>
+
                 {/* Toolbar */}
-                <div style={{padding:"14px 20px",borderBottom:"1px solid #EBEAE5",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:"#FFFFFF"}}>
+                <div style={{padding:"0 28px 16px",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,borderBottom:"1px solid #EBEAE5",paddingBottom:16}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <button onClick={()=>{ const n=new Date(); setCalDate(new Date(n.getFullYear(),n.getMonth(),n.getDate())); const w=new Date(n); w.setDate(w.getDate()-((w.getDay()+6)%7)); w.setHours(0,0,0,0); setCalWeekStart(w); }} style={{padding:"6px 14px",borderRadius:8,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",fontSize:12,fontWeight:600,cursor:"pointer"}}>Aujourd'hui</button>
+                    <button onClick={()=>{ const n=new Date(); setCalDate(new Date(n.getFullYear(),n.getMonth(),n.getDate())); const w=new Date(n); w.setDate(w.getDate()-((w.getDay()+6)%7)); w.setHours(0,0,0,0); setCalWeekStart(w); }} style={{padding:"7px 13px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,fontWeight:500,cursor:"pointer"}}>Aujourd'hui</button>
                     <button onClick={()=>{
                       if(calView==="mois") setCalDate(new Date(calDate.getFullYear(),calDate.getMonth()-1,1));
                       else if(calView==="semaine"){ const d=new Date(calWeekStart); d.setDate(d.getDate()-7); setCalWeekStart(d); }
                       else { const d=new Date(calDate); d.setDate(d.getDate()-1); setCalDate(d); }
-                    }} style={{width:30,height:30,borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+                    }} style={{width:30,height:30,borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>‹</button>
                     <button onClick={()=>{
                       if(calView==="mois") setCalDate(new Date(calDate.getFullYear(),calDate.getMonth()+1,1));
                       else if(calView==="semaine"){ const d=new Date(calWeekStart); d.setDate(d.getDate()+7); setCalWeekStart(d); }
                       else { const d=new Date(calDate); d.setDate(d.getDate()+1); setCalDate(d); }
-                    }} style={{width:30,height:30,borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
-                    <span style={{fontSize:16,fontWeight:600,color:"#1A1A1E",marginLeft:4}}>
-                      {calView==="mois" && `${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}`}
-                      {calView==="semaine" && `${weekDays[0].getDate()} ${MOIS[weekDays[0].getMonth()].slice(0,3)} – ${weekDays[6].getDate()} ${MOIS[weekDays[6].getMonth()].slice(0,3)} ${weekDays[6].getFullYear()}`}
-                      {calView==="jour" && `${calDate.getDate()} ${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}`}
-                    </span>
+                    }} style={{width:30,height:30,borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>›</button>
+                    <span style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",marginLeft:6,fontVariantNumeric:"tabular-nums"}}>{periodLabel}</span>
                   </div>
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    {/* Filtre par statut */}
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <select
-                        value={planFilter}
-                        onChange={e=>setPlanFilter(e.target.value)}
-                        style={{padding:"5px 10px",borderRadius:8,border:`1.5px solid ${planFilter!=="all"?"#B8924F":"#EBEAE5"}`,background:planFilter!=="all"?"#FEF9EE":"#FFFFFF",color:planFilter!=="all"?"#854F0B":"#3D3530",fontSize:12,cursor:"pointer",outline:"none",fontWeight:planFilter!=="all"?600:400}}>
-                        <option value="all">Tous les statuts</option>
-                        {statuts.map(s=>(
-                          <option key={s.id} value={s.id}>{s.label}</option>
-                        ))}
-                        <option value="__none__">Sans statut</option>
-                      </select>
-                      {planFilter!=="all"&&(
-                        <button onClick={()=>setPlanFilter("all")} title="Réinitialiser le filtre" style={{width:22,height:22,borderRadius:6,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-                      )}
-                    </div>
-                    {/* Vue toggle */}
-                    <div style={{display:"flex",background:"#F5F4F0",borderRadius:8,padding:2,border:"1px solid #EBEAE5"}}>
+                    <select value={planFilter} onChange={e=>setPlanFilter(e.target.value)} style={{padding:"7px 28px 7px 12px",borderRadius:8,border:`1px solid ${planFilter!=="all"?"#B8924F":"#EBEAE5"}`,background:`${planFilter!=="all"?"#F4EEDF":"#FFFFFF"} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'%3E%3Cpath d='M2 3.5L5 6.5L8 3.5' stroke='%236B6B72' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center`,appearance:"none",WebkitAppearance:"none",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,color:planFilter!=="all"?"#B8924F":"#1A1A1E",cursor:"pointer",outline:"none",fontWeight:planFilter!=="all"?500:400}}>
+                      <option value="all">Tous les statuts</option>
+                      {statuts.map(s=>(<option key={s.id} value={s.id}>{s.label}</option>))}
+                      <option value="__none__">Sans statut</option>
+                    </select>
+                    <select value={planEspaceFilter} onChange={e=>setPlanEspaceFilter(e.target.value)} style={{padding:"7px 28px 7px 12px",borderRadius:8,border:`1px solid ${planEspaceFilter!=="all"?"#B8924F":"#EBEAE5"}`,background:`${planEspaceFilter!=="all"?"#F4EEDF":"#FFFFFF"} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'%3E%3Cpath d='M2 3.5L5 6.5L8 3.5' stroke='%236B6B72' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center`,appearance:"none",WebkitAppearance:"none",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,color:planEspaceFilter!=="all"?"#B8924F":"#1A1A1E",cursor:"pointer",outline:"none",fontWeight:planEspaceFilter!=="all"?500:400}}>
+                      <option value="all">Tous les espaces</option>
+                      {ESPACES.map(e=>(<option key={e.id} value={e.id}>{e.nom}</option>))}
+                    </select>
+                    <div style={{display:"inline-flex",border:"1px solid #E0DED7",background:"#FFFFFF",borderRadius:8,padding:3}}>
                       {(["mois","semaine","jour"] as const).map(v=>(
-                        <button key={v} onClick={()=>setCalView(v)} style={{padding:"5px 12px",borderRadius:6,border:"none",background:calView===v?"#FFFFFF":"transparent",color:calView===v?"#1A1A1E":"#A5A4A0",fontSize:12,fontWeight:calView===v?600:400,cursor:"pointer",textTransform:"capitalize"}}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
+                        <button key={v} onClick={()=>setCalView(v)} style={{padding:"5px 12px",border:"none",background:calView===v?"#F5F4F0":"transparent",color:calView===v?"#1A1A1E":"#6B6B72",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,fontWeight:500,cursor:"pointer",borderRadius:6,textTransform:"capitalize"}}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
                       ))}
                     </div>
-                    <button onClick={()=>{setSelResaGeneral({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setEditResaPanel({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""});}} style={{...gold,fontSize:12,padding:"7px 14px"}}>+ Réservation</button>
                   </div>
                 </div>
 
                 {/* ── VUE MOIS ── */}
                 {calView==="mois" && (
-                  <div style={{flex:1,overflowY:"auto",padding:16}}>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:0,marginBottom:0,border:"1px solid #EBEAE5",borderRadius:12,overflow:"hidden"}}>
-                      {["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map(d=>(
-                        <div key={d} style={{textAlign:"center",fontSize:11,color:"#6B6E7E",padding:"8px 0",fontWeight:600,background:"#F5F4F0",borderBottom:"1px solid #EBEAE5"}}>{d}</div>
-                      ))}
-                      {Array.from({length:firstDay(calDate)}).map((_,i)=>(
-                        <div key={"p"+i} style={{minHeight:100,background:"#EEEAE4",borderRight:"1px solid #EBEAE5",borderBottom:"1px solid #EBEAE5"}}/>
-                      ))}
-                      {Array.from({length:daysInMonth(calDate)}).map((_,i)=>{
-                        const day=i+1;
-                        const ds=calDate.getFullYear()+"-"+String(calDate.getMonth()+1).padStart(2,"0")+"-"+String(day).padStart(2,"0");
-                        const dr=resasForDate(ds);
-                        const isToday=ds===todayStr;
-                        const col=(firstDay(calDate)+i)%7;
-                        return (
-                          <div key={day} style={{minHeight:100,borderRight:col<6?"1px solid #EBEAE5":"none",borderBottom:"1px solid #EBEAE5",padding:"6px 6px 4px",background:isToday?"rgba(184,146,79,0.05)":"#FFFFFF",position:"relative"}}>
-                            <div style={{display:"flex",justifyContent:"center",marginBottom:4}}>
-                              <span style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:isToday?700:400,background:isToday?"#B8924F":"transparent",color:isToday?"#FFFFFF":"#9E9890"}}>{day}</span>
+                  <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px",background:"#FAFAF7"}}>
+                    <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,overflow:"hidden"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderBottom:"1px solid #EBEAE5"}}>
+                        {["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"].map(d=>(
+                          <div key={d} style={{textAlign:"left",fontSize:10.5,color:"#A5A4A0",padding:"8px 10px",fontWeight:500,fontFamily:"'Geist','system-ui',sans-serif",textTransform:"uppercase",letterSpacing:"0.08em"}}>{d}</div>
+                        ))}
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+                        {/* Cellules du mois précédent (out) */}
+                        {(()=>{
+                          const fd = firstDay(calDate);
+                          const prevMonth = new Date(calDate.getFullYear(), calDate.getMonth(), 0);
+                          const prevDays = prevMonth.getDate();
+                          return Array.from({length:fd}).map((_,i)=>(
+                            <div key={"p"+i} style={{minHeight:110,background:"#FAFAF7",opacity:0.55,borderRight:i<fd-1||fd<7?"1px solid #EBEAE5":"none",borderBottom:"1px solid #EBEAE5",padding:"6px 8px"}}>
+                              <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,fontSize:13,color:"#A5A4A0",fontVariantNumeric:"tabular-nums",fontFamily:"'Geist','system-ui',sans-serif"}}>{prevDays-fd+i+1}</span>
                             </div>
-                            {dr.slice(0,3).map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                              <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setResaOnglet("infos"); }} style={{fontSize:10,background:st.bg,color:st.color,padding:"2px 6px",borderRadius:4,marginBottom:2,cursor:"pointer",overflow:"hidden",fontWeight:500,borderLeft:`2px solid ${st.color}`}}>
-                                <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                                  {r.heureDebut&&<span style={{opacity:.7,marginRight:3}}>{r.heureDebut}{r.heureFin&&`→${r.heureFin}`}</span>}{r.nom}
-                                </div>
-                                {(r.entreprise||espace)&&<div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",opacity:.7,fontSize:9}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
-                              </div>
-                            );})}
-                            {dr.length>3&&<div style={{fontSize:10,color:"#6B6E7E",paddingLeft:4,cursor:"pointer"}} onClick={()=>setCalView("jour")}>+{dr.length-3} autre{dr.length-3>1?"s":""}</div>}
-                          </div>
-                        );
-                      })}
+                          ));
+                        })()}
+                        {Array.from({length:daysInMonth(calDate)}).map((_,i)=>{
+                          const day=i+1;
+                          const ds=calDate.getFullYear()+"-"+String(calDate.getMonth()+1).padStart(2,"0")+"-"+String(day).padStart(2,"0");
+                          const dr=resasForDate(ds);
+                          const isToday=ds===todayStr;
+                          const col=(firstDay(calDate)+i)%7;
+                          return (
+                            <div key={day} style={{minHeight:110,borderRight:col<6?"1px solid #EBEAE5":"none",borderBottom:"1px solid #EBEAE5",padding:"6px 8px",background:isToday?"rgba(184,146,79,0.04)":"#FFFFFF",display:"flex",flexDirection:"column",gap:3,cursor:"pointer",transition:"background .12s ease"}} onClick={()=>{setCalDate(new Date(calDate.getFullYear(),calDate.getMonth(),day));setCalView("jour");}}>
+                              <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,fontSize:13,color:isToday?"#FFFFFF":"#6B6B72",fontVariantNumeric:"tabular-nums",fontWeight:isToday?500:400,background:isToday?"#B8924F":"transparent",borderRadius:"50%",boxShadow:isToday?"0 0 0 3px rgba(184,146,79,0.15)":"none",fontFamily:"'Geist','system-ui',sans-serif",marginBottom:2}}>{day}</span>
+                              {dr.slice(0,3).map(r=>{
+                                const st=getStatut(r);
+                                const statutLabel = (st.label||"").toLowerCase();
+                                const isConfirmed = statutLabel.includes("confirm") || statutLabel.includes("valid");
+                                const isNouveau = statutLabel.includes("nouveau");
+                                const bg = isConfirmed?"#F6F9F3":isNouveau?"#EDF2E8":st.bg||"#F5F4F0";
+                                return (
+                                  <div key={r.id} onClick={e=>{e.stopPropagation(); setSelResaGeneral(r); setResaOnglet("infos"); }} style={{fontSize:10.5,background:bg,padding:"2px 6px",borderRadius:4,cursor:"pointer",overflow:"hidden",display:"flex",alignItems:"center",gap:5,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                                    <span style={{width:5,height:5,borderRadius:"50%",background:st.color,flexShrink:0}}/>
+                                    {r.heureDebut&&<span style={{color:"#6B6B72",fontWeight:500,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{r.heureDebut}</span>}
+                                    <span style={{fontWeight:500,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{displayNom(r)}</span>
+                                  </div>
+                                );
+                              })}
+                              {dr.length>3&&<div style={{fontSize:10.5,color:"#A5A4A0",padding:"2px 6px",cursor:"pointer",fontWeight:500,fontFamily:"'Geist','system-ui',sans-serif"}} onClick={e=>{e.stopPropagation();setCalDate(new Date(calDate.getFullYear(),calDate.getMonth(),day));setCalView("jour");}}>+ {dr.length-3} autre{dr.length-3>1?"s":""}</div>}
+                            </div>
+                          );
+                        })}
+                        {/* Cellules du mois suivant (out) */}
+                        {(()=>{
+                          const fd = firstDay(calDate);
+                          const dim = daysInMonth(calDate);
+                          const total = fd + dim;
+                          const remainder = total % 7;
+                          const fillCount = remainder === 0 ? 0 : 7 - remainder;
+                          return Array.from({length:fillCount}).map((_,i)=>(
+                            <div key={"n"+i} style={{minHeight:110,background:"#FAFAF7",opacity:0.55,borderRight:i<fillCount-1?"1px solid #EBEAE5":"none",borderBottom:"1px solid #EBEAE5",padding:"6px 8px"}}>
+                              <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,fontSize:13,color:"#A5A4A0",fontVariantNumeric:"tabular-nums",fontFamily:"'Geist','system-ui',sans-serif"}}>{i+1}</span>
+                            </div>
+                          ));
+                        })()}
+                      </div>
                     </div>
                   </div>
                 )}
 
                 {/* ── VUE SEMAINE ── */}
                 {calView==="semaine" && (
-                  <div style={{flex:1,overflowY:"auto"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"48px repeat(7,1fr)",borderBottom:"1px solid #EBEAE5"}}>
-                      <div/>
-                      {weekDays.map(d=>{ const ds=fmtDate(d); const isTd=ds===todayStr; return (
-                        <div key={ds} style={{textAlign:"center",padding:"10px 4px",borderLeft:"1px solid #EBEAE5",background:"#FFFFFF"}}>
-                          <div style={{fontSize:11,color:isTd?"#C9A876":"#A5A4A0",fontWeight:600,textTransform:"uppercase"}}>{["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"][d.getDay()===0?6:d.getDay()-1]}</div>
-                          <div style={{width:28,height:28,borderRadius:"50%",background:isTd?"#C9A876":"transparent",color:isTd?"#0F0F0F":"#1A1A1E",fontSize:14,fontWeight:isTd?700:500,display:"flex",alignItems:"center",justifyContent:"center",margin:"4px auto 0"}}>{d.getDate()}</div>
-                        </div>
-                      );})}
-                    </div>
-                    <div style={{display:"grid",gridTemplateColumns:"48px repeat(7,1fr)"}}>
-                      <div/>
-                      {weekDays.map(d=>{ const ds=fmtDate(d); const dr=resasForDate(ds); const isTd=ds===todayStr; return (
-                        <div key={ds} style={{borderLeft:"1px solid #EBEAE5",minHeight:300,padding:"6px 4px",background:isTd?"rgba(201,168,118,0.03)":"transparent"}}>
-                          {dr.map(r=>{ const st=getStatut(r); const espace=ESPACES.find(e=>e.id===r.espaceId); return (
-                            <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setResaOnglet("infos"); }} style={{background:st.bg,borderLeft:`3px solid ${st.color}`,borderRadius:"0 6px 6px 0",padding:"5px 7px",marginBottom:4,cursor:"pointer",fontSize:11}}>
-                              <div style={{fontWeight:600,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.nom}</div>
-                              {r.heureDebut&&<div style={{fontSize:10,color:st.color,opacity:.8}}>{r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</div>}
-                              {(r.entreprise||espace)&&<div style={{fontSize:9,color:st.color,opacity:.65,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
+                  <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px",background:"#FAFAF7"}}>
+                    <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,overflow:"hidden"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderBottom:"1px solid #EBEAE5"}}>
+                        {weekDays.map((d,i)=>{
+                          const ds=fmtDate(d);
+                          const isTd=ds===todayStr;
+                          return (
+                            <div key={ds} style={{textAlign:"center",padding:"12px 8px",borderLeft:i>0?"1px solid #EBEAE5":"none"}}>
+                              <div style={{fontSize:10.5,color:"#A5A4A0",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>{["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"][d.getDay()===0?6:d.getDay()-1]}</div>
+                              <div style={{width:30,height:30,borderRadius:"50%",background:isTd?"#B8924F":"transparent",color:isTd?"#FFFFFF":"#1A1A1E",fontSize:15,fontWeight:isTd?500:400,display:"inline-flex",alignItems:"center",justifyContent:"center",margin:"5px auto 0",fontVariantNumeric:"tabular-nums",fontFamily:"'Geist','system-ui',sans-serif",boxShadow:isTd?"0 0 0 3px rgba(184,146,79,0.15)":"none"}}>{d.getDate()}</div>
                             </div>
-                          );})}
-                        </div>
-                      );})}
+                          );
+                        })}
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+                        {weekDays.map((d,i)=>{
+                          const ds=fmtDate(d);
+                          const dr=resasForDate(ds);
+                          const isTd=ds===todayStr;
+                          return (
+                            <div key={ds} onClick={()=>{setCalDate(new Date(d));setCalView("jour");}} style={{borderLeft:i>0?"1px solid #EBEAE5":"none",minHeight:320,padding:"8px 6px",background:isTd?"rgba(184,146,79,0.03)":"transparent",cursor:"pointer",display:"flex",flexDirection:"column",gap:5}}>
+                              {dr.length===0?(
+                                <div style={{fontSize:11,color:"#C5C3BE",textAlign:"center",padding:"20px 4px",fontFamily:"'Geist','system-ui',sans-serif"}}>—</div>
+                              ):dr.map(r=>{
+                                const st=getStatut(r);
+                                const espace=ESPACES.find(e=>e.id===r.espaceId);
+                                const statutLabel = (st.label||"").toLowerCase();
+                                const isConfirmed = statutLabel.includes("confirm") || statutLabel.includes("valid");
+                                const isNouveau = statutLabel.includes("nouveau");
+                                const bg = isConfirmed?"#F6F9F3":isNouveau?"#EDF2E8":st.bg||"#F5F4F0";
+                                return (
+                                  <div key={r.id} onClick={e=>{e.stopPropagation(); setSelResaGeneral(r); setResaOnglet("infos"); }} style={{background:bg,borderRadius:8,padding:"7px 9px",cursor:"pointer",fontSize:11,fontFamily:"'Geist','system-ui',sans-serif",display:"flex",flexDirection:"column",gap:2}}>
+                                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                                      <span style={{width:5,height:5,borderRadius:"50%",background:st.color,flexShrink:0}}/>
+                                      {r.heureDebut&&<span style={{fontSize:10.5,color:"#6B6B72",fontWeight:500,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{r.heureDebut}</span>}
+                                    </div>
+                                    <div style={{fontWeight:500,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontSize:11.5,letterSpacing:"-0.005em"}}>{displayNom(r)}</div>
+                                    {(r.entreprise||espace)&&<div style={{fontSize:10,color:st.color,opacity:0.7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
 
                 {/* ── VUE JOUR ── */}
                 {calView==="jour" && (
-                  <div style={{flex:1,overflowY:"auto",padding:20}}>
+                  <div style={{flex:1,overflowY:"auto",padding:"18px 28px 28px",background:"#FAFAF7"}}>
                     {dayResas.length===0?(
-                      <div style={{textAlign:"center",padding:"60px 0",color:"#6B6E7E"}}>
-                        <div style={{fontSize:36,marginBottom:10}}>📅</div>
-                        <div style={{fontSize:14}}>Aucun événement ce jour</div>
-                        <button onClick={()=>{setSelResaGeneral({...EMPTY_RESA,dateDebut:calDayStr}); setEditResaPanel({...EMPTY_RESA,dateDebut:calDayStr});}} style={{...gold,marginTop:16,fontSize:12}}>+ Ajouter un événement</button>
+                      <div style={{textAlign:"center",padding:"60px 0",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>
+                        <svg width="40" height="40" viewBox="0 0 14 14" fill="none" style={{color:"#C5C3BE",marginBottom:12}}><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1"/><path d="M1.5 5.5h11M4.5 1v2.5M9.5 1v2.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
+                        <div style={{fontSize:14,color:"#6B6B72"}}>Aucun événement ce jour</div>
+                        <div style={{fontSize:12,marginTop:4}}>Ajoutez une demande via le bouton en haut à droite</div>
+                        <button onClick={()=>{ setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || "", dateDebut: calDayStr}); setNewEventErrors({}); setShowNewEvent(true); }} style={{marginTop:16,display:"inline-flex",alignItems:"center",gap:7,padding:"9px 14px",borderRadius:8,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
+                          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                          Ajouter un événement
+                        </button>
                       </div>
                     ):(
-                      <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                        {dayResas.map(r=>{ const st=getStatut(r); return (
-                          <div key={r.id} onClick={()=>{ setSelResaGeneral(r); setResaOnglet("infos"); }} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5",borderLeft:`4px solid ${st.color}`,padding:"16px 18px",cursor:"pointer"}}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                              <div>
-                                <div style={{fontSize:15,fontWeight:600,color:"#1A1A1E"}}>{r.nom}</div>
-                                {r.entreprise&&<div style={{fontSize:12,color:"#6B6E7E",marginTop:1}}>{r.entreprise}</div>}
-                              </div>
-                              <span style={{fontSize:11,padding:"3px 10px",borderRadius:100,background:st.bg,color:st.color,fontWeight:600,flexShrink:0,marginLeft:8}}>{st.label}</span>
-                            </div>
-                            <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:8}}>
-                              {r.heureDebut&&<span style={{fontSize:12,color:"#6B6E7E"}}>🕐 {r.heureDebut}{r.heureFin&&` → ${r.heureFin}`}</span>}
-                              {r.typeEvenement&&<span style={{fontSize:12,color:"#6B6E7E"}}>🎉 {r.typeEvenement}</span>}
-                              {r.nombrePersonnes&&<span style={{fontSize:12,color:"#6B6E7E"}}>👥 {r.nombrePersonnes} pers.</span>}
-                              {r.espaceId&&<span style={{fontSize:12,color:"#6B6E7E"}}>📍 {ESPACES.find(e=>e.id===r.espaceId)?.nom}</span>}
-                            </div>
-                          </div>
-                        );})}
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {dayResas.map(r=><DayEventCard key={r.id} r={r}/>)}
                       </div>
                     )}
                   </div>
                 )}
               </div>
-
-              {/* Panel détail */}
             </div>
           );
         })()}
