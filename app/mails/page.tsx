@@ -538,9 +538,8 @@ export default function App() {
     setView("mails");
     setMailFilter("all");
     // handleSel marque comme lu + charge le corps complet + restaure le cache
-    // Note : handleSel fait setMailOrigine(null), on le replace juste après
-    handleSel(email).then?.(() => {}).catch?.(() => {});
-    // Utiliser setTimeout pour que setMailOrigine s'applique après handleSel
+    handleSel(email);
+    // setMailOrigine après handleSel car handleSel le remet à null
     setTimeout(() => {
       setMailOrigine({type:'evenement', resaId: resa.id, nom: resa.nom || resa.entreprise || "l'événement"});
     }, 0);
@@ -3020,10 +3019,10 @@ FORMAT
 
             {/* ══ VUE RADAR ARCHANGE ══ */}
             {mailFilter==="priorites" && (
-              <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+              <div style={{flex:sel?undefined:1,width:sel?560:undefined,display:"flex",overflow:"hidden",flexShrink:0}}>
 
                 {/* ── Panel gauche — liste des cartes ── */}
-                <div style={{flex:sel?undefined:1,width:sel?560:undefined,flexShrink:0,overflowY:"auto",background:"#F7F2EA",padding:"20px 20px",borderRight:sel?"1px solid #E6DCC9":"none"}}>
+                <div style={{flex:1,overflowY:"auto",background:"#F7F2EA",padding:"20px 20px",borderRight:sel?"1px solid #E6DCC9":"none"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                     <div>
                       <div style={{fontSize:18,fontWeight:300,color:"#1B1E2B",fontFamily:"'Cormorant Garamond',serif",letterSpacing:"0.01em"}}>Radar ARCHANGE</div>
@@ -3186,7 +3185,7 @@ FORMAT
                     </div>
                   )}
                   {(mailFilter==="envoyes"?sentList:draftList).map(em=>(
-                    <div key={em.id} onClick={()=>setSel(em as any)} style={{padding:"12px 16px",borderBottom:"1px solid #E6DCC9",cursor:"pointer",background:sel?.id===em.id?"#EFE7DA":"transparent",borderLeft:`2px solid ${sel?.id===em.id?"#B89456":"transparent"}`}}>
+                    <div key={em.id} onClick={()=>handleSel(em as any)} style={{padding:"12px 16px",borderBottom:"1px solid #E6DCC9",cursor:"pointer",background:sel?.id===em.id?"#EFE7DA":"transparent",borderLeft:`2px solid ${sel?.id===em.id?"#B89456":"transparent"}`}}>
                       <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
                         <span style={{fontSize:12,fontWeight:500,color:"#1B1E2B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>{mailFilter==="envoyes"?(em as any).toEmail||"Moi":em.fromEmail}</span>
                         <span style={{fontSize:10,color:"#6B6E7E",flexShrink:0,fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>{em.date}</span>
@@ -3419,6 +3418,7 @@ FORMAT
                           const resa = resas.find(r=>r.id===mailOrigine.resaId);
                           if(resa){ setSelResaGeneral(resa); setView("general"); setResaOnglet('mails'); }
                         } else if (mailOrigine.type==="radar") {
+                          setSel(null);
                           setMailFilter("priorites");
                         }
                         setMailOrigine(null);
