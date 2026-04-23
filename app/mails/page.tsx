@@ -3085,8 +3085,8 @@ FORMAT
                         ["Date", dateStr ? fmtDateFr(dateStr) : "—"],
                         ["Personnes", nbPers ? `${nbPers} pers.` : "—"],
                         ["Budget", budget||"—"],
-                        ...(heureDebut ? [["Horaires", heureDebut+(heureFin?` → ${heureFin}`:"")]] as [string,string][] : [["Horaires","—"]] as [string,string][]),
-                        ...(espaceNom ? [["Espace", espaceNom]] as [string,string][] : [["Espace","—"]] as [string,string][]),
+                        ...(heureDebut ? [["Horaires", heureDebut+(heureFin?` → ${heureFin}`:"")]] : [["Horaires","—"]]),
+                        ...(espaceNom ? [["Espace", espaceNom]] : [["Espace","—"]]),
                       ];
 
                       return (
@@ -3809,7 +3809,7 @@ FORMAT
                         <button key={v} onClick={()=>setCalView(v)} style={{padding:"5px 12px",borderRadius:6,border:"none",background:calView===v?"#FFFFFF":"transparent",color:calView===v?"#1C1814":"#8A8178",fontSize:12,fontWeight:calView===v?600:400,cursor:"pointer",textTransform:"capitalize"}}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
                       ))}
                     </div>
-                    <button onClick={()=>setEditResaPanel({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setSelResaGeneral({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""})} style={{...gold,fontSize:12,padding:"7px 14px"}}>+ Réservation</button>
+                    <button onClick={()=>{setSelResaGeneral({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setEditResaPanel({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""});}} style={{...gold,fontSize:12,padding:"7px 14px"}}>+ Réservation</button>
                   </div>
                 </div>
 
@@ -3886,7 +3886,7 @@ FORMAT
                       <div style={{textAlign:"center",padding:"60px 0",color:"#6B6E7E"}}>
                         <div style={{fontSize:36,marginBottom:10}}>📅</div>
                         <div style={{fontSize:14}}>Aucun événement ce jour</div>
-                        <button onClick={()=>setSelResaGeneral({...EMPTY_RESA,dateDebut:calDayStr}); setEditResaPanel({...EMPTY_RESA,dateDebut:calDayStr})} style={{...gold,marginTop:16,fontSize:12}}>+ Ajouter un événement</button>
+                        <button onClick={()=>{setSelResaGeneral({...EMPTY_RESA,dateDebut:calDayStr}); setEditResaPanel({...EMPTY_RESA,dateDebut:calDayStr});}} style={{...gold,marginTop:16,fontSize:12}}>+ Ajouter un événement</button>
                       </div>
                     ):(
                       <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -4167,7 +4167,7 @@ FORMAT
               ["menus",      "🍽️", "Menus & Tarifs",        "Collez ici vos menus, formules, tarifs par personne, options boissons…",            menusCtx,      saveMenusCtx],
               ["conditions", "📜", "Conditions & Politique", "Politique d'annulation, acomptes, délais de confirmation, horaires d'accès…",       conditionsCtx, saveConditionsCtx],
               ["ton",        "✏️", "Règles & Ton IA",        "Ex: Toujours proposer une visite. Ne pas mentionner les prix avant une demande de devis. Signature personnalisée…", tonCtx, saveTonCtx],
-            ] as [string, string, string, string, string, (v:string)=>void][]).map(([key, icon, title, ph, val, save]) => (
+            ]).map(([key, icon, title, ph, val, save]) => (
               <div key={key} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #E6DCC9"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#EFE7DA",borderBottom:srcSections[key]?"1px solid #E6DCC9":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,[key]:!s[key]}))}>
                   <div>
@@ -4325,7 +4325,7 @@ FORMAT
 
             {/* Onglets — 4 onglets identiques peu importe l'origine */}
             <div style={{display:"flex",borderBottom:"1px solid #E6DCC9",flexShrink:0}}>
-              {([["infos","📋 Infos"],["mails","📧 Mails "+(getLinkedEmails(selResaGeneral).length>0?"("+getLinkedEmails(selResaGeneral).length+")":"")],["noteIA","✨ Note IA"],["relances","⏰ Relances"]] as [string,string][]).map(([tab,label])=>(
+              {([["infos","📋 Infos"],["mails","📧 Mails "+(getLinkedEmails(selResaGeneral).length>0?"("+getLinkedEmails(selResaGeneral).length+")":"")],["noteIA","✨ Note IA"],["relances","⏰ Relances"]]).map(([tab,label])=>(
                 <button key={tab} onClick={()=>setResaOnglet(tab as any)} style={{flex:1,padding:"10px 0",fontSize:11,fontWeight:resaOnglet===tab?600:400,color:resaOnglet===tab?"#1B1E2B":"#6B6E7E",background:"transparent",border:"none",borderBottom:`2px solid ${resaOnglet===tab?"#1B1E2B":"transparent"}`,cursor:"pointer",whiteSpace:"nowrap"}}>
                   {label}
                 </button>
@@ -4349,7 +4349,7 @@ FORMAT
                   </div>
                   {/* Grille infos */}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                    {([["🎉","Type",selResaGeneral.typeEvenement],["👥","Personnes",selResaGeneral.nombrePersonnes?selResaGeneral.nombrePersonnes+" pers.":null],["📅","Date",fmtDateFr(selResaGeneral.dateDebut)],["🕐","Horaires",selResaGeneral.heureDebut+(selResaGeneral.heureFin?" → "+selResaGeneral.heureFin:"")],["📍","Espace",ESPACES.find(e=>e.id===selResaGeneral.espaceId)?.nom],["💰","Budget",selResaGeneral.budget]] as [string,string,any][]).map(([icon,k,v])=>(
+                    {([["🎉","Type",selResaGeneral.typeEvenement],["👥","Personnes",selResaGeneral.nombrePersonnes?selResaGeneral.nombrePersonnes+" pers.":null],["📅","Date",fmtDateFr(selResaGeneral.dateDebut)],["🕐","Horaires",selResaGeneral.heureDebut+(selResaGeneral.heureFin?" → "+selResaGeneral.heureFin:"")],["📍","Espace",ESPACES.find(e=>e.id===selResaGeneral.espaceId)?.nom],["💰","Budget",selResaGeneral.budget]]).map(([icon,k,v])=>(
                       <div key={k} style={{background:"#F5F2EE",borderRadius:10,padding:"13px 15px"}}>
                         <div style={{fontSize:10,color:"#6B6E7E",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.04em"}}>{icon} {k}</div>
                         <div style={{fontSize:14,fontWeight:500,color:v?"#1C1814":"#C0BAB2",fontStyle:v?"normal":"italic"}}>{v||"Non renseigné"}</div>
@@ -4500,7 +4500,7 @@ FORMAT
               <button onClick={()=>setEditResaPanel(null)} style={{width:28,height:28,borderRadius:6,border:"1px solid #E6DCC9",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             </div>
             <div style={{padding:18,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",flex:1}}>
-              {([["nom","👤 Nom"],["email","📧 Email"],["telephone","📞 Téléphone"],["entreprise","🏢 Entreprise"],["nombrePersonnes","👥 Nb personnes"]] as [string,string][]).map(([k,l])=>(
+              {([["nom","👤 Nom"],["email","📧 Email"],["telephone","📞 Téléphone"],["entreprise","🏢 Entreprise"],["nombrePersonnes","👥 Nb personnes"]]).map(([k,l])=>(
                 <div key={k}><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>{l}</label><input value={editResaPanel[k]||""} onChange={e=>setEditResaPanel({...editResaPanel,[k]:e.target.value})} style={{...inp}}/></div>
               ))}
               <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:4}}>📅 Date</label><DatePicker value={editResaPanel.dateDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,dateDebut:v})}/></div>
