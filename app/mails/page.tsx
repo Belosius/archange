@@ -537,6 +537,9 @@ export default function App() {
   const ouvrirMailDepuisEvenement = (email: any, resa: any) => {
     setView("mails");
     setMailFilter("all");
+    setTagFilter(null);
+    setSearch("");
+    setShowArchived(false);
     // handleSel marque comme lu + charge le corps complet + restaure le cache
     handleSel(email);
     // setMailOrigine après handleSel car handleSel le remet à null
@@ -1808,7 +1811,7 @@ export default function App() {
       return (b.rawDate||b.date||"").localeCompare(a.rawDate||a.date||""); // date_desc par défaut
     });
     return res;
-  }, [emails, search, mailFilter, sortOrder, showArchived]);
+  }, [emails, search, mailFilter, sortOrder, showArchived, tagFilter, emailTags]);
 
   // Synchroniser le ref à chaque render (avant les effects)
   filteredRef.current = filtered;
@@ -3136,7 +3139,7 @@ FORMAT
                     ◆
                     {prioritesArchange.length>0&&<span style={{position:"absolute",top:1,right:1,width:8,height:8,borderRadius:"50%",background:"#A84B45"}}/>}
                   </button>
-                  <button onClick={()=>setMailFilter("all")} title="Tous les mails" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="all"?"rgba(201,168,118,0.1)":"transparent",cursor:"pointer",fontSize:14}}>📬</button>
+                  <button onClick={()=>{setMailFilter("all");setShowArchived(false);setTagFilter(null);setSearch("");}} title="Tous les mails" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="all"&&!showArchived&&!tagFilter?"rgba(201,168,118,0.1)":"transparent",cursor:"pointer",fontSize:14}}>📬</button>
                   {MAIL_CATS.map(c=>(
                     <button key={c.id} onClick={()=>setMailFilter(c.id)} title={c.label} style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(201,168,118,0.1)":"transparent",cursor:"pointer",fontSize:14}}>
                       {c.icon}
@@ -3168,10 +3171,10 @@ FORMAT
                     {id:"all", label:"Tous les mails", count:emails.filter(m=>m.unread&&!m.archived).length||null,
                       icon:<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="9" rx="1" stroke="currentColor" strokeWidth="1.1"/><path d="M1 4l6 4.5L13 4" stroke="currentColor" strokeWidth="1.1"/></svg>},
                   ].map(item=>(
-                    <button key={item.id} onClick={()=>{setMailFilter("all");setShowArchived(false);setTagFilter(null);setSearch("");}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="all"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="all"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="all"&&!showArchived?500:400,transition:"background .12s ease"}}>
-                      <span style={{color:mailFilter==="all"&&!showArchived?"#1A1A1E":"#6B6E7E",display:"inline-flex"}}>{item.icon}</span>
+                    <button key={item.id} onClick={()=>{setMailFilter("all");setShowArchived(false);setTagFilter(null);setSearch("");}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="all"&&!showArchived&&!tagFilter?"#F5F4F0":"transparent",color:mailFilter==="all"&&!showArchived&&!tagFilter?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="all"&&!showArchived&&!tagFilter?500:400,transition:"background .12s ease"}}>
+                      <span style={{color:mailFilter==="all"&&!showArchived&&!tagFilter?"#1A1A1E":"#6B6E7E",display:"inline-flex"}}>{item.icon}</span>
                       <span style={{flex:1}}>{item.label}</span>
-                      <span style={{fontSize:11,color:mailFilter==="all"&&!showArchived?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{item.count||""}</span>
+                      <span style={{fontSize:11,color:mailFilter==="all"&&!showArchived&&!tagFilter?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{item.count||""}</span>
                     </button>
                   ))}
                   {MAIL_CATS.map(c=>{
@@ -3505,7 +3508,7 @@ FORMAT
                     <div style={{fontSize:12,fontWeight:500,marginBottom:4}}>
                       {mailFilter==="nonlus"?"Aucun email non lu":mailFilter==="atraiter"?"Aucun email à traiter":mailFilter==="star"?"Aucun favori":mailFilter==="flag"?"Aucun email flaggé":search?"Aucun résultat":"Aucun email"}
                     </div>
-                    {mailFilter!=="all"&&<button onClick={()=>{setMailFilter("all");setSearch("");}} style={{fontSize:11,color:"#B8924F",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Voir tous les mails</button>}
+                    {(mailFilter!=="all"||tagFilter)&&<button onClick={()=>{setMailFilter("all");setSearch("");setTagFilter(null);setShowArchived(false);}} style={{fontSize:11,color:"#B8924F",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Voir tous les mails</button>}
                   </div>
                 )}
                 {filtered.map(em=>{
