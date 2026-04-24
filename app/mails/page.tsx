@@ -943,11 +943,16 @@ export default function App() {
               if (saveTimer.current) clearTimeout(saveTimer.current);
               saveTimer.current = setTimeout(() => setSaveIndicator(false), 2000);
             } else {
-              console.error("Supabase save error:", key, res.status);
+              // Log détaillé pour diagnostic — affiche dans la console le statut + le message d'erreur de l'API
+              let errBody = "";
+              try { errBody = await res.text(); } catch {}
+              console.error(`[saveToSupabase] FAIL key="${key}" status=${res.status} ${res.statusText}`, errBody);
+              toast(`Sauvegarde ${key} : erreur ${res.status}`);
               setOfflineQueue(q => ({ ...q, [key]: value }));
             }
-          } catch {
-            // Hors ligne — mettre en file d'attente
+          } catch (err) {
+            // Hors ligne ou erreur réseau — log + queue
+            console.error(`[saveToSupabase] NETWORK FAIL key="${key}"`, err);
             setOfflineQueue(q => ({ ...q, [key]: value }));
           }
         };
