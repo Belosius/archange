@@ -1428,6 +1428,7 @@ export default function App() {
   const [showRelanceIA, setShowRelanceIA] = useState<any>(null); // resa
   const [showKeyHelp, setShowKeyHelp] = useState(false);
   const [relanceIAText, setRelanceIAText] = useState("");
+  const [relancesIA, setRelancesIA] = useState<Record<string,{text:string,date:string,motif:string}>>({});
   const [genRelanceIA, setGenRelanceIA] = useState(false);
   // Motifs de relance — personnalisables, persistés en Supabase
   const DEFAULT_MOTIFS_RELANCE = [
@@ -1617,6 +1618,7 @@ export default function App() {
 
   const saveSentReplies = (r: Record<string,any>) => { setSentReplies(r); saveToSupabase({ sent_replies: JSON.stringify(r) }); };
   const saveNoteIA = (n: Record<string,{text:string,date:string}>) => { setNoteIA(n); saveToSupabase({note_ia:JSON.stringify(n)}); };
+  const saveRelancesIA = (r: Record<string,{text:string,date:string,motif:string}>) => { setRelancesIA(r); saveToSupabase({relances_ia:JSON.stringify(r)}); };
   const saveStatuts = (s: StatutDef[]) => { setStatuts(s); saveToSupabase({statuts:JSON.stringify(s)}); };
   const saveResas = (r: any[]) => { setResas(r); saveToSupabase({resas:JSON.stringify(r)}); };
   const saveRelances = (r: any[]) => { setRelances(r); saveToSupabase({relances:JSON.stringify(r)}); };
@@ -1858,9 +1860,7 @@ export default function App() {
         Object.entries(prev).forEach(([id, v]: [string, any]) => {
           if (v.extracted) allExtractions[id] = v.extracted;
         });
-        // Limiter à 500 entrées (200 était trop bas — évinçait des analyses valides → re-analyses inutiles)
-        const keys = Object.keys(allExtractions);
-        if (keys.length > 500) keys.slice(0, keys.length - 500).forEach(k => delete allExtractions[k]);
+          // Aucune limite — toutes les extractions sont persistées (évite les re-analyses inutiles)
         saveExtractions(allExtractions);
         return prev;
       });
@@ -2070,6 +2070,7 @@ export default function App() {
         try { if (d.statuts)  { const s = JSON.parse(d.statuts); if (Array.isArray(s) && s.length > 0) setStatuts(s); } } catch {}
         try { if (d.relances)  setRelances(JSON.parse(d.relances)); }  catch {}
         try { if (d.note_ia)   setNoteIA(JSON.parse(d.note_ia)); }     catch {}
+        try { if (d.relances_ia) setRelancesIA(JSON.parse(d.relances_ia)); } catch {}
         try { if (d.email_resa_links) setEmailResaLinks(JSON.parse(d.email_resa_links)); } catch {}
         try { if (d.motifs_relance) { const m = JSON.parse(d.motifs_relance); if (Array.isArray(m) && m.length > 0) setMotifsRelance(m); } } catch {}
         try { if (d.email_meta) {
@@ -2120,8 +2121,8 @@ export default function App() {
           setRepliesCache(prev => {
             const merged: Record<string,any> = { ...prev };
             Object.entries(replies).forEach(([id, rc]: [string, any]) => {
-              if (!merged[id]) merged[id] = { reply: rc.reply||"", editReply: rc.editReply||rc.reply||"", extracted: null, dateGen: rc.dateGen||"" };
-              else merged[id] = { ...merged[id], reply: merged[id].reply || rc.reply||"", editReply: merged[id].editReply || rc.editReply||rc.reply||"", dateGen: merged[id].dateGen || rc.dateGen||"" };
+              if (!merged[id]) merged[id] = { reply: rc.reply||"", editReply: rc.editReply||rc.reply||"", extracted: null, dateGen: rc.dateGen||"", radarReply: rc.radarReply||"" };
+              else merged[id] = { ...merged[id], reply: merged[id].reply || rc.reply||"", editReply: merged[id].editReply || rc.editReply||rc.reply||"", dateGen: merged[id].dateGen || rc.dateGen||"", radarReply: merged[id].radarReply || rc.radarReply||"" };
             });
             return merged;
           });
@@ -2305,6 +2306,30 @@ export default function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ gmail_id: em.gmailId }),
         }).catch(() => {});
+      }
+      // Purger le cache ARCHANGE lié à cet email (évite accumulation infinie)
+      setRepliesCache(prev => {
+        if (!prev[em.id]) return prev;
+        const rest = { ...prev };
+        delete rest[em.id];
+        const extractionsToSave: Record<string,any> = {};
+        const repliesToSave: Record<string,any> = {};
+        Object.entries(rest).forEach(([id, v]: [string, any]) => {
+          if (v.extracted) extractionsToSave[id] = v.extracted;
+          if (v.reply || v.radarReply) repliesToSave[id] = { reply: v.reply || "", editReply: v.editReply || v.reply || "", dateGen: v.dateGen || "", radarReply: v.radarReply || "" };
+        });
+        saveToSupabase({ extractions: JSON.stringify(extractionsToSave), replies_cache: JSON.stringify(repliesToSave) });
+        return rest;
+      });
+      if (emailResaLinks[em.id]) {
+        const restLinks = { ...emailResaLinks };
+        delete restLinks[em.id];
+        saveEmailResaLinks(restLinks);
+      }
+      if (emailTags[em.id]) {
+        const restTags = { ...emailTags };
+        delete restTags[em.id];
+        saveEmailTags(restTags);
       }
       setUndoDelete(null);
     }, 4000);
@@ -2897,7 +2922,7 @@ export default function App() {
           };
           const repliesToSave: Record<string,{reply:string,editReply:string,dateGen:string}> = {};
           Object.entries(updated).forEach(([id, v]: [string, any]) => {
-            if (v.reply) repliesToSave[id] = { reply: v.reply, editReply: v.editReply || v.reply, dateGen: v.dateGen || "" };
+            if (v.reply) repliesToSave[id] = { reply: v.reply, editReply: v.editReply || v.reply, dateGen: v.dateGen || "", radarReply: v.radarReply || "" };
           });
           saveToSupabase({ replies_cache: JSON.stringify(repliesToSave) });
           return updated;
@@ -2978,8 +3003,17 @@ INSTRUCTIONS :
 Retourne UNIQUEMENT ce JSON valide :
 {"modifications": [{"champ": "nomDuChamp", "ancienne": "valeurActuelle", "nouvelle": "nouvelleValeur", "raison": "explication courte en français"}]}`;
 
-                const modifResult = await callClaude(modifPrompt, "Tu analyses des emails pour détecter des modifications de réservation. Réponds uniquement en JSON valide.", null, "detection_modif_resa");
-                const modifData = JSON.parse(modifResult.replace(/```json|```/g, "").trim());
+                // Garde cache — ne pas refaire la détection si déjà faite pour ce (email, resa)
+                const cachedModif = repliesCache[sel.id]?.modifDetection;
+                let modifData: any;
+                if (cachedModif && cachedModif.resaId === resaExists.id) {
+                  modifData = { modifications: cachedModif.modifications || [] };
+                } else {
+                  const modifResult = await callClaude(modifPrompt, "Tu analyses des emails pour détecter des modifications de réservation. Réponds uniquement en JSON valide.", null, "detection_modif_resa");
+                  modifData = JSON.parse(modifResult.replace(/```json|```/g, "").trim());
+                  // Persister dans repliesCache pour éviter re-détection
+                  setRepliesCache(prev => ({ ...prev, [sel.id]: { ...(prev[sel.id] || { reply: "", editReply: "" }), modifDetection: { resaId: resaExists.id, modifications: modifData.modifications || [] } } }));
+                }
 
                 if (modifData.modifications && modifData.modifications.length > 0) {
                   const suggestions: SuggestionModif[] = modifData.modifications.map((m: any) => ({
@@ -3117,6 +3151,11 @@ Retourne UNIQUEMENT ce JSON valide :
 
   const fetchLink = async (url: string, key: string) => {
     if (!url?.trim()) return;
+    // Garde anti-doublon : ne pas re-fetcher un lien avec la même URL
+    if (linksFetched[key]?.url === url) {
+      toast("Ce lien est déjà analysé — supprimez-le pour ré-analyser", "err");
+      return;
+    }
     setFetchingLink(key);
     try {
       const prompt = `Recherche et analyse ce site web pour ${nomEtab} : ${url}\nRésume en 200 mots max : ce que fait ce site, ses services, son ambiance, pour aider à répondre à des emails professionnels.`;
@@ -3160,6 +3199,14 @@ Retourne UNIQUEMENT ce JSON valide :
       const motifFinal = motifSelectionne === "Autre"
         ? (motifPersonnalise || "Relance générale")
         : (motifSelectionne || "Relance sans motif spécifique");
+
+      // Garde cache : ne pas regénérer si déjà fait pour (resa, motif)
+      const relanceCacheKey = `${resa.id}__${motifFinal}`;
+      if (relancesIA[relanceCacheKey]?.text) {
+        setRelanceIAText(relancesIA[relanceCacheKey].text);
+        setGenRelanceIA(false);
+        return;
+      }
 
       const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, telEtab, espacesDyn});
 
@@ -3209,6 +3256,11 @@ INSTRUCTIONS DE RÉDACTION
       // Docs exclus volontairement — non nécessaires pour une relance et trop lourds (PDFs base64)
       const txt = await callClaude(prompt, sys, null, "generation_relance");
       setRelanceIAText(txt);
+      // Persister dans relancesIA pour éviter re-génération
+      if (txt) {
+        const key = `${resa.id}__${motifFinal}`;
+        saveRelancesIA({ ...relancesIA, [key]: { text: txt, date: new Date().toLocaleDateString("fr-FR"), motif: motifFinal } });
+      }
     } catch (e: any) {
       toast(humanError(e), "err");
       setShowRelanceIA(null);
@@ -3216,7 +3268,8 @@ INSTRUCTIONS DE RÉDACTION
     setGenRelanceIA(false);
   };
 
-  const generateNoteIA = async (resa: any) => {
+  const generateNoteIA = async (resa: any, force = false) => {
+    if (!force && noteIA[resa.id]?.text) return;
     setGenNoteIA(resa.id);
     try {
       const linkedMails = getLinkedEmails(resa);
@@ -3302,6 +3355,13 @@ FORMAT
 
   const genRadarReply = async (m: any) => {
     setRadarReplyLoading(true);
+    // Garde cache : si une réponse Radar existe déjà pour ce mail, on la restaure
+    const cachedRadarReply = repliesCache[m.id]?.radarReply;
+    if (cachedRadarReply) {
+      setRadarReplyText(cachedRadarReply);
+      setRadarReplyLoading(false);
+      return;
+    }
     setRadarReplyText("");
     try {
       // Utilise l'extraction déjà faite si disponible (zéro travail en double)
@@ -3327,6 +3387,18 @@ FORMAT
 
       const rep = await callClaude(userMsg, sys, null, "generation_radar_reply");
       setRadarReplyText(rep || "");
+      // Persister dans repliesCache pour éviter re-génération (coût IA)
+      if (rep) {
+        setRepliesCache(prev => {
+          const updated = { ...prev, [m.id]: { ...(prev[m.id] || { reply: "", editReply: "" }), radarReply: rep } };
+          const repliesToSave: Record<string,any> = {};
+          Object.entries(updated).forEach(([id, v]: [string, any]) => {
+            if (v.reply || v.radarReply) repliesToSave[id] = { reply: v.reply || "", editReply: v.editReply || v.reply || "", dateGen: v.dateGen || "", radarReply: v.radarReply || "" };
+          });
+          saveToSupabase({ replies_cache: JSON.stringify(repliesToSave) });
+          return updated;
+        });
+      }
     } catch(e: any) {
       toast(humanError(e), "err");
     }
@@ -7166,14 +7238,14 @@ FORMAT
                     ? <div>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                           <span style={{fontSize:11.5,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>Générée le {noteIA[resa.id].date}</span>
-                          <button onClick={()=>generateNoteIA(resa)} disabled={!!genNoteIA} style={{fontSize:12,padding:"6px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#6B6B72",cursor:genNoteIA?"wait":"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>↺ Régénérer</button>
+                          <button onClick={()=>generateNoteIA(resa, !!noteIA[resa.id]?.text)} disabled={!!genNoteIA} style={{fontSize:12,padding:"6px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#6B6B72",cursor:genNoteIA?"wait":"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>↺ Régénérer</button>
                         </div>
                         <div style={{fontSize:13.5,color:"#1A1A1E",lineHeight:1.75,whiteSpace:"pre-wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>{noteIA[resa.id].text}</div>
                       </div>
                     : <div style={{textAlign:"center",padding:"48px 0",fontFamily:"'Geist','system-ui',sans-serif"}}>
                         <svg width="32" height="32" viewBox="0 0 14 14" fill="none" style={{color:"#B8924F",marginBottom:10,opacity:0.6}}><path d="M7 1v2M7 11v2M2.5 2.5l1.5 1.5M10 10l1.5 1.5M1 7h2M11 7h2M2.5 11.5l1.5-1.5M10 4l1.5-1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
                         <div style={{fontSize:13,color:"#6B6B72",marginBottom:16}}>Générez une note de briefing basée sur les échanges emails</div>
-                        <button onClick={()=>generateNoteIA(resa)} disabled={!!genNoteIA} style={{padding:"10px 18px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:genNoteIA?"wait":"pointer",display:"inline-flex",alignItems:"center",gap:8,fontFamily:"'Geist','system-ui',sans-serif",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
+                        <button onClick={()=>generateNoteIA(resa, !!noteIA[resa.id]?.text)} disabled={!!genNoteIA} style={{padding:"10px 18px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:genNoteIA?"wait":"pointer",display:"inline-flex",alignItems:"center",gap:8,fontFamily:"'Geist','system-ui',sans-serif",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
                           {genNoteIA?<><Spin s={12}/> Génération…</>:<><span style={{fontSize:13}}>✦</span> Générer la note</>}
                         </button>
                       </div>
