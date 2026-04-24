@@ -184,19 +184,50 @@ Structure recommandée :
 - Tu génères uniquement le texte de la réponse email, rien d'autre`;
 }
 // ─── Détection plateforme intermédiaire (Zenchef, ABC Salles, etc.) ──────────
-function detectPlateforme(fromEmail: string): string | null {
-  if (!fromEmail) return null;
-  const e = fromEmail.toLowerCase();
-  if (/zenchef/.test(e)) return "Zenchef";
-  if (/abcsalles|abc-salles/.test(e)) return "ABC Salles";
-  if (/funbooker/.test(e)) return "Funbooker";
-  if (/bookingshake/.test(e)) return "BookingShake";
-  if (/thefork|lafourchette/.test(e)) return "TheFork";
-  if (/mapado/.test(e)) return "Mapado";
-  if (/eventdrive/.test(e)) return "Eventdrive";
-  if (/bedouk/.test(e)) return "Bedouk";
-  if (/^(noreply|no-reply|notifications?|ne-pas-repondre|do-not-reply|mailer|system|postmaster)@/i.test(e)) return "Plateforme automatique";
+// Scanne D'ABORD l'expéditeur, PUIS le corps si fourni (cas des mails forwardés)
+function detectPlateforme(fromEmail: string, body?: string): string | null {
+  // 1. Détection sur l'expéditeur direct
+  if (fromEmail) {
+    const e = fromEmail.toLowerCase();
+    if (/zenchef/.test(e)) return "Zenchef";
+    if (/abcsalles|abc-salles/.test(e)) return "ABC Salles";
+    if (/funbooker/.test(e)) return "Funbooker";
+    if (/bookingshake/.test(e)) return "BookingShake";
+    if (/thefork|lafourchette/.test(e)) return "TheFork";
+    if (/mapado/.test(e)) return "Mapado";
+    if (/eventdrive/.test(e)) return "Eventdrive";
+    if (/bedouk/.test(e)) return "Bedouk";
+    if (/^(noreply|no-reply|notifications?|ne-pas-repondre|do-not-reply|mailer|system|postmaster)@/i.test(e)) return "Plateforme automatique";
+  }
+  // 2. Si pas détecté et qu'on a le corps : scanner les mails forwardés
+  if (body) {
+    const b = body.toLowerCase();
+    // Indicateur que c'est un forward
+    const estForward = /fwd\s*:|fw\s*:|forwarded\s+message|d[ée]but\s+du\s+message\s+r[ée]exp[ée]di[ée]|----[-\s]*(forwarded|message\s+transf[ée]r[ée])/i.test(body);
+    if (estForward) {
+      if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}zenchef/im.test(body)) return "Zenchef (via forward)";
+      if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}abc[-\s]?salles/im.test(body)) return "ABC Salles (via forward)";
+      if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}funbooker/im.test(body)) return "Funbooker (via forward)";
+      if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}bookingshake/im.test(body)) return "BookingShake (via forward)";
+      if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}(thefork|lafourchette)/im.test(body)) return "TheFork (via forward)";
+      if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}mapado/im.test(body)) return "Mapado (via forward)";
+      if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}eventdrive/im.test(body)) return "Eventdrive (via forward)";
+      if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}bedouk/im.test(body)) return "Bedouk (via forward)";
+      // Forward détecté mais plateforme inconnue
+      return "Mail forwardé (source à analyser dans le corps)";
+    }
+  }
   return null;
+}
+
+// ─── Détection si l'email est un mail forwardé (Fwd:, transféré, etc.) ──────
+function estMailForwarde(email: { subject?: string; body?: string }): boolean {
+  const s = (email.subject || "").toLowerCase();
+  if (/^(fwd|fw|tr)\s*:|^fwd:|^fw:/i.test(s.trim())) return true;
+  if (email.body) {
+    return /forwarded\s+message|d[ée]but\s+du\s+message\s+r[ée]exp[ée]di[ée]|----[-\s]*(forwarded|message\s+transf[ée]r[ée])/i.test(email.body);
+  }
+  return false;
 }
 
 // ─── Extraction du vrai contact client depuis le corps (cas plateforme) ─────
@@ -301,6 +332,59 @@ EXEMPLE :
      "entreprise": "SETEC"
   PAS noreply@mg.zenchefrestaurants.com !
 
+⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ CAS SPÉCIAL — MAILS FORWARDÉS (Fwd:, Tr:, "transféré")
+⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Quand un mail est forwardé (objet commençant par "Fwd:", "Fw:", "Tr:",
+ou corps contenant "Début du message réexpédié", "---------- Forwarded message",
+"---------- Message transféré"), le VRAI message à analyser est le mail ORIGINAL
+inclus dans le corps, PAS le message du forwardeur.
+
+Le forwardeur (ex: ton collègue Olivier qui te transfère une demande) n'est PAS
+le client. Même si sa signature apparaît en tête du mail, ses coordonnées
+(nom, email, téléphone) ne doivent PAS être mises dans le JSON.
+
+EXEMPLE DE FORWARD :
+  De: Olivier Teissedre <reva13france@gmail.com>
+  Objet: "TEST TES TEST Fwd: Nouvelle demande de réservation"
+  Corps: "TEST TES TEST
+          Bien à vous
+          Teissedre Olivier
+          Mail: reva13france@gmail.com
+
+          Début du message réexpédié :
+          De: ABC Salles <contact@email.abcsalles.com>
+          Objet: Nouvelle demande de réservation - Mariage
+          Répondre à: shana1212@icloud.com
+
+          Nouvelle demande pour Rêva Brasserie, de la part de Shana Atia.
+          Type: Mariage. 100 personnes. Date: 30/06/2026.
+          Email: shana1212@icloud.com. Téléphone: 06.51.75.53.19"
+
+  CORRECT :
+    "isReservation": true (c'est bien une demande de réservation !)
+    "nom": "Shana Atia"
+    "email": "shana1212@icloud.com"
+    "telephone": "06.51.75.53.19"
+    "sourceEmail": "plateforme:abc_salles"
+    "typeEvenement": "Mariage"
+    "dateDebut": "2026-06-30"
+    "nombrePersonnes": 100
+
+  INCORRECT (ce que tu ferais si tu ne lisais que la tête du mail) :
+    "isReservation": false (parce que "TEST TES TEST" semble anodin)
+    "nom": "Olivier Teissedre"
+    "email": "reva13france@gmail.com"
+    → NON ! Olivier est le FORWARDEUR, pas le client.
+
+RÈGLES POUR LES FORWARDS :
+1. Lis INTÉGRALEMENT le corps, y compris la partie après "Début du message réexpédié"
+2. La demande de réservation est dans la PARTIE FORWARDÉE, pas en tête
+3. Ignore le "TEST", "Bonjour", "Bien à vous" du forwardeur — ce n'est pas le vrai message
+4. Si la partie forwardée vient d'une plateforme (ABC Salles, Zenchef...), applique les règles plateforme
+5. isReservation = true si la partie forwardée est une demande de réservation
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RÈGLES D'EXTRACTION :
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -385,13 +469,24 @@ function buildExtractMessage(email: {
   snippet?: string;
 }): string {
   const fromEmail = email.fromEmail || "";
-  const plateforme = detectPlateforme(fromEmail);
   const corpsBrut = email.body || email.snippet || "";
-  const contactExtrait = plateforme ? extraireContactDepuisCorps(corpsBrut, fromEmail) : null;
+  // Nouveau : on passe le corps pour détecter les forwards
+  const plateforme = detectPlateforme(fromEmail, corpsBrut);
+  const estForward = estMailForwarde({ subject: email.subject, body: corpsBrut });
+  // On cherche le contact dans le corps si plateforme détectée OU si c'est un forward
+  const contactExtrait = (plateforme || estForward) ? extraireContactDepuisCorps(corpsBrut, fromEmail) : null;
 
-  const briefing = plateforme
-    ? `🎯 BRIEFING : Mail reçu via la plateforme "${plateforme}". Le client réel n'est PAS l'expéditeur "${fromEmail}". Cherche ses vraies coordonnées dans le corps.${contactExtrait?.email ? `\n   Indice automatique : email candidat = ${contactExtrait.email}` : ""}${contactExtrait?.nomComplet ? `\n   Indice automatique : nom candidat = ${contactExtrait.nomComplet}` : ""}${contactExtrait?.telephone ? `\n   Indice automatique : téléphone candidat = ${contactExtrait.telephone}` : ""}\n   Vérifie ces indices et complète les autres champs en lisant le corps complet.`
-    : `🎯 BRIEFING : Mail direct du client (pas de plateforme intermédiaire détectée).`;
+  // Briefing adapté à la situation
+  let briefing: string;
+  if (estForward && plateforme) {
+    briefing = `🎯 BRIEFING : Mail FORWARDÉ (transféré) — la demande originale vient de "${plateforme}". L'expéditeur "${fromEmail}" est le FORWARDEUR, pas le client. Le vrai client et ses coordonnées sont dans la partie forwardée du corps (après "Début du message réexpédié" ou équivalent).${contactExtrait?.email ? `\n   Indice automatique : email candidat = ${contactExtrait.email}` : ""}${contactExtrait?.nomComplet ? `\n   Indice automatique : nom candidat = ${contactExtrait.nomComplet}` : ""}${contactExtrait?.telephone ? `\n   Indice automatique : téléphone candidat = ${contactExtrait.telephone}` : ""}\n   ⚠️ NE PAS confondre les coordonnées du forwardeur avec celles du client réel.`;
+  } else if (estForward) {
+    briefing = `🎯 BRIEFING : Mail FORWARDÉ (transféré) — l'expéditeur "${fromEmail}" est le forwardeur, pas forcément le client. Lis la partie forwardée du corps pour identifier la vraie demande et le vrai destinataire.${contactExtrait?.email ? `\n   Indice automatique : email candidat trouvé dans le forward = ${contactExtrait.email}` : ""}${contactExtrait?.nomComplet ? `\n   Indice automatique : nom candidat = ${contactExtrait.nomComplet}` : ""}`;
+  } else if (plateforme) {
+    briefing = `🎯 BRIEFING : Mail reçu via la plateforme "${plateforme}". Le client réel n'est PAS l'expéditeur "${fromEmail}". Cherche ses vraies coordonnées dans le corps.${contactExtrait?.email ? `\n   Indice automatique : email candidat = ${contactExtrait.email}` : ""}${contactExtrait?.nomComplet ? `\n   Indice automatique : nom candidat = ${contactExtrait.nomComplet}` : ""}${contactExtrait?.telephone ? `\n   Indice automatique : téléphone candidat = ${contactExtrait.telephone}` : ""}\n   Vérifie ces indices et complète les autres champs en lisant le corps complet.`;
+  } else {
+    briefing = `🎯 BRIEFING : Mail direct du client (pas de plateforme ni forward détectés).`;
+  }
 
   const MAX_BODY = 30000;
   const corpsTronque = corpsBrut.length > MAX_BODY
@@ -405,13 +500,14 @@ function buildExtractMessage(email: {
     <expediteur_technique>${email.from || ""} <${fromEmail}></expediteur_technique>
     <objet>${email.subject || "(sans objet)"}</objet>
     ${plateforme ? `<plateforme_detectee>${plateforme}</plateforme_detectee>` : ""}
+    ${estForward ? `<mail_forwarde>true — la vraie demande est dans la partie forwardée du corps</mail_forwarde>` : ""}
   </metadonnees>
   <corps>
 ${corpsTronque}
   </corps>
 </email_a_analyser>
 
-⚠️ Rappel final : si le mail vient d'une plateforme (${plateforme || "non détecté ici"}), les vrais nom/email/téléphone/société sont DANS LE CORPS, pas dans <expediteur_technique>.
+⚠️ Rappel final :${estForward ? ` c'est un MAIL FORWARDÉ — ignore les coordonnées du forwardeur en tête, le vrai client est dans la partie forwardée du corps.` : ""}${plateforme ? ` le mail implique la plateforme "${plateforme}" — les vrais nom/email/téléphone/société sont DANS LE CORPS, pas dans <expediteur_technique>.` : (!estForward ? ` mail direct, utilise les coordonnées de l'expéditeur.` : "")}
 Retourne maintenant le JSON.`;
 }
 
@@ -423,8 +519,9 @@ function buildResponseMessage(opts: {
 }): string {
   const { email, extracted, historiqueMails = [], signature = "" } = opts;
   const fromEmail = email.fromEmail || "";
-  const plateforme = detectPlateforme(fromEmail);
-  const contactDansCorps = plateforme ? extraireContactDepuisCorps(email.body || email.snippet || "", fromEmail) : null;
+  const corpsEmail = email.body || email.snippet || "";
+  const plateforme = detectPlateforme(fromEmail, corpsEmail);
+  const contactDansCorps = plateforme ? extraireContactDepuisCorps(corpsEmail, fromEmail) : null;
   const vraiNom = extracted?.nom || contactDansCorps?.nomComplet || email.from || "le client";
   const vraiEmail = extracted?.email || contactDansCorps?.email || fromEmail;
   const prenom = vraiNom.split(/\s+/)[0] || "";
