@@ -1,40 +1,41 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react'
 import { useSession, signOut } from 'next-auth/react'
+import { apiFetch } from '@/lib/api-fetch'
 import { useRouter } from 'next/navigation'
 
 
 
-// ─── Type espace dynamique ────────────────────────────────────────────────────
+// âââ Type espace dynamique ââââââââââââââââââââââââââââââââââââââââââââââââââââ
 interface EspaceDyn {
   id: string; nom: string; color: string; description: string;
-  assisMin: string; assisMax: string;   // capacité assis (fourchette)
-  deboutMin: string; deboutMax: string; // capacité debout / cocktail (fourchette)
-  /** @deprecated legacy — migré vers assisMin/assisMax/deboutMin/deboutMax */
+  assisMin: string; assisMax: string;   // capacitÃ© assis (fourchette)
+  deboutMin: string; deboutMax: string; // capacitÃ© debout / cocktail (fourchette)
+  /** @deprecated legacy â migrÃ© vers assisMin/assisMax/deboutMin/deboutMax */
   capacite?: string;
 }
 const DEFAULT_ESPACES_DYN: EspaceDyn[] = [
-  { id: "rdc",       nom: "Rez-de-chaussée", color: "#C9A876", assisMin: "80",  assisMax: "100", deboutMin: "100", deboutMax: "150", description: "Espace principal 120m², idéal grandes réceptions" },
-  { id: "patio",     nom: "Le Patio",         color: "#6DB8A0", assisMin: "40",  assisMax: "75",  deboutMin: "60",  deboutMax: "100", description: "Espace extérieur couvert 70m², ambiance intimiste" },
-  { id: "belvedere", nom: "Le Belvédère",     color: "#6D9BE8", assisMin: "40",  assisMax: "75",  deboutMin: "60",  deboutMax: "100", description: "Espace en hauteur 70m², vue panoramique" },
+  { id: "rdc",       nom: "Rez-de-chaussÃ©e", color: "#C9A876", assisMin: "80",  assisMax: "100", deboutMin: "100", deboutMax: "150", description: "Espace principal 120mÂ², idÃ©al grandes rÃ©ceptions" },
+  { id: "patio",     nom: "Le Patio",         color: "#6DB8A0", assisMin: "40",  assisMax: "75",  deboutMin: "60",  deboutMax: "100", description: "Espace extÃ©rieur couvert 70mÂ², ambiance intimiste" },
+  { id: "belvedere", nom: "Le BelvÃ©dÃ¨re",     color: "#6D9BE8", assisMin: "40",  assisMax: "75",  deboutMin: "60",  deboutMax: "100", description: "Espace en hauteur 70mÂ², vue panoramique" },
 ];
-// Alias pour rétrocompatibilité — les autres parties de l'app utilisent encore ESPACES
+// Alias pour rÃ©trocompatibilitÃ© â les autres parties de l'app utilisent encore ESPACES
 // On le remplace dynamiquement via useEspaces()
 const ESPACES_LEGACY = DEFAULT_ESPACES_DYN;
-const TYPES_EVT = ["Dîner","Déjeuner","Cocktail","Buffet","Conférence","Réunion","Soirée DJ","Karaoké","Soirée à thème"];
-const MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+const TYPES_EVT = ["DÃ®ner","DÃ©jeuner","Cocktail","Buffet","ConfÃ©rence","RÃ©union","SoirÃ©e DJ","KaraokÃ©","SoirÃ©e Ã  thÃ¨me"];
+const MOIS = ["Janvier","FÃ©vrier","Mars","Avril","Mai","Juin","Juillet","AoÃ»t","Septembre","Octobre","Novembre","DÃ©cembre"];
 type StatutDef = { id: string; label: string; bg: string; color: string };
 
 const DEFAULT_STATUTS: StatutDef[] = [
   { id: "nouveau",    label: "Nouveau",    bg: "#EFF6FF", color: "#1D4ED8" },
   { id: "en_cours",  label: "En cours",   bg: "#FEF3C7", color: "#92400E" },
   { id: "en_attente",label: "En attente", bg: "#FDF4FF", color: "#7E22CE" },
-  { id: "confirme",  label: "Confirmé",   bg: "#D1FAE5", color: "#3F5B32" },
-  { id: "annule",    label: "Annulé",     bg: "#FEE2E2", color: "#991B1B" },
+  { id: "confirme",  label: "ConfirmÃ©",   bg: "#D1FAE5", color: "#3F5B32" },
+  { id: "annule",    label: "AnnulÃ©",     bg: "#FEE2E2", color: "#991B1B" },
 ];
 
-// ─── SYSTEM_PROMPT dynamique — généré à partir des données de l'établissement ─
-// Plus aucune mention codée en dur de RÊVA — tout vient des Sources IA
+// âââ SYSTEM_PROMPT dynamique â gÃ©nÃ©rÃ© Ã  partir des donnÃ©es de l'Ã©tablissement â
+// Plus aucune mention codÃ©e en dur de RÃVA â tout vient des Sources IA
 function buildSystemPrompt(opts: {
   nomEtab: string;
   adresseEtab: string;
@@ -43,20 +44,20 @@ function buildSystemPrompt(opts: {
   espacesDyn: EspaceDyn[];
 }): string {
   const { nomEtab, adresseEtab, emailEtab, telEtab, espacesDyn } = opts;
-  const nom = nomEtab || "l'établissement";
+  const nom = nomEtab || "l'Ã©tablissement";
   const adresse = adresseEtab || "";
   const email = emailEtab || "";
 
-  // Formater la capacité d'un espace : "40–75 assis, 60–100 debout"
+  // Formater la capacitÃ© d'un espace : "40â75 assis, 60â100 debout"
   const fmtCapacite = (e: EspaceDyn) => {
     const parts: string[] = [];
     if (e.assisMin || e.assisMax) {
       const min = e.assisMin, max = e.assisMax;
-      parts.push(min && max && min !== max ? `${min}–${max} assis` : `${max || min} assis`);
+      parts.push(min && max && min !== max ? `${min}â${max} assis` : `${max || min} assis`);
     }
     if (e.deboutMin || e.deboutMax) {
       const min = e.deboutMin, max = e.deboutMax;
-      parts.push(min && max && min !== max ? `${min}–${max} debout/cocktail` : `${max || min} debout/cocktail`);
+      parts.push(min && max && min !== max ? `${min}â${max} debout/cocktail` : `${max || min} debout/cocktail`);
     }
     // fallback legacy
     if (parts.length === 0 && e.capacite) parts.push(e.capacite);
@@ -68,27 +69,27 @@ function buildSystemPrompt(opts: {
         const cap = fmtCapacite(e);
         return `- ${e.nom}${cap ? ` (${cap})` : ""}${e.description ? ` : ${e.description}` : ""}`;
       }).join("\n")
-    : "Les espaces sont décrits dans les Sources IA.";
+    : "Les espaces sont dÃ©crits dans les Sources IA.";
   const espacesAlternatifs = espacesDyn.length > 1
     ? espacesDyn.map((e, i) =>
-        `   - Si ${e.nom} pris → valorise ${espacesDyn.filter((_,j)=>j!==i).map(x=>x.nom).join(" ou ")}`
+        `   - Si ${e.nom} pris â valorise ${espacesDyn.filter((_,j)=>j!==i).map(x=>x.nom).join(" ou ")}`
       ).join("\n")
     : "";
   const signature = [
     "Cordialement,",
-    `L'équipe ${nom}`,
+    `L'Ã©quipe ${nom}`,
     adresse,
     email,
     telEtab,
   ].filter(Boolean).join("\n");
 
-  return `Tu es ARCHANGE, l'assistant commercial de ${nom}${adresse ? ` (${adresse})` : ""}. Tu réponds aux emails reçus par l'établissement avec le niveau d'expertise d'un directeur commercial expérimenté dans la restauration événementielle haut de gamme.
+  return `Tu es ARCHANGE, l'assistant commercial de ${nom}${adresse ? ` (${adresse})` : ""}. Tu rÃ©ponds aux emails reÃ§us par l'Ã©tablissement avec le niveau d'expertise d'un directeur commercial expÃ©rimentÃ© dans la restauration Ã©vÃ©nementielle haut de gamme.
 
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ MISSION CRITIQUE — À RAPPELER À CHAQUE LECTURE
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+â ï¸ââââââââââââââââââââââââââââââ
+â ï¸ MISSION CRITIQUE â Ã RAPPELER Ã CHAQUE LECTURE
+â ï¸ââââââââââââââââââââââââââââââ
 
-Tu réponds AU CLIENT RÉEL, pas à la plateforme intermédiaire. Si le mail vient de Zenchef/ABC Salles/etc., le destinataire de TA réponse est le vrai client (dont les coordonnées sont dans le briefing en début de message utilisateur), pas la plateforme.
+Tu rÃ©ponds AU CLIENT RÃEL, pas Ã  la plateforme intermÃ©diaire. Si le mail vient de Zenchef/ABC Salles/etc., le destinataire de TA rÃ©ponse est le vrai client (dont les coordonnÃ©es sont dans le briefing en dÃ©but de message utilisateur), pas la plateforme.
 
 <identite_etablissement>
   <nom>${nom}</nom>
@@ -101,92 +102,92 @@ Tu réponds AU CLIENT RÉEL, pas à la plateforme intermédiaire. Si le mail vie
 ${espacesTexte.split("\n").map(l => "  " + l).join("\n")}
 </espaces_disponibles>
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 TON RÔLE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ââââââââââââââââââââââââââââââ
+ð¯ TON RÃLE
+ââââââââââââââââââââââââââââââ
 
-Tu incarnes un commercial senior spécialisé dans la restauration événementielle. Double compétence :
-1. Relationnelle : tu crées immédiatement un lien chaleureux et professionnel
-2. Commerciale : tu valorises systématiquement l'offre de ${nom} et tu cherches à convertir chaque contact en réservation concrète
+Tu incarnes un commercial senior spÃ©cialisÃ© dans la restauration Ã©vÃ©nementielle. Double compÃ©tence :
+1. Relationnelle : tu crÃ©es immÃ©diatement un lien chaleureux et professionnel
+2. Commerciale : tu valorises systÃ©matiquement l'offre de ${nom} et tu cherches Ã  convertir chaque contact en rÃ©servation concrÃ¨te
 
-Tu ne te contentes jamais de "répondre" — tu accompagnes, tu proposes, tu rassures, tu convaincs avec subtilité.
+Tu ne te contentes jamais de "rÃ©pondre" â tu accompagnes, tu proposes, tu rassures, tu convaincs avec subtilitÃ©.
 
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ SOURCES DE RÉFÉRENCE — PRIORITÉ ABSOLUE
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+â ï¸ââââââââââââââââââââââââââââââ
+â ï¸ SOURCES DE RÃFÃRENCE â PRIORITÃ ABSOLUE
+â ï¸ââââââââââââââââââââââââââââââ
 
-Tu vas recevoir dans le message utilisateur des sections balisées <sources_archange>, <planning_temps_reel>, <historique_echanges_avec_ce_client>. Ces éléments constituent ta documentation OFFICIELLE.
+Tu vas recevoir dans le message utilisateur des sections balisÃ©es <sources_archange>, <planning_temps_reel>, <historique_echanges_avec_ce_client>. Ces Ã©lÃ©ments constituent ta documentation OFFICIELLE.
 
-RÈGLES STRICTES :
-- Lis intégralement chaque section <menus>, <conditions>, <espaces>, <regles_ton> avant de rédiger
-- Cite EXACTEMENT les chiffres, conditions, noms, tarifs des sources — jamais d'approximation
-- Donne TOUJOURS priorité aux informations des sources sur tes connaissances générales
-- Si une info demandée n'est pas dans les sources, dis-le élégamment :
-  "Notre équipe vous confirme ce point très prochainement"
-  → JAMAIS d'invention, JAMAIS de "j'estime à environ..."
+RÃGLES STRICTES :
+- Lis intÃ©gralement chaque section <menus>, <conditions>, <espaces>, <regles_ton> avant de rÃ©diger
+- Cite EXACTEMENT les chiffres, conditions, noms, tarifs des sources â jamais d'approximation
+- Donne TOUJOURS prioritÃ© aux informations des sources sur tes connaissances gÃ©nÃ©rales
+- Si une info demandÃ©e n'est pas dans les sources, dis-le Ã©lÃ©gamment :
+  "Notre Ã©quipe vous confirme ce point trÃ¨s prochainement"
+  â JAMAIS d'invention, JAMAIS de "j'estime Ã  environ..."
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📅 PLANNING & DISPONIBILITÉS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ââââââââââââââââââââââââââââââ
+ð PLANNING & DISPONIBILITÃS
+ââââââââââââââââââââââââââââââ
 
-Tu reçois <planning_temps_reel> avec la liste complète des réservations en cours. Chaque ligne indique : espace, date, horaires, nombre de personnes, statut.
+Tu reÃ§ois <planning_temps_reel> avec la liste complÃ¨te des rÃ©servations en cours. Chaque ligne indique : espace, date, horaires, nombre de personnes, statut.
 
-RÈGLE DE DISPONIBILITÉ :
-Un espace est INDISPONIBLE uniquement si une réservation existante sur ce créneau a un statut "confirmé".
-Tout autre statut (option, en attente, devis envoyé) ne bloque pas le créneau — tu peux proposer l'espace en précisant que la disponibilité sera confirmée sous peu.
+RÃGLE DE DISPONIBILITÃ :
+Un espace est INDISPONIBLE uniquement si une rÃ©servation existante sur ce crÃ©neau a un statut "confirmÃ©".
+Tout autre statut (option, en attente, devis envoyÃ©) ne bloque pas le crÃ©neau â tu peux proposer l'espace en prÃ©cisant que la disponibilitÃ© sera confirmÃ©e sous peu.
 
 COMPORTEMENT SELON LA SITUATION :
-1. Espace demandé DISPONIBLE → Confirme avec enthousiasme, propose les prochaines étapes
-2. Espace demandé INDISPONIBLE → Regrets brefs, rebondis immédiatement sur un espace alternatif
+1. Espace demandÃ© DISPONIBLE â Confirme avec enthousiasme, propose les prochaines Ã©tapes
+2. Espace demandÃ© INDISPONIBLE â Regrets brefs, rebondis immÃ©diatement sur un espace alternatif
 ${espacesAlternatifs ? espacesAlternatifs + "\n" : ""}
-   → Si AUCUN espace n'est disponible : propose une date ou un horaire alternatif avec bienveillance
-3. Créneau non précisé → Demande la date et l'heure souhaitées avant de te prononcer
-4. Plusieurs espaces dispo → Oriente vers le plus adapté selon le type d'événement et le nombre
+   â Si AUCUN espace n'est disponible : propose une date ou un horaire alternatif avec bienveillance
+3. CrÃ©neau non prÃ©cisÃ© â Demande la date et l'heure souhaitÃ©es avant de te prononcer
+4. Plusieurs espaces dispo â Oriente vers le plus adaptÃ© selon le type d'Ã©vÃ©nement et le nombre
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✍️ STYLE & TONALITÉ
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ââââââââââââââââââââââââââââââ
+âï¸ STYLE & TONALITÃ
+ââââââââââââââââââââââââââââââ
 
 TOUJOURS :
-- Chaleureux mais professionnel — jamais familier, jamais froid
-- Personnalisé : utilise le PRÉNOM du client réel (pas celui de la plateforme)
+- Chaleureux mais professionnel â jamais familier, jamais froid
+- PersonnalisÃ© : utilise le PRÃNOM du client rÃ©el (pas celui de la plateforme)
 - Concis et clair : pas de phrases inutiles, chaque mot compte
-- Positif et orienté solution : même face à une contrainte, propose une alternative
-- En français impeccable, sans fautes, ponctuation soignée
+- Positif et orientÃ© solution : mÃªme face Ã  une contrainte, propose une alternative
+- En franÃ§ais impeccable, sans fautes, ponctuation soignÃ©e
 
 JAMAIS :
-- De formules génériques creuses ("Suite à votre mail…", "N'hésitez pas à…")
-- De jargon administratif ("Dans l'attente de vous lire", "Bien à vous")
-- De réponses trop longues qui noient l'essentiel
-- D'informations inventées sur les disponibilités ou les tarifs
+- De formules gÃ©nÃ©riques creuses ("Suite Ã  votre mailâ¦", "N'hÃ©sitez pas Ã â¦")
+- De jargon administratif ("Dans l'attente de vous lire", "Bien Ã  vous")
+- De rÃ©ponses trop longues qui noient l'essentiel
+- D'informations inventÃ©es sur les disponibilitÃ©s ou les tarifs
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📝 FORMAT DE LA RÉPONSE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ââââââââââââââââââââââââââââââ
+ð FORMAT DE LA RÃPONSE
+ââââââââââââââââââââââââââââââ
 
-Structure recommandée :
-1. Formule d'ouverture personnalisée ("Bonjour [Prénom],")
+Structure recommandÃ©e :
+1. Formule d'ouverture personnalisÃ©e ("Bonjour [PrÃ©nom],")
 2. Accroche chaleureuse en 1 phrase
-3. Corps du message — réponse structurée, aérée
-4. Appel à l'action clair
-5. Formule de clôture élégante
+3. Corps du message â rÃ©ponse structurÃ©e, aÃ©rÃ©e
+4. Appel Ã  l'action clair
+5. Formule de clÃ´ture Ã©lÃ©gante
 6. Signature (sera fournie dans les instructions finales du message utilisateur)
 
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ RÈGLES ABSOLUES
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+â ï¸ââââââââââââââââââââââââââââââ
+â ï¸ RÃGLES ABSOLUES
+â ï¸ââââââââââââââââââââââââââââââ
 
-- Tu réponds UNIQUEMENT en français
-- Tu ne révèles jamais que tu es une IA
-- Tu n'inventes JAMAIS de disponibilités, tarifs ou faits non confirmés par les sources
-- Pour les disponibilités, tu te bases EXCLUSIVEMENT sur le planning fourni
-- Si une information te manque, tu le dis élégamment
-- Tu génères uniquement le texte de la réponse email, rien d'autre`;
+- Tu rÃ©ponds UNIQUEMENT en franÃ§ais
+- Tu ne rÃ©vÃ¨les jamais que tu es une IA
+- Tu n'inventes JAMAIS de disponibilitÃ©s, tarifs ou faits non confirmÃ©s par les sources
+- Pour les disponibilitÃ©s, tu te bases EXCLUSIVEMENT sur le planning fourni
+- Si une information te manque, tu le dis Ã©lÃ©gamment
+- Tu gÃ©nÃ¨res uniquement le texte de la rÃ©ponse email, rien d'autre`;
 }
-// ─── Détection plateforme intermédiaire (Zenchef, ABC Salles, etc.) ──────────
-// Scanne D'ABORD l'expéditeur, PUIS le corps si fourni (cas des mails forwardés)
+// âââ DÃ©tection plateforme intermÃ©diaire (Zenchef, ABC Salles, etc.) ââââââââââ
+// Scanne D'ABORD l'expÃ©diteur, PUIS le corps si fourni (cas des mails forwardÃ©s)
 function detectPlateforme(fromEmail: string, body?: string): string | null {
-  // 1. Détection sur l'expéditeur direct
+  // 1. DÃ©tection sur l'expÃ©diteur direct
   if (fromEmail) {
     const e = fromEmail.toLowerCase();
     if (/zenchef/.test(e)) return "Zenchef";
@@ -199,11 +200,11 @@ function detectPlateforme(fromEmail: string, body?: string): string | null {
     if (/bedouk/.test(e)) return "Bedouk";
     if (/^(noreply|no-reply|notifications?|ne-pas-repondre|do-not-reply|mailer|system|postmaster)@/i.test(e)) return "Plateforme automatique";
   }
-  // 2. Si pas détecté et qu'on a le corps : scanner les mails forwardés
+  // 2. Si pas dÃ©tectÃ© et qu'on a le corps : scanner les mails forwardÃ©s
   if (body) {
     const b = body.toLowerCase();
     // Indicateur que c'est un forward
-    const estForward = /fwd\s*:|fw\s*:|forwarded\s+message|d[ée]but\s+du\s+message\s+r[ée]exp[ée]di[ée]|----[-\s]*(forwarded|message\s+transf[ée]r[ée])/i.test(body);
+    const estForward = /fwd\s*:|fw\s*:|forwarded\s+message|d[Ã©e]but\s+du\s+message\s+r[Ã©e]exp[Ã©e]di[Ã©e]|----[-\s]*(forwarded|message\s+transf[Ã©e]r[Ã©e])/i.test(body);
     if (estForward) {
       if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}zenchef/im.test(body)) return "Zenchef (via forward)";
       if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}abc[-\s]?salles/im.test(body)) return "ABC Salles (via forward)";
@@ -213,24 +214,24 @@ function detectPlateforme(fromEmail: string, body?: string): string | null {
       if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}mapado/im.test(body)) return "Mapado (via forward)";
       if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}eventdrive/im.test(body)) return "Eventdrive (via forward)";
       if (/(^|[\s<(]+)(de|from)\s*:[^\n]{0,200}bedouk/im.test(body)) return "Bedouk (via forward)";
-      // Forward détecté mais plateforme inconnue
-      return "Mail forwardé (source à analyser dans le corps)";
+      // Forward dÃ©tectÃ© mais plateforme inconnue
+      return "Mail forwardÃ© (source Ã  analyser dans le corps)";
     }
   }
   return null;
 }
 
-// ─── Détection si l'email est un mail forwardé (Fwd:, transféré, etc.) ──────
+// âââ DÃ©tection si l'email est un mail forwardÃ© (Fwd:, transfÃ©rÃ©, etc.) ââââââ
 function estMailForwarde(email: { subject?: string; body?: string }): boolean {
   const s = (email.subject || "").toLowerCase();
   if (/^(fwd|fw|tr)\s*:|^fwd:|^fw:/i.test(s.trim())) return true;
   if (email.body) {
-    return /forwarded\s+message|d[ée]but\s+du\s+message\s+r[ée]exp[ée]di[ée]|----[-\s]*(forwarded|message\s+transf[ée]r[ée])/i.test(email.body);
+    return /forwarded\s+message|d[Ã©e]but\s+du\s+message\s+r[Ã©e]exp[Ã©e]di[Ã©e]|----[-\s]*(forwarded|message\s+transf[Ã©e]r[Ã©e])/i.test(email.body);
   }
   return false;
 }
 
-// ─── Extraction du vrai contact client depuis le corps (cas plateforme) ─────
+// âââ Extraction du vrai contact client depuis le corps (cas plateforme) âââââ
 function extraireContactDepuisCorps(corps: string, fromEmail?: string): { email: string|null, telephone: string|null, nomComplet: string|null } {
   if (!corps) return { email: null, telephone: null, nomComplet: null };
   const platformeEmail = (fromEmail||"").toLowerCase();
@@ -242,8 +243,8 @@ function extraireContactDepuisCorps(corps: string, fromEmail?: string): { email:
       && !/zenchef|abcsalles|funbooker|bookingshake|thefork|mapado|eventdrive|bedouk/.test(e));
   const phoneRegex = /(?:\+33|0)[1-9](?:[\s.-]?\d{2}){4}\b/g;
   const phones = corps.match(phoneRegex) || [];
-  const nomMatch = corps.match(/\b(?:nom|name)\s*[:=]\s*([A-ZÀ-Ü][A-Za-zÀ-ÿ\s'-]{1,40})/i);
-  const prenomMatch = corps.match(/\b(?:pr[ée]nom|first.?name)\s*[:=]\s*([A-ZÀ-Ü][A-Za-zÀ-ÿ\s'-]{1,30})/i);
+  const nomMatch = corps.match(/\b(?:nom|name)\s*[:=]\s*([A-ZÃ-Ã][A-Za-zÃ-Ã¿\s'-]{1,40})/i);
+  const prenomMatch = corps.match(/\b(?:pr[Ã©e]nom|first.?name)\s*[:=]\s*([A-ZÃ-Ã][A-Za-zÃ-Ã¿\s'-]{1,30})/i);
   let nomComplet: string | null = null;
   if (prenomMatch && nomMatch) nomComplet = `${prenomMatch[1].trim()} ${nomMatch[1].trim()}`;
   else if (nomMatch) nomComplet = nomMatch[1].trim();
@@ -255,7 +256,7 @@ function extraireContactDepuisCorps(corps: string, fromEmail?: string): { email:
   };
 }
 
-// ─── Estimation tokens (rough — 1 token ≈ 4 chars en français) ──────────────
+// âââ Estimation tokens (rough â 1 token â 4 chars en franÃ§ais) ââââââââââââââ
 function estimateTokens(text: string): number {
   return Math.ceil((text || "").length / 4);
 }
@@ -263,11 +264,11 @@ function estimateCostUSD(inputTokens: number, outputTokens: number): number {
   return (inputTokens * 3 / 1_000_000) + (outputTokens * 15 / 1_000_000);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Sources ARCHANGE v2 — Activation conditionnelle des règles commerciales
-// ═══════════════════════════════════════════════════════════════════════════
-// Renvoie UNIQUEMENT les règles pertinentes pour le mail en cours, selon les
-// infos extraites par l'IA. Réduit la taille du prompt et augmente la précision.
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Sources ARCHANGE v2 â Activation conditionnelle des rÃ¨gles commerciales
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Renvoie UNIQUEMENT les rÃ¨gles pertinentes pour le mail en cours, selon les
+// infos extraites par l'IA. RÃ©duit la taille du prompt et augmente la prÃ©cision.
 function activerReglesSelonContexte(opts: {
   extraction: any | null;
   regles: any; // ReglesCommerciales
@@ -290,9 +291,9 @@ function activerReglesSelonContexte(opts: {
     if (texte && texte.trim()) activees.push(`  <par_nombre_personnes categorie="${key} (${nbPers} pers.)">\n${texte.trim()}\n  </par_nombre_personnes>`);
   }
 
-  // Budget par personne — détection depuis string "45€/pers" etc.
+  // Budget par personne â dÃ©tection depuis string "45â¬/pers" etc.
   const budgetStr = String(extraction.budget || "").toLowerCase();
-  const matchParPers = budgetStr.match(/(\d+)\s*€?\s*(?:\/|par)\s*(?:pers|personne)/);
+  const matchParPers = budgetStr.match(/(\d+)\s*â¬?\s*(?:\/|par)\s*(?:pers|personne)/);
   const budgetParPersonne = matchParPers ? parseInt(matchParPers[1], 10) : null;
   if (budgetParPersonne !== null && regles.parBudgetParPers) {
     let key = "";
@@ -300,11 +301,11 @@ function activerReglesSelonContexte(opts: {
     else if (budgetParPersonne <= 120) key = "standard";
     else key = "premium";
     const texte = regles.parBudgetParPers[key];
-    if (texte && texte.trim()) activees.push(`  <par_budget_par_pers categorie="${key} (${budgetParPersonne}€/pers)">\n${texte.trim()}\n  </par_budget_par_pers>`);
+    if (texte && texte.trim()) activees.push(`  <par_budget_par_pers categorie="${key} (${budgetParPersonne}â¬/pers)">\n${texte.trim()}\n  </par_budget_par_pers>`);
   }
 
   // Budget total
-  const matchTotal = budgetStr.match(/(\d+[\s.,]?\d*)\s*€/);
+  const matchTotal = budgetStr.match(/(\d+[\s.,]?\d*)\s*â¬/);
   let budgetTotal: number | null = null;
   if (matchTotal && !matchParPers) {
     budgetTotal = parseInt(matchTotal[1].replace(/[\s.,]/g, ""), 10);
@@ -318,18 +319,18 @@ function activerReglesSelonContexte(opts: {
     else if (budgetTotal <= 2500) key = "important";
     else key = "tresImportant";
     const texte = regles.parBudgetTotal[key];
-    if (texte && texte.trim()) activees.push(`  <par_budget_total categorie="${key} (${budgetTotal}€)">\n${texte.trim()}\n  </par_budget_total>`);
+    if (texte && texte.trim()) activees.push(`  <par_budget_total categorie="${key} (${budgetTotal}â¬)">\n${texte.trim()}\n  </par_budget_total>`);
   }
 
-  // Profil client — détection simple depuis champ "entreprise" et "sourceEmail"
+  // Profil client â dÃ©tection simple depuis champ "entreprise" et "sourceEmail"
   if (regles.parProfilClient) {
     const entreprise = String(extraction.entreprise || "").trim();
     const nom = String(extraction.nom || "").trim();
     let profil = "";
-    // Heuristique simple : entreprise non vide ET pas d'indication particulier → entreprise
+    // Heuristique simple : entreprise non vide ET pas d'indication particulier â entreprise
     if (entreprise && !/mr|mme|m\.|mlle|madame|monsieur/i.test(nom)) {
-      // Détecter institutionnel vs entreprise classique vs agence
-      const bigCorp = /mairie|ministère|ministere|université|universite|ambassade|préfecture|prefecture|conseil (régional|general|général)/i.test(entreprise);
+      // DÃ©tecter institutionnel vs entreprise classique vs agence
+      const bigCorp = /mairie|ministÃ¨re|ministere|universitÃ©|universite|ambassade|prÃ©fecture|prefecture|conseil (rÃ©gional|general|gÃ©nÃ©ral)/i.test(entreprise);
       const agency = /agence|event|incentive|travel|communication|marketing/i.test(entreprise);
       if (bigCorp) profil = "institutionnels";
       else if (agency) profil = "agences";
@@ -341,7 +342,7 @@ function activerReglesSelonContexte(opts: {
     if (texte && texte.trim()) activees.push(`  <par_profil_client categorie="${profil}">\n${texte.trim()}\n  </par_profil_client>`);
   }
 
-  // Moment — basé sur heureDebut
+  // Moment â basÃ© sur heureDebut
   const heure = String(extraction.heureDebut || "").match(/^(\d{1,2})/);
   if (heure && regles.parMoment) {
     const h = parseInt(heure[1], 10);
@@ -367,7 +368,7 @@ function activerReglesSelonContexte(opts: {
   return `\n<regles_commerciales_activees>\n${activees.join("\n\n")}\n</regles_commerciales_activees>`;
 }
 
-// Sources ARCHANGE v2 — Détection des cas particuliers (clients VIP, partenaires)
+// Sources ARCHANGE v2 â DÃ©tection des cas particuliers (clients VIP, partenaires)
 function matchCasParticulier(opts: {
   email: { from?: string; fromEmail?: string };
   extraction: any | null;
@@ -385,7 +386,7 @@ function matchCasParticulier(opts: {
     const emailPat = String(cp.emailPattern || "").toLowerCase().trim();
     const nomPat = String(cp.nomPattern || "").toLowerCase().trim();
 
-    // Match sur email : pattern @domaine.fr OU adresse complète
+    // Match sur email : pattern @domaine.fr OU adresse complÃ¨te
     if (emailPat) {
       if (emailPat.startsWith("@") && (fromEmailLower.endsWith(emailPat) || extractedEmailLower.endsWith(emailPat))) return cp;
       if (!emailPat.startsWith("@") && (fromEmailLower === emailPat || extractedEmailLower === emailPat)) return cp;
@@ -397,7 +398,7 @@ function matchCasParticulier(opts: {
   return null;
 }
 
-// Sources ARCHANGE v2 — Construction du bloc ton & style formalité
+// Sources ARCHANGE v2 â Construction du bloc ton & style formalitÃ©
 function buildTonStyleBlock(ton: any, profilDetecte: string): string {
   if (!ton) return "";
   const parts: string[] = [];
@@ -405,7 +406,7 @@ function buildTonStyleBlock(ton: any, profilDetecte: string): string {
   if (Array.isArray(ton.formulesValides) && ton.formulesValides.length > 0) {
     const formulesStr = ton.formulesValides
       .filter((f: any) => f && (f.formule || "").trim())
-      .map((f: any) => `    • ${f.contexte ? `[${f.contexte}] ` : ""}"${f.formule}"`)
+      .map((f: any) => `    â¢ ${f.contexte ? `[${f.contexte}] ` : ""}"${f.formule}"`)
       .join("\n");
     if (formulesStr) parts.push(`  <formules_a_utiliser>\n${formulesStr}\n  </formules_a_utiliser>`);
   }
@@ -413,18 +414,18 @@ function buildTonStyleBlock(ton: any, profilDetecte: string): string {
   if (Array.isArray(ton.formulesInterdites) && ton.formulesInterdites.length > 0) {
     const interdits = ton.formulesInterdites.filter((f: string) => f && f.trim());
     if (interdits.length > 0) {
-      parts.push(`  <formules_interdites>\n${interdits.map((f: string) => `    • "${f}" — NE JAMAIS UTILISER`).join("\n")}\n  </formules_interdites>`);
+      parts.push(`  <formules_interdites>\n${interdits.map((f: string) => `    â¢ "${f}" â NE JAMAIS UTILISER`).join("\n")}\n  </formules_interdites>`);
     }
   }
 
-  // Formalité : traduire le slider 0-1 en instruction verbale
+  // FormalitÃ© : traduire le slider 0-1 en instruction verbale
   if (ton.formalite && profilDetecte && ton.formalite[profilDetecte] !== undefined) {
     const niveau = ton.formalite[profilDetecte];
     let desc = "";
-    if (niveau < 0.25) desc = "Chaleureux et proche — utiliser un ton cordial, accessible, presque amical. Tutoiement possible si le client le propose.";
-    else if (niveau < 0.5) desc = "Professionnel avec chaleur — vouvoiement, mais avec des formulations personnelles et bienveillantes.";
-    else if (niveau < 0.75) desc = "Professionnel neutre — vouvoiement systématique, ton courtois et mesuré.";
-    else desc = "Très formel — vouvoiement strict, formulations institutionnelles, registre soutenu.";
+    if (niveau < 0.25) desc = "Chaleureux et proche â utiliser un ton cordial, accessible, presque amical. Tutoiement possible si le client le propose.";
+    else if (niveau < 0.5) desc = "Professionnel avec chaleur â vouvoiement, mais avec des formulations personnelles et bienveillantes.";
+    else if (niveau < 0.75) desc = "Professionnel neutre â vouvoiement systÃ©matique, ton courtois et mesurÃ©.";
+    else desc = "TrÃ¨s formel â vouvoiement strict, formulations institutionnelles, registre soutenu.";
     parts.push(`  <niveau_formalite profil="${profilDetecte}">\n    ${desc}\n  </niveau_formalite>`);
   }
 
@@ -434,12 +435,12 @@ function buildTonStyleBlock(ton: any, profilDetecte: string): string {
 
 // EXTRACT_PROMPT est une fonction pour injecter la date du jour dynamiquement
 const buildExtractPrompt = (
-  nomEtablissement = "l'établissement",
+  nomEtablissement = "l'Ã©tablissement",
   espacesDyn: EspaceDyn[] = []
 ) => {
   const today = new Date().toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" });
 
-  // Construire la règle d'attribution d'espaces dynamiquement
+  // Construire la rÃ¨gle d'attribution d'espaces dynamiquement
   let espacesRegle = "";
   if (espacesDyn.length > 0) {
     const withCap = espacesDyn.map(e => {
@@ -453,28 +454,28 @@ const buildExtractPrompt = (
 
     espacesRegle = withCap.map((e, i) => {
       const prev = i > 0 ? withCap[i-1].cap + 1 : 1;
-      const range = i === 0 ? `≤ ${e.cap} personnes` :
+      const range = i === 0 ? `â¤ ${e.cap} personnes` :
                     i === withCap.length - 1 ? `> ${withCap[i-1].cap} personnes` :
-                    `${prev}–${e.cap} personnes`;
+                    `${prev}â${e.cap} personnes`;
       const assis = e.assisMax ? ` (max ${e.assisMax} assis, max ${e.deboutMax||e.assisMax} debout)` : "";
-      return `    * ${range} → "${e.id}" (${e.nom})${assis}`;
+      return `    * ${range} â "${e.id}" (${e.nom})${assis}`;
     }).join("\n");
   } else {
-    espacesRegle = `    * Laisse null si aucun espace n'est configuré`;
+    espacesRegle = `    * Laisse null si aucun espace n'est configurÃ©`;
   }
 
-  return `Tu es un assistant spécialisé dans l'analyse d'emails reçus par ${nomEtablissement}, un lieu événementiel.
+  return `Tu es un assistant spÃ©cialisÃ© dans l'analyse d'emails reÃ§us par ${nomEtablissement}, un lieu Ã©vÃ©nementiel.
 
 Date du jour : ${today}
 
-Analyse l'email ci-dessous et retourne UNIQUEMENT un JSON valide, sans aucun texte avant ou après.
+Analyse l'email ci-dessous et retourne UNIQUEMENT un JSON valide, sans aucun texte avant ou aprÃ¨s.
 
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ RÈGLE FONDAMENTALE — IDENTIFIER LE CLIENT RÉEL
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+â ï¸ââââââââââââââââââââââââââââââ
+â ï¸ RÃGLE FONDAMENTALE â IDENTIFIER LE CLIENT RÃEL
+â ï¸ââââââââââââââââââââââââââââââ
 
-L'expéditeur technique du mail (champ "De:") n'est PAS toujours le client.
-Beaucoup de demandes arrivent via des plateformes intermédiaires :
+L'expÃ©diteur technique du mail (champ "De:") n'est PAS toujours le client.
+Beaucoup de demandes arrivent via des plateformes intermÃ©diaires :
   - Zenchef (noreply@*.zenchef.com, *@mg.zenchefrestaurants.com)
   - ABC Salles (info@abcsalles.com, contact@abc-salles.com, noreply@abcsalles.com)
   - BookingShake, Funbooker, TheFork, Mapado, Eventdrive, Bedouk
@@ -482,57 +483,57 @@ Beaucoup de demandes arrivent via des plateformes intermédiaires :
 
 INDICES qu'un mail vient d'une plateforme :
   - L'email "De:" contient : noreply, no-reply, notifications, ne-pas-repondre, mailer, system, postmaster
-  - Le nom d'expéditeur est générique : "Notifications", "Réservations", "Contact"
-  - Le corps contient des sections structurées type formulaire :
-    "Nom: ... Prénom: ... Email: ... Téléphone: ..."
+  - Le nom d'expÃ©diteur est gÃ©nÃ©rique : "Notifications", "RÃ©servations", "Contact"
+  - Le corps contient des sections structurÃ©es type formulaire :
+    "Nom: ... PrÃ©nom: ... Email: ... TÃ©lÃ©phone: ..."
 
-DANS CE CAS, les VRAIES coordonnées du client sont DANS LE CORPS DU MAIL.
+DANS CE CAS, les VRAIES coordonnÃ©es du client sont DANS LE CORPS DU MAIL.
 Tu DOIS les y chercher activement et les remplir dans nom/email/telephone/entreprise.
-N'utilise les coordonnées du "De:" que si tu es certain qu'il s'agit du vrai client.
+N'utilise les coordonnÃ©es du "De:" que si tu es certain qu'il s'agit du vrai client.
 
 EXEMPLE :
   De: noreply@mg.zenchefrestaurants.com
-  Corps: "Nouvelle demande. Nom: MORILLON. Prénom: Roxane.
-          Email: roxane.morillon@setec.com. Téléphone: 01 82 51 50 97
-          Société: SETEC. 30 personnes le 15 mai..."
-  →  "nom": "Roxane MORILLON",
+  Corps: "Nouvelle demande. Nom: MORILLON. PrÃ©nom: Roxane.
+          Email: roxane.morillon@setec.com. TÃ©lÃ©phone: 01 82 51 50 97
+          SociÃ©tÃ©: SETEC. 30 personnes le 15 mai..."
+  â  "nom": "Roxane MORILLON",
      "email": "roxane.morillon@setec.com",
      "telephone": "01 82 51 50 97",
      "entreprise": "SETEC"
   PAS noreply@mg.zenchefrestaurants.com !
 
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ CAS SPÉCIAL — MAILS FORWARDÉS (Fwd:, Tr:, "transféré")
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+â ï¸ââââââââââââââââââââââââââââââ
+â ï¸ CAS SPÃCIAL â MAILS FORWARDÃS (Fwd:, Tr:, "transfÃ©rÃ©")
+â ï¸ââââââââââââââââââââââââââââââ
 
-Quand un mail est forwardé (objet commençant par "Fwd:", "Fw:", "Tr:",
-ou corps contenant "Début du message réexpédié", "---------- Forwarded message",
-"---------- Message transféré"), le VRAI message à analyser est le mail ORIGINAL
+Quand un mail est forwardÃ© (objet commenÃ§ant par "Fwd:", "Fw:", "Tr:",
+ou corps contenant "DÃ©but du message rÃ©expÃ©diÃ©", "---------- Forwarded message",
+"---------- Message transfÃ©rÃ©"), le VRAI message Ã  analyser est le mail ORIGINAL
 inclus dans le corps, PAS le message du forwardeur.
 
-Le forwardeur (ex: ton collègue Olivier qui te transfère une demande) n'est PAS
-le client. Même si sa signature apparaît en tête du mail, ses coordonnées
-(nom, email, téléphone) ne doivent PAS être mises dans le JSON.
+Le forwardeur (ex: ton collÃ¨gue Olivier qui te transfÃ¨re une demande) n'est PAS
+le client. MÃªme si sa signature apparaÃ®t en tÃªte du mail, ses coordonnÃ©es
+(nom, email, tÃ©lÃ©phone) ne doivent PAS Ãªtre mises dans le JSON.
 
 EXEMPLE DE FORWARD :
   De: Olivier Teissedre <reva13france@gmail.com>
-  Objet: "TEST TES TEST Fwd: Nouvelle demande de réservation"
+  Objet: "TEST TES TEST Fwd: Nouvelle demande de rÃ©servation"
   Corps: "TEST TES TEST
-          Bien à vous
+          Bien Ã  vous
           Teissedre Olivier
           Mail: reva13france@gmail.com
 
-          Début du message réexpédié :
+          DÃ©but du message rÃ©expÃ©diÃ© :
           De: ABC Salles <contact@email.abcsalles.com>
-          Objet: Nouvelle demande de réservation - Mariage
-          Répondre à: shana1212@icloud.com
+          Objet: Nouvelle demande de rÃ©servation - Mariage
+          RÃ©pondre Ã : shana1212@icloud.com
 
-          Nouvelle demande pour Rêva Brasserie, de la part de Shana Atia.
+          Nouvelle demande pour RÃªva Brasserie, de la part de Shana Atia.
           Type: Mariage. 100 personnes. Date: 30/06/2026.
-          Email: shana1212@icloud.com. Téléphone: 06.51.75.53.19"
+          Email: shana1212@icloud.com. TÃ©lÃ©phone: 06.51.75.53.19"
 
   CORRECT :
-    "isReservation": true (c'est bien une demande de réservation !)
+    "isReservation": true (c'est bien une demande de rÃ©servation !)
     "nom": "Shana Atia"
     "email": "shana1212@icloud.com"
     "telephone": "06.51.75.53.19"
@@ -541,72 +542,72 @@ EXEMPLE DE FORWARD :
     "dateDebut": "2026-06-30"
     "nombrePersonnes": 100
 
-  INCORRECT (ce que tu ferais si tu ne lisais que la tête du mail) :
+  INCORRECT (ce que tu ferais si tu ne lisais que la tÃªte du mail) :
     "isReservation": false (parce que "TEST TES TEST" semble anodin)
     "nom": "Olivier Teissedre"
     "email": "reva13france@gmail.com"
-    → NON ! Olivier est le FORWARDEUR, pas le client.
+    â NON ! Olivier est le FORWARDEUR, pas le client.
 
-RÈGLES POUR LES FORWARDS :
-1. Lis INTÉGRALEMENT le corps, y compris la partie après "Début du message réexpédié"
-2. La demande de réservation est dans la PARTIE FORWARDÉE, pas en tête
-3. Ignore le "TEST", "Bonjour", "Bien à vous" du forwardeur — ce n'est pas le vrai message
-4. Si la partie forwardée vient d'une plateforme (ABC Salles, Zenchef...), applique les règles plateforme
-5. isReservation = true si la partie forwardée est une demande de réservation
+RÃGLES POUR LES FORWARDS :
+1. Lis INTÃGRALEMENT le corps, y compris la partie aprÃ¨s "DÃ©but du message rÃ©expÃ©diÃ©"
+2. La demande de rÃ©servation est dans la PARTIE FORWARDÃE, pas en tÃªte
+3. Ignore le "TEST", "Bonjour", "Bien Ã  vous" du forwardeur â ce n'est pas le vrai message
+4. Si la partie forwardÃ©e vient d'une plateforme (ABC Salles, Zenchef...), applique les rÃ¨gles plateforme
+5. isReservation = true si la partie forwardÃ©e est une demande de rÃ©servation
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RÈGLES D'EXTRACTION :
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ââââââââââââââââââââââââââââââ
+RÃGLES D'EXTRACTION :
+ââââââââââââââââââââââââââââââ
 
-- isReservation : true UNIQUEMENT si l'email contient une demande explicite de réservation, privatisation, devis pour un groupe, ou un événement. Une simple question sur les horaires ou le menu = false.
-  Note : un mail venant d'une plateforme de réservation avec des coordonnées client structurées est presque toujours isReservation=true.
+- isReservation : true UNIQUEMENT si l'email contient une demande explicite de rÃ©servation, privatisation, devis pour un groupe, ou un Ã©vÃ©nement. Une simple question sur les horaires ou le menu = false.
+  Note : un mail venant d'une plateforme de rÃ©servation avec des coordonnÃ©es client structurÃ©es est presque toujours isReservation=true.
 
-- confiance : "haute" si tous les éléments clés sont présents, "moyenne" si partielle, "faible" si incertain
+- confiance : "haute" si tous les Ã©lÃ©ments clÃ©s sont prÃ©sents, "moyenne" si partielle, "faible" si incertain
 
-- nom : Prénom + NOM du client réel (jamais le nom de la plateforme).
+- nom : PrÃ©nom + NOM du client rÃ©el (jamais le nom de la plateforme).
   Cherche dans le corps : "Nom:", "De la part de:", "Contact:", signatures de mail.
 
-- email : adresse email du client réel. Si "De:" est noreply/plateforme → cherche dans le corps : "Email:", "Mail:", "Reply-To:", ou toute adresse présente dans la signature.
+- email : adresse email du client rÃ©el. Si "De:" est noreply/plateforme â cherche dans le corps : "Email:", "Mail:", "Reply-To:", ou toute adresse prÃ©sente dans la signature.
 
-- telephone : numéro du client. Cherche : "Téléphone:", "Tél:", "Phone:", "Mobile:", ou numéro français dans le corps.
+- telephone : numÃ©ro du client. Cherche : "TÃ©lÃ©phone:", "TÃ©l:", "Phone:", "Mobile:", ou numÃ©ro franÃ§ais dans le corps.
 
-- entreprise : société du client (PAS la plateforme). Cherche : "Société:", "Entreprise:", "Company:", domaine email (roxane@setec.com → SETEC), signature.
+- entreprise : sociÃ©tÃ© du client (PAS la plateforme). Cherche : "SociÃ©tÃ©:", "Entreprise:", "Company:", domaine email (roxane@setec.com â SETEC), signature.
 
-- typeEvenement : détecte parmi [Dîner, Déjeuner, Cocktail, Buffet, Conférence, Réunion, Soirée DJ, Karaoké, Soirée à thème, Afterwork, Team building, Séminaire, Anniversaire, Mariage] ou laisse null
+- typeEvenement : dÃ©tecte parmi [DÃ®ner, DÃ©jeuner, Cocktail, Buffet, ConfÃ©rence, RÃ©union, SoirÃ©e DJ, KaraokÃ©, SoirÃ©e Ã  thÃ¨me, Afterwork, Team building, SÃ©minaire, Anniversaire, Mariage] ou laisse null
 
-- nombrePersonnes : extrais le nombre maximum mentionné (entier). Ex : "entre 80 et 120" → 120
+- nombrePersonnes : extrais le nombre maximum mentionnÃ© (entier). Ex : "entre 80 et 120" â 120
 
-- nombrePersonnesMin : si une fourchette est mentionnée, extrais le minimum. Sinon, même valeur que nombrePersonnes.
+- nombrePersonnesMin : si une fourchette est mentionnÃ©e, extrais le minimum. Sinon, mÃªme valeur que nombrePersonnes.
 
-- espaceDetecte : déduis l'espace le plus adapté selon le nombre de personnes et le type :
+- espaceDetecte : dÃ©duis l'espace le plus adaptÃ© selon le nombre de personnes et le type :
 ${espacesRegle}
-  Si l'espace est mentionné explicitement dans l'email, utilise-le en priorité.
+  Si l'espace est mentionnÃ© explicitement dans l'email, utilise-le en prioritÃ©.
 
-- dateDebut : format YYYY-MM-DD. Pour les dates relatives, utilise la date du jour fournie en référence.
+- dateDebut : format YYYY-MM-DD. Pour les dates relatives, utilise la date du jour fournie en rÃ©fÃ©rence.
 
-- heureDebut / heureFin : format HH:MM. Si non mentionné → null
+- heureDebut / heureFin : format HH:MM. Si non mentionnÃ© â null
 
-- budget : extrais le budget si mentionné (ex: "1900€", "45€/pers"), sinon null
+- budget : extrais le budget si mentionnÃ© (ex: "1900â¬", "45â¬/pers"), sinon null
 
-- resume : 1-2 phrases maximum résumant la demande de façon factuelle. Ne mettre que si isReservation est true, sinon null.
+- resume : 1-2 phrases maximum rÃ©sumant la demande de faÃ§on factuelle. Ne mettre que si isReservation est true, sinon null.
 
-- notes : résume en 1-2 phrases les détails importants. Si le mail vient d'une plateforme, mentionne-la ici (ex: "Demande reçue via Zenchef").
+- notes : rÃ©sume en 1-2 phrases les dÃ©tails importants. Si le mail vient d'une plateforme, mentionne-la ici (ex: "Demande reÃ§ue via Zenchef").
 
-- statutSuggere : suggère un statut parmi [nouveau, en_cours, en_attente, confirme]
+- statutSuggere : suggÃ¨re un statut parmi [nouveau, en_cours, en_attente, confirme]
 
 - sourceEmail : "client_direct" / "plateforme:zenchef" / "plateforme:abc_salles" / "plateforme:funbooker" / "plateforme:autre" / "formulaire_contact" / null
 
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ AUTO-VÉRIFICATION AVANT DE RETOURNER LE JSON
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+â ï¸ââââââââââââââââââââââââââââââ
+â ï¸ AUTO-VÃRIFICATION AVANT DE RETOURNER LE JSON
+â ï¸ââââââââââââââââââââââââââââââ
 
-Avant de produire ta réponse JSON, vérifie mentalement :
-1. ✅ L'email retourné n'est PAS une adresse noreply / plateforme / système ?
-2. ✅ Le nom retourné n'est PAS le nom de la plateforme ?
-3. ✅ L'entreprise retournée est bien celle du client (pas la plateforme) ?
-4. ✅ Si tu n'as pas trouvé l'email/téléphone/nom : as-tu vraiment regardé toute la signature ?
+Avant de produire ta rÃ©ponse JSON, vÃ©rifie mentalement :
+1. â L'email retournÃ© n'est PAS une adresse noreply / plateforme / systÃ¨me ?
+2. â Le nom retournÃ© n'est PAS le nom de la plateforme ?
+3. â L'entreprise retournÃ©e est bien celle du client (pas la plateforme) ?
+4. â Si tu n'as pas trouvÃ© l'email/tÃ©lÃ©phone/nom : as-tu vraiment regardÃ© toute la signature ?
 
-JSON à retourner :
+JSON Ã  retourner :
 {
   "isReservation": false,
   "confiance": "haute|moyenne|faible",
@@ -629,7 +630,7 @@ JSON à retourner :
 }`;
 };
 
-// ─── Fonctions pures de construction de message (réutilisables sync + async) ─
+// âââ Fonctions pures de construction de message (rÃ©utilisables sync + async) â
 function buildExtractMessage(email: {
   from?: string;
   fromEmail?: string;
@@ -639,27 +640,27 @@ function buildExtractMessage(email: {
 }): string {
   const fromEmail = email.fromEmail || "";
   const corpsBrut = email.body || email.snippet || "";
-  // Nouveau : on passe le corps pour détecter les forwards
+  // Nouveau : on passe le corps pour dÃ©tecter les forwards
   const plateforme = detectPlateforme(fromEmail, corpsBrut);
   const estForward = estMailForwarde({ subject: email.subject, body: corpsBrut });
-  // On cherche le contact dans le corps si plateforme détectée OU si c'est un forward
+  // On cherche le contact dans le corps si plateforme dÃ©tectÃ©e OU si c'est un forward
   const contactExtrait = (plateforme || estForward) ? extraireContactDepuisCorps(corpsBrut, fromEmail) : null;
 
-  // Briefing adapté à la situation
+  // Briefing adaptÃ© Ã  la situation
   let briefing: string;
   if (estForward && plateforme) {
-    briefing = `🎯 BRIEFING : Mail FORWARDÉ (transféré) — la demande originale vient de "${plateforme}". L'expéditeur "${fromEmail}" est le FORWARDEUR, pas le client. Le vrai client et ses coordonnées sont dans la partie forwardée du corps (après "Début du message réexpédié" ou équivalent).${contactExtrait?.email ? `\n   Indice automatique : email candidat = ${contactExtrait.email}` : ""}${contactExtrait?.nomComplet ? `\n   Indice automatique : nom candidat = ${contactExtrait.nomComplet}` : ""}${contactExtrait?.telephone ? `\n   Indice automatique : téléphone candidat = ${contactExtrait.telephone}` : ""}\n   ⚠️ NE PAS confondre les coordonnées du forwardeur avec celles du client réel.`;
+    briefing = `ð¯ BRIEFING : Mail FORWARDÃ (transfÃ©rÃ©) â la demande originale vient de "${plateforme}". L'expÃ©diteur "${fromEmail}" est le FORWARDEUR, pas le client. Le vrai client et ses coordonnÃ©es sont dans la partie forwardÃ©e du corps (aprÃ¨s "DÃ©but du message rÃ©expÃ©diÃ©" ou Ã©quivalent).${contactExtrait?.email ? `\n   Indice automatique : email candidat = ${contactExtrait.email}` : ""}${contactExtrait?.nomComplet ? `\n   Indice automatique : nom candidat = ${contactExtrait.nomComplet}` : ""}${contactExtrait?.telephone ? `\n   Indice automatique : tÃ©lÃ©phone candidat = ${contactExtrait.telephone}` : ""}\n   â ï¸ NE PAS confondre les coordonnÃ©es du forwardeur avec celles du client rÃ©el.`;
   } else if (estForward) {
-    briefing = `🎯 BRIEFING : Mail FORWARDÉ (transféré) — l'expéditeur "${fromEmail}" est le forwardeur, pas forcément le client. Lis la partie forwardée du corps pour identifier la vraie demande et le vrai destinataire.${contactExtrait?.email ? `\n   Indice automatique : email candidat trouvé dans le forward = ${contactExtrait.email}` : ""}${contactExtrait?.nomComplet ? `\n   Indice automatique : nom candidat = ${contactExtrait.nomComplet}` : ""}`;
+    briefing = `ð¯ BRIEFING : Mail FORWARDÃ (transfÃ©rÃ©) â l'expÃ©diteur "${fromEmail}" est le forwardeur, pas forcÃ©ment le client. Lis la partie forwardÃ©e du corps pour identifier la vraie demande et le vrai destinataire.${contactExtrait?.email ? `\n   Indice automatique : email candidat trouvÃ© dans le forward = ${contactExtrait.email}` : ""}${contactExtrait?.nomComplet ? `\n   Indice automatique : nom candidat = ${contactExtrait.nomComplet}` : ""}`;
   } else if (plateforme) {
-    briefing = `🎯 BRIEFING : Mail reçu via la plateforme "${plateforme}". Le client réel n'est PAS l'expéditeur "${fromEmail}". Cherche ses vraies coordonnées dans le corps.${contactExtrait?.email ? `\n   Indice automatique : email candidat = ${contactExtrait.email}` : ""}${contactExtrait?.nomComplet ? `\n   Indice automatique : nom candidat = ${contactExtrait.nomComplet}` : ""}${contactExtrait?.telephone ? `\n   Indice automatique : téléphone candidat = ${contactExtrait.telephone}` : ""}\n   Vérifie ces indices et complète les autres champs en lisant le corps complet.`;
+    briefing = `ð¯ BRIEFING : Mail reÃ§u via la plateforme "${plateforme}". Le client rÃ©el n'est PAS l'expÃ©diteur "${fromEmail}". Cherche ses vraies coordonnÃ©es dans le corps.${contactExtrait?.email ? `\n   Indice automatique : email candidat = ${contactExtrait.email}` : ""}${contactExtrait?.nomComplet ? `\n   Indice automatique : nom candidat = ${contactExtrait.nomComplet}` : ""}${contactExtrait?.telephone ? `\n   Indice automatique : tÃ©lÃ©phone candidat = ${contactExtrait.telephone}` : ""}\n   VÃ©rifie ces indices et complÃ¨te les autres champs en lisant le corps complet.`;
   } else {
-    briefing = `🎯 BRIEFING : Mail direct du client (pas de plateforme ni forward détectés).`;
+    briefing = `ð¯ BRIEFING : Mail direct du client (pas de plateforme ni forward dÃ©tectÃ©s).`;
   }
 
   const MAX_BODY = 30000;
   const corpsTronque = corpsBrut.length > MAX_BODY
-    ? corpsBrut.slice(0, MAX_BODY) + "\n\n[…message tronqué — " + corpsBrut.length + " chars au total]"
+    ? corpsBrut.slice(0, MAX_BODY) + "\n\n[â¦message tronquÃ© â " + corpsBrut.length + " chars au total]"
     : corpsBrut;
 
   return `${briefing}
@@ -669,14 +670,14 @@ function buildExtractMessage(email: {
     <expediteur_technique>${email.from || ""} <${fromEmail}></expediteur_technique>
     <objet>${email.subject || "(sans objet)"}</objet>
     ${plateforme ? `<plateforme_detectee>${plateforme}</plateforme_detectee>` : ""}
-    ${estForward ? `<mail_forwarde>true — la vraie demande est dans la partie forwardée du corps</mail_forwarde>` : ""}
+    ${estForward ? `<mail_forwarde>true â la vraie demande est dans la partie forwardÃ©e du corps</mail_forwarde>` : ""}
   </metadonnees>
   <corps>
 ${corpsTronque}
   </corps>
 </email_a_analyser>
 
-⚠️ Rappel final :${estForward ? ` c'est un MAIL FORWARDÉ — ignore les coordonnées du forwardeur en tête, le vrai client est dans la partie forwardée du corps.` : ""}${plateforme ? ` le mail implique la plateforme "${plateforme}" — les vrais nom/email/téléphone/société sont DANS LE CORPS, pas dans <expediteur_technique>.` : (!estForward ? ` mail direct, utilise les coordonnées de l'expéditeur.` : "")}
+â ï¸ Rappel final :${estForward ? ` c'est un MAIL FORWARDÃ â ignore les coordonnÃ©es du forwardeur en tÃªte, le vrai client est dans la partie forwardÃ©e du corps.` : ""}${plateforme ? ` le mail implique la plateforme "${plateforme}" â les vrais nom/email/tÃ©lÃ©phone/sociÃ©tÃ© sont DANS LE CORPS, pas dans <expediteur_technique>.` : (!estForward ? ` mail direct, utilise les coordonnÃ©es de l'expÃ©diteur.` : "")}
 Retourne maintenant le JSON.`;
 }
 
@@ -695,15 +696,15 @@ function buildResponseMessage(opts: {
   const vraiEmail = extracted?.email || contactDansCorps?.email || fromEmail;
   const prenom = vraiNom.split(/\s+/)[0] || "";
 
-  const briefing = `🎯 BRIEFING — RÉPONSE À RÉDIGER :
+  const briefing = `ð¯ BRIEFING â RÃPONSE Ã RÃDIGER :
 Client : ${vraiNom}${extracted?.entreprise ? " (" + extracted.entreprise + ")" : ""}
 Email du client : ${vraiEmail}
-${plateforme ? `📨 Mail reçu via la plateforme "${plateforme}" (saluer ${prenom}, pas la plateforme)` : "📨 Mail direct du client"}
-${extracted?.dateDebut ? `Date demandée : ${extracted.dateDebut}` : ""}${extracted?.heureDebut ? ` à ${extracted.heureDebut}` : ""}
+${plateforme ? `ð¨ Mail reÃ§u via la plateforme "${plateforme}" (saluer ${prenom}, pas la plateforme)` : "ð¨ Mail direct du client"}
+${extracted?.dateDebut ? `Date demandÃ©e : ${extracted.dateDebut}` : ""}${extracted?.heureDebut ? ` Ã  ${extracted.heureDebut}` : ""}
 ${extracted?.nombrePersonnes ? `Personnes : ${extracted.nombrePersonnes}` : ""}
 ${extracted?.typeEvenement ? `Type : ${extracted.typeEvenement}` : ""}
 ${extracted?.budget ? `Budget : ${extracted.budget}` : ""}
-${extracted?.resume ? `Résumé : ${extracted.resume}` : ""}`;
+${extracted?.resume ? `RÃ©sumÃ© : ${extracted.resume}` : ""}`;
 
   const histStr = historiqueMails.length > 0
     ? `<historique_echanges_avec_ce_client>
@@ -711,24 +712,24 @@ ${historiqueMails.slice(0, 5).map(h => {
   const corpsH = (h.body || "").slice(0, 3000);
   return `  <${h.direction === "in" ? "mail_recu" : "reponse_envoyee"} date="${h.date}" expediteur="${h.from}">
     <objet>${h.subject || ""}</objet>
-    <contenu>${corpsH}${(h.body||"").length > 3000 ? "\n[…tronqué]" : ""}</contenu>
+    <contenu>${corpsH}${(h.body||"").length > 3000 ? "\n[â¦tronquÃ©]" : ""}</contenu>
   </${h.direction === "in" ? "mail_recu" : "reponse_envoyee"}>`;
 }).join("\n\n")}
 </historique_echanges_avec_ce_client>`
-    : `<historique_echanges_avec_ce_client>Aucun échange précédent avec ce client.</historique_echanges_avec_ce_client>`;
+    : `<historique_echanges_avec_ce_client>Aucun Ã©change prÃ©cÃ©dent avec ce client.</historique_echanges_avec_ce_client>`;
 
   const corpsTronque = (email.body || email.snippet || "").slice(0, 30000);
   const corpsAffiche = (email.body||"").length > 30000
-    ? corpsTronque + "\n[…message tronqué]"
+    ? corpsTronque + "\n[â¦message tronquÃ©]"
     : corpsTronque;
 
   return `${briefing}
 
 ${histStr}
 
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ EMAIL EN COURS — À TRAITER MAINTENANT
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+â ï¸ââââââââââââââââââââââââââââââ
+â ï¸ EMAIL EN COURS â Ã TRAITER MAINTENANT
+â ï¸ââââââââââââââââââââââââââââââ
 
 <email_a_repondre>
   <metadonnees>
@@ -741,53 +742,53 @@ ${corpsAffiche}
   </corps_complet>
 </email_a_repondre>
 
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ INSTRUCTIONS FINALES POUR TA RÉPONSE
-⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+â ï¸ââââââââââââââââââââââââââââââ
+â ï¸ INSTRUCTIONS FINALES POUR TA RÃPONSE
+â ï¸ââââââââââââââââââââââââââââââ
 
-Rédige maintenant ta réponse en respectant STRICTEMENT :
+RÃ©dige maintenant ta rÃ©ponse en respectant STRICTEMENT :
 
-1. ✅ Adresse-toi à ${prenom || vraiNom} (et non à la plateforme intermédiaire)
-2. ✅ N'utilise QUE les tarifs/conditions présents dans <sources_archange> du contexte système — n'invente jamais un chiffre
-3. ✅ Vérifie la disponibilité dans <planning_temps_reel> avant de confirmer une date/un espace
-4. ✅ Si l'historique montre une promesse déjà faite, respecte-la
-5. ✅ Ne re-propose pas une option déjà mentionnée dans l'historique
-6. ✅ Termine par la signature exacte ci-dessous
+1. â Adresse-toi Ã  ${prenom || vraiNom} (et non Ã  la plateforme intermÃ©diaire)
+2. â N'utilise QUE les tarifs/conditions prÃ©sents dans <sources_archange> du contexte systÃ¨me â n'invente jamais un chiffre
+3. â VÃ©rifie la disponibilitÃ© dans <planning_temps_reel> avant de confirmer une date/un espace
+4. â Si l'historique montre une promesse dÃ©jÃ  faite, respecte-la
+5. â Ne re-propose pas une option dÃ©jÃ  mentionnÃ©e dans l'historique
+6. â Termine par la signature exacte ci-dessous
 
-SIGNATURE À UTILISER (exacte) :
+SIGNATURE Ã UTILISER (exacte) :
 ---
 ${signature}
 ---
 
-⚠️ AVANT DE FINALISER TA RÉPONSE, AUTO-VÉRIFIE :
-   • Tous les chiffres (tarifs, capacités) viennent-ils des sources ? (pas inventés)
-   • Le prénom utilisé est-il bien celui du client réel ?
-   • La date proposée est-elle compatible avec le planning fourni ?
-   • La signature est-elle complète et correcte ?
+â ï¸ AVANT DE FINALISER TA RÃPONSE, AUTO-VÃRIFIE :
+   â¢ Tous les chiffres (tarifs, capacitÃ©s) viennent-ils des sources ? (pas inventÃ©s)
+   â¢ Le prÃ©nom utilisÃ© est-il bien celui du client rÃ©el ?
+   â¢ La date proposÃ©e est-elle compatible avec le planning fourni ?
+   â¢ La signature est-elle complÃ¨te et correcte ?
 
-Génère uniquement le texte de la réponse email, rien d'autre.`;
+GÃ©nÃ¨re uniquement le texte de la rÃ©ponse email, rien d'autre.`;
 }
 
-// EMPTY_RESA : espaceId initialisé au premier espace dispo — sera surchargé par getEmptyResa()
+// EMPTY_RESA : espaceId initialisÃ© au premier espace dispo â sera surchargÃ© par getEmptyResa()
 const EMPTY_RESA = { id:null, prenom:"", nom:"", email:"", telephone:"", entreprise:"", typeEvenement:"", nombrePersonnes:"", espaceId:"", dateDebut:"", heureDebut:"", heureFin:"", statut:"nouveau", notes:"", budget:"", noteDirecteur:"" };
 
-// ─── Traduction des erreurs techniques en langage humain ─────────────────────
+// âââ Traduction des erreurs techniques en langage humain âââââââââââââââââââââ
 function humanError(e: any): string {
   const msg = (e?.message || String(e || "")).toLowerCase();
-  if (msg.includes("401") || msg.includes("unauthorized") || msg.includes("invalid_grant") || msg.includes("unauthenticated")) return "Votre session a expiré. Déconnectez-vous puis reconnectez-vous.";
-  if (msg.includes("403") || msg.includes("forbidden")) return "Accès refusé. Vérifiez vos autorisations Gmail.";
-  if (msg.includes("429") || msg.includes("rate limit") || msg.includes("overload") || msg.includes("surcharg")) return "Service momentanément surchargé. Réessayez dans quelques secondes.";
-  if (msg.includes("timeout") || msg.includes("abort") || msg.includes("délai")) return "La requête a pris trop de temps. Vérifiez votre connexion et réessayez.";
-  if (msg.includes("network") || msg.includes("fetch") || msg.includes("réseau") || msg.includes("connexion") || msg.includes("failed to fetch")) return "Connexion impossible. Vérifiez votre accès internet.";
-  if (msg.includes("500") || msg.includes("internal server")) return "Une erreur est survenue côté serveur. Réessayez dans un moment.";
-  if (msg.includes("503") || msg.includes("unavailable")) return "Le service est temporairement indisponible. Réessayez dans quelques minutes.";
-  if (msg.includes("gmail_auth_expired") || msg.includes("session gmail")) return "Session Gmail expirée. Déconnectez-vous puis reconnectez-vous.";
-  if (msg.includes("ia indisponible") || msg.includes("erreur ia") || msg.includes("anthropic")) return "ARCHANGE est temporairement indisponible. Réessayez dans un moment.";
-  // Fallback — garder le message original si non reconnu, mais le nettoyer
-  return e?.message || "Une erreur inattendue est survenue. Réessayez.";
+  if (msg.includes("401") || msg.includes("unauthorized") || msg.includes("invalid_grant") || msg.includes("unauthenticated")) return "Votre session a expirÃ©. DÃ©connectez-vous puis reconnectez-vous.";
+  if (msg.includes("403") || msg.includes("forbidden")) return "AccÃ¨s refusÃ©. VÃ©rifiez vos autorisations Gmail.";
+  if (msg.includes("429") || msg.includes("rate limit") || msg.includes("overload") || msg.includes("surcharg")) return "Service momentanÃ©ment surchargÃ©. RÃ©essayez dans quelques secondes.";
+  if (msg.includes("timeout") || msg.includes("abort") || msg.includes("dÃ©lai")) return "La requÃªte a pris trop de temps. VÃ©rifiez votre connexion et rÃ©essayez.";
+  if (msg.includes("network") || msg.includes("fetch") || msg.includes("rÃ©seau") || msg.includes("connexion") || msg.includes("failed to fetch")) return "Connexion impossible. VÃ©rifiez votre accÃ¨s internet.";
+  if (msg.includes("500") || msg.includes("internal server")) return "Une erreur est survenue cÃ´tÃ© serveur. RÃ©essayez dans un moment.";
+  if (msg.includes("503") || msg.includes("unavailable")) return "Le service est temporairement indisponible. RÃ©essayez dans quelques minutes.";
+  if (msg.includes("gmail_auth_expired") || msg.includes("session gmail")) return "Session Gmail expirÃ©e. DÃ©connectez-vous puis reconnectez-vous.";
+  if (msg.includes("ia indisponible") || msg.includes("erreur ia") || msg.includes("anthropic")) return "ARCHANGE est temporairement indisponible. RÃ©essayez dans un moment.";
+  // Fallback â garder le message original si non reconnu, mais le nettoyer
+  return e?.message || "Une erreur inattendue est survenue. RÃ©essayez.";
 }
 
-// ─── Stats globales d'usage API (in-memory, accessible via window pour debug) ─
+// âââ Stats globales d'usage API (in-memory, accessible via window pour debug) â
 const apiUsageStats = {
   totalCalls: 0,
   totalInputTokens: 0,
@@ -802,7 +803,7 @@ async function callClaude(msg: string, system: string, docs: any[] | null, callT
   const timeout = setTimeout(() => controller.abort(), 55000);
   const inputTokens = estimateTokens(system) + estimateTokens(msg);
   try {
-    const res = await fetch("/api/claude", {
+    const res = await apiFetch("/api/claude", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "raw", msg, system, docs }),
@@ -829,15 +830,15 @@ async function callClaude(msg: string, system: string, docs: any[] | null, callT
     if (apiUsageStats.history.length > 200) apiUsageStats.history.shift();
     return response;
   } catch (e: any) {
-    if (e.name === "AbortError") throw new Error("Délai dépassé — réessayez");
+    if (e.name === "AbortError") throw new Error("DÃ©lai dÃ©passÃ© â rÃ©essayez");
     throw e;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-// ─── Extraction texte propre depuis HTML email ────────────────────────────────
-// Toujours retourne du texte lisible — utilisé pour snippet, IA, et prévisualisation
+// âââ Extraction texte propre depuis HTML email ââââââââââââââââââââââââââââââââ
+// Toujours retourne du texte lisible â utilisÃ© pour snippet, IA, et prÃ©visualisation
 function stripHtml(raw: string): string {
   if (!raw) return "";
   let text = raw;
@@ -849,21 +850,21 @@ function stripHtml(raw: string): string {
   text = text.replace(/<script[\s\S]*?<\/script>/gi, "");
   // Supprimer les commentaires HTML <!-- ... -->
   text = text.replace(/<!--[\s\S]*?-->/g, "");
-  // Ajouter des sauts de ligne aux éléments de bloc avant de les supprimer
+  // Ajouter des sauts de ligne aux Ã©lÃ©ments de bloc avant de les supprimer
   text = text.replace(/<br\s*\/?>/gi, "\n");
   text = text.replace(/<\/?(p|div|tr|li|h[1-6]|blockquote|section|article|header|footer)[^>]*>/gi, "\n");
   text = text.replace(/<\/td>/gi, " | ").replace(/<\/th>/gi, " | ");
   // Supprimer toutes les balises HTML restantes
   text = text.replace(/<[^>]+>/g, "");
-  // Décoder les entités HTML
+  // DÃ©coder les entitÃ©s HTML
   const entities: Record<string,string> = {
     "&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&#39;":"'","&apos;":"'",
-    "&nbsp;":" ","&hellip;":"…","&mdash;":"—","&ndash;":"–","&laquo;":"«","&raquo;":"»",
-    "&eacute;":"é","&egrave;":"è","&ecirc;":"ê","&euml;":"ë",
-    "&agrave;":"à","&acirc;":"â","&auml;":"ä",
-    "&ocirc;":"ô","&ouml;":"ö","&oslash;":"ø",
-    "&ugrave;":"ù","&ucirc;":"û","&uuml;":"ü",
-    "&iuml;":"ï","&ccedil;":"ç","&copy;":"©","&reg;":"®","&trade;":"™",
+    "&nbsp;":" ","&hellip;":"â¦","&mdash;":"â","&ndash;":"â","&laquo;":"Â«","&raquo;":"Â»",
+    "&eacute;":"Ã©","&egrave;":"Ã¨","&ecirc;":"Ãª","&euml;":"Ã«",
+    "&agrave;":"Ã ","&acirc;":"Ã¢","&auml;":"Ã¤",
+    "&ocirc;":"Ã´","&ouml;":"Ã¶","&oslash;":"Ã¸",
+    "&ugrave;":"Ã¹","&ucirc;":"Ã»","&uuml;":"Ã¼",
+    "&iuml;":"Ã¯","&ccedil;":"Ã§","&copy;":"Â©","&reg;":"Â®","&trade;":"â¢",
   };
   Object.entries(entities).forEach(([e, c]) => {
     text = text.replace(new RegExp(e, "gi"), c);
@@ -874,16 +875,16 @@ function stripHtml(raw: string): string {
   text = text.split("\n").map(l => l.replace(/[ \t]{2,}/g, " ").trim()).join("\n");
   text = text.replace(/\n{3,}/g, "\n\n");
   text = text.trim();
-  if (text.length > 20000) text = text.slice(0, 20000) + "\n\n[…tronqué]";
+  if (text.length > 20000) text = text.slice(0, 20000) + "\n\n[â¦tronquÃ©]";
   return text;
 }
 
-// ─── Sanitize HTML pour affichage sécurisé en iframe ─────────────────────────
+// âââ Sanitize HTML pour affichage sÃ©curisÃ© en iframe âââââââââââââââââââââââââ
 function sanitizeHtmlForDisplay(raw: string): string {
   if (!raw) return "";
   return raw
     .replace(/<script[\s\S]*?<\/script>/gi, "")           // scripts
-    // head conservé — l'iframe est sandboxée, les styles sont nécessaires pour le rendu
+    // head conservÃ© â l'iframe est sandboxÃ©e, les styles sont nÃ©cessaires pour le rendu
     .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, "")        // event handlers inline
     .replace(/\son\w+\s*=\s*[^\s>]*/gi, "")               // event handlers sans guillemets
     .replace(/javascript\s*:/gi, "void:")                  // js: dans href
@@ -894,10 +895,10 @@ function sanitizeHtmlForDisplay(raw: string): string {
     .replace(/expression\s*\(/gi, "");                     // CSS expressions IE
 }
 
-// Alias pour compatibilité — retourne toujours du texte propre
+// Alias pour compatibilitÃ© â retourne toujours du texte propre
 function cleanEmailBody(raw: string): string { return stripHtml(raw); }
 
-// ─── Rendu texte brut enrichi — URLs, emails, tél cliquables ────────────────
+// âââ Rendu texte brut enrichi â URLs, emails, tÃ©l cliquables ââââââââââââââââ
 function renderPlainText(text: string): React.ReactNode[] {
   if (!text) return [];
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g;
@@ -905,7 +906,7 @@ function renderPlainText(text: string): React.ReactNode[] {
   const telRegex = /(\+?[\d][\d\s\-\.]{7,}[\d])/g;
   const lines = text.split("\n");
   return lines.map((line, li) => {
-    // Remplacer URLs, emails, tels par des éléments React cliquables
+    // Remplacer URLs, emails, tels par des Ã©lÃ©ments React cliquables
     const parts: React.ReactNode[] = [];
     let remaining = line;
     let key = 0;
@@ -944,11 +945,11 @@ const Avatar = ({name: nameProp, size=34}) => {
   return <div style={{width:size,height:size,borderRadius:"50%",background:bg+"25",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.33,fontWeight:700,color:bg,flexShrink:0}}>{i}</div>;
 };
 
-// ─── Génère les créneaux horaires ────────────────────────────────────────────
+// âââ GÃ©nÃ¨re les crÃ©neaux horaires ââââââââââââââââââââââââââââââââââââââââââââ
 const TIME_SLOTS: string[] = [];
 for(let h=0;h<24;h++) for(let m of [0,30]) TIME_SLOTS.push(String(h).padStart(2,"0")+":"+String(m).padStart(2,"0"));
 
-// ─── Sélecteur d'heure (dropdown) ────────────────────────────────────────────
+// âââ SÃ©lecteur d'heure (dropdown) ââââââââââââââââââââââââââââââââââââââââââââ
 const TimePicker = ({value, onChange, placeholder="Heure", light=false}: {value:string, onChange:(v:string)=>void, placeholder?:string, light?:boolean}) => (
   <select
     value={value||""}
@@ -960,9 +961,9 @@ const TimePicker = ({value, onChange, placeholder="Heure", light=false}: {value:
   </select>
 );
 
-// ─── Mini calendrier picker ───────────────────────────────────────────────────
+// âââ Mini calendrier picker âââââââââââââââââââââââââââââââââââââââââââââââââââ
 const JOURS_COURTS = ["L","M","M","J","V","S","D"];
-const MOIS_COURTS = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+const MOIS_COURTS = ["Jan","FÃ©v","Mar","Avr","Mai","Jun","Jul","AoÃ»","Sep","Oct","Nov","DÃ©c"];
 
 const DatePicker = ({value, onChange, light=false}: {value:string, onChange:(v:string)=>void, light?:boolean}) => {
   const parseDate = (s:string) => { const d=new Date(s+"T12:00:00"); return isNaN(d.getTime())?null:d; };
@@ -993,17 +994,17 @@ const DatePicker = ({value, onChange, light=false}: {value:string, onChange:(v:s
   return (
     <div ref={ref} style={{position:"relative",width:"100%"}}>
       <button onClick={()=>setOpen(v=>!v)} type="button" style={{width:"100%",padding:"8px 12px",borderRadius:8,border,background:bg,color:value?textMain:textSub,fontSize:13,textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontSize:14}}>📅</span>
+        <span style={{fontSize:14}}>ð</span>
         <span style={{flex:1}}>{value?fmtDisplay(value):"Choisir une date"}</span>
-        {value&&<span onClick={e=>{e.stopPropagation();onChange("");}} style={{fontSize:14,opacity:.4,lineHeight:1}}>×</span>}
+        {value&&<span onClick={e=>{e.stopPropagation();onChange("");}} style={{fontSize:14,opacity:.4,lineHeight:1}}>Ã</span>}
       </button>
       {open&&(
         <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:1000,background:"#FFFFFF",borderRadius:12,boxShadow:"0 8px 32px rgba(0,0,0,.18)",border:"1px solid #E5E7EB",width:260,padding:"12px"}}>
           {/* Nav mois */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-            <button onClick={()=>setNav(new Date(nav.getFullYear(),nav.getMonth()-1,1))} style={{width:26,height:26,borderRadius:6,border:"1px solid #E5E7EB",background:"transparent",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:"#374151"}}>‹</button>
+            <button onClick={()=>setNav(new Date(nav.getFullYear(),nav.getMonth()-1,1))} style={{width:26,height:26,borderRadius:6,border:"1px solid #E5E7EB",background:"transparent",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:"#374151"}}>â¹</button>
             <span style={{fontSize:13,fontWeight:600,color:"#111111"}}>{MOIS_COURTS[nav.getMonth()]} {nav.getFullYear()}</span>
-            <button onClick={()=>setNav(new Date(nav.getFullYear(),nav.getMonth()+1,1))} style={{width:26,height:26,borderRadius:6,border:"1px solid #E5E7EB",background:"transparent",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:"#374151"}}>›</button>
+            <button onClick={()=>setNav(new Date(nav.getFullYear(),nav.getMonth()+1,1))} style={{width:26,height:26,borderRadius:6,border:"1px solid #E5E7EB",background:"transparent",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:"#374151"}}>âº</button>
           </div>
           {/* Jours de la semaine */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
@@ -1030,7 +1031,7 @@ const DatePicker = ({value, onChange, light=false}: {value:string, onChange:(v:s
   );
 };
 
-// SVG icons for mail sub-categories — Céleste theme
+// SVG icons for mail sub-categories â CÃ©leste theme
 const MailCatIcon = ({id, active}: {id:string, active:boolean}) => {
   const c = active ? "#1A1A1E" : "#6B6E7E";
   const icons: Record<string,JSX.Element> = {
@@ -1044,9 +1045,9 @@ const MailCatIcon = ({id, active}: {id:string, active:boolean}) => {
 
 const MAIL_CATS = [
   {id:"nonlus",   label:"Non lus"},
-  {id:"atraiter", label:"À traiter"},
+  {id:"atraiter", label:"Ã traiter"},
   {id:"star",     label:"Favoris"},
-  {id:"flag",     label:"Flaggés"},
+  {id:"flag",     label:"FlaggÃ©s"},
 ];
 
 export default function App() {
@@ -1055,17 +1056,17 @@ export default function App() {
   useEffect(() => { if (status === "unauthenticated") router.replace("/") }, [status, router])
   const [view, setView] = useState("general");
   const [emails, setEmails] = useState([]);
-  // Fix #4 — Pagination : savoir s'il y a plus d'emails à charger
+  // Fix #4 â Pagination : savoir s'il y a plus d'emails Ã  charger
   const [emailsTotal, setEmailsTotal] = useState(0);
   const [emailsLimit, setEmailsLimit] = useState(100);
   const [loadingMore, setLoadingMore] = useState(false);
   const [resas, setResas] = useState<any[]>([]);
   const [sel, setSel] = useState(null);
-  // Origine du mail ouvert — pour le fil d'Ariane "← Retour à l'événement" ou "← Retour au Radar"
+  // Origine du mail ouvert â pour le fil d'Ariane "â Retour Ã  l'Ã©vÃ©nement" ou "â Retour au Radar"
   const [mailOrigine, setMailOrigine] = useState<{type:'evenement'|'radar',resaId:string,nom:string}|null>(null);
 
-  // Ouvrir un mail depuis une fiche événement
-  // handleSel fait setMailOrigine(null) en début — on le reset après
+  // Ouvrir un mail depuis une fiche Ã©vÃ©nement
+  // handleSel fait setMailOrigine(null) en dÃ©but â on le reset aprÃ¨s
   const ouvrirMailDepuisEvenement = (email: any, resa: any) => {
     setView("mails");
     setMailFilter("all");
@@ -1074,38 +1075,38 @@ export default function App() {
     setShowArchived(false);
     // handleSel marque comme lu + charge le corps complet + restaure le cache
     handleSel(email);
-    // setMailOrigine après handleSel car handleSel le remet à null
+    // setMailOrigine aprÃ¨s handleSel car handleSel le remet Ã  null
     setTimeout(() => {
-      setMailOrigine({type:'evenement', resaId: resa.id, nom: resa.nom || resa.entreprise || "l'événement"});
+      setMailOrigine({type:'evenement', resaId: resa.id, nom: resa.nom || resa.entreprise || "l'Ã©vÃ©nement"});
     }, 0);
   };
   const [reply, setReply] = useState("");
   const [genReply, setGenReply] = useState(false);
   const [extracted, setExtracted] = useState<any>(null);
-  // Cache des réponses par email ID — évite les regénérations inutiles
+  // Cache des rÃ©ponses par email ID â Ã©vite les regÃ©nÃ©rations inutiles
   const [repliesCache, setRepliesCache] = useState<Record<string,{reply:string,editReply:string,extracted:any|null,dateGen?:string}>>({});
   const [drafted, setDrafted] = useState(new Set());
   const [undoDelete, setUndoDelete] = useState<{email:any,timer:any}|null>(null);
-  // Réponses envoyées — indexées par emailId, persistées en Supabase
+  // RÃ©ponses envoyÃ©es â indexÃ©es par emailId, persistÃ©es en Supabase
   const [sentReplies, setSentReplies] = useState<Record<string,{text:string,date:string,subject:string,toEmail:string}>>({});
   const [editing, setEditing] = useState(false);
   const [editReply, setEditReply] = useState("");
 
-  // ─── Éditeur de réponse manuelle (distinct de l'IA) ─────────────────────────
+  // âââ Ãditeur de rÃ©ponse manuelle (distinct de l'IA) âââââââââââââââââââââââââ
   const [showReplyEditor, setShowReplyEditor] = useState(false);
   const [replyEditorText, setReplyEditorText] = useState("");
   const [replyEditorMode, setReplyEditorMode] = useState<"reply"|"replyAll"|"forward">("reply");
   const [replyEditorTo, setReplyEditorTo] = useState("");
   const [sending, setSending] = useState(false);
 
-  // ─── Composer nouveau mail ────────────────────────────────────────────────────
+  // âââ Composer nouveau mail ââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const [showCompose, setShowCompose] = useState(false);
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [composeSending, setComposeSending] = useState(false);
 
-  // ─── Brouillons persistés ─────────────────────────────────────────────────────
+  // âââ Brouillons persistÃ©s âââââââââââââââââââââââââââââââââââââââââââââââââââââ
   type DraftItem = {id:string, to:string, subject:string, body:string, date:string, emailId?:string};
   const [localDrafts, setLocalDrafts] = useState<DraftItem[]>([]);
   const [notif, setNotif] = useState<{msg:string,type:string}|null>(null);
@@ -1117,20 +1118,20 @@ export default function App() {
   };
   useEffect(() => () => { if (notifTimer.current) clearTimeout(notifTimer.current); }, []);
 
-  // Suppression mail au clavier (Delete ou Backspace) quand un mail est sélectionné
-  // ─── Badge non lus dans le titre de l'onglet ────────────────────────────────
+  // Suppression mail au clavier (Delete ou Backspace) quand un mail est sÃ©lectionnÃ©
+  // âââ Badge non lus dans le titre de l'onglet ââââââââââââââââââââââââââââââââ
   useEffect(() => {
     const unreadCount = emails.filter(m => m.unread && !m.archived).length;
     document.title = unreadCount > 0 ? `(${unreadCount}) ARCHANGE` : "ARCHANGE";
   }, [emails]);
 
-  // ─── États tri, archivage, sélection multiple, snooze ───────────────────────
+  // âââ Ãtats tri, archivage, sÃ©lection multiple, snooze âââââââââââââââââââââââ
   const [sortOrder, setSortOrder] = useState<"date_desc"|"date_asc"|"from"|"subject">("date_desc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showArchived, setShowArchived] = useState(false);
 
-  // Ref pour accéder à la liste filtrée depuis les event handlers sans TDZ
-  // (filtered est déclaré plus bas via useMemo — on ne peut pas le mettre directement dans les deps)
+  // Ref pour accÃ©der Ã  la liste filtrÃ©e depuis les event handlers sans TDZ
+  // (filtered est dÃ©clarÃ© plus bas via useMemo â on ne peut pas le mettre directement dans les deps)
   const filteredRef = useRef<any[]>([]);
 
   useEffect(() => {
@@ -1138,13 +1139,13 @@ export default function App() {
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea" || (e.target as HTMLElement)?.isContentEditable) return;
 
-      // "/" — focus recherche
+      // "/" â focus recherche
       if (e.key === "/" && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         document.querySelector<HTMLInputElement>('input[placeholder="Rechercher..."]')?.focus();
         return;
       }
-      // "?" — aide raccourcis
+      // "?" â aide raccourcis
       if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
         e.preventDefault();
         setShowKeyHelp(v => !v);
@@ -1153,7 +1154,7 @@ export default function App() {
 
       if (!sel) return;
 
-      // J / K — email suivant/précédent
+      // J / K â email suivant/prÃ©cÃ©dent
       if (e.key === "j" || e.key === "J") {
         e.preventDefault();
         const idx = filteredRef.current.findIndex(m => m.id === sel.id);
@@ -1166,43 +1167,43 @@ export default function App() {
         if (idx > 0) handleSel(filteredRef.current[idx - 1]);
         return;
       }
-      // E — archiver
+      // E â archiver
       if (e.key === "e" || e.key === "E") {
         e.preventDefault();
         archiveEmail(sel.id);
         return;
       }
-      // U — toggle non lu
+      // U â toggle non lu
       if (e.key === "u" || e.key === "U") {
         e.preventDefault();
         toggleUnread(sel.id);
         return;
       }
-      // S — toggle étoile
+      // S â toggle Ã©toile
       if (e.key === "s" || e.key === "S") {
         e.preventDefault();
         toggleFlag(sel.id, "star");
         return;
       }
-      // R — répondre
+      // R â rÃ©pondre
       if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         openReplyEditor("reply");
         return;
       }
-      // F — transférer (forward)
+      // F â transfÃ©rer (forward)
       if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         openReplyEditor("forward");
         return;
       }
-      // # — supprimer
+      // # â supprimer
       if (e.key === "#") {
         e.preventDefault();
         deleteEmailWithUndo(sel);
         return;
       }
-      // Delete / Backspace — supprimer
+      // Delete / Backspace â supprimer
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         deleteEmailWithUndo(sel);
@@ -1216,7 +1217,7 @@ export default function App() {
   const [analysing, setAnalysing] = useState(false);
   const [analysingProgress, setAnalysingProgress] = useState("");
 
-  // ─── Synchronisation complète Gmail ─────────────────────────────────────────
+  // âââ Synchronisation complÃ¨te Gmail âââââââââââââââââââââââââââââââââââââââââ
   const [syncStatus, setSyncStatus] = useState<'idle'|'running'|'done'|'error'>('idle');
   const [syncProgress, setSyncProgress] = useState({synced: 0, total: 0, pageToken: null as string|null});
   const [syncLastDate, setSyncLastDate] = useState<string|null>(null);
@@ -1225,10 +1226,10 @@ export default function App() {
   const syncRunning = useRef(false);
   const [saveIndicator, setSaveIndicator] = useState(false);
   const [offlineQueue, setOfflineQueue] = useState<Record<string,string>>({}); // P4: file hors-ligne
-  // ─── Notifications de troncature : par emailId, liste des éléments dépassés ─
+  // âââ Notifications de troncature : par emailId, liste des Ã©lÃ©ments dÃ©passÃ©s â
   type TruncationInfo = { label: string; actuel: number; limite: number };
   const [truncations, setTruncations] = useState<Record<string, TruncationInfo[]>>({});
-  // ─── Stats API tokens (mises à jour à chaque appel callClaude) ────────────
+  // âââ Stats API tokens (mises Ã  jour Ã  chaque appel callClaude) ââââââââââââ
   const [apiStatsView, setApiStatsView] = useState({ totalCalls: 0, totalInputTokens: 0, totalOutputTokens: 0, totalCostUSD: 0 });
   const [apiStatsOpen, setApiStatsOpen] = useState(false);
   useEffect(() => {
@@ -1242,9 +1243,9 @@ export default function App() {
     }, 2000);
     return () => clearInterval(interval);
   }, []);
-  // alerteUrgente supprimé
+  // alerteUrgente supprimÃ©
   const saveTimer = useRef<any>(null);
-  // ─── États Radar ARCHANGE ───────────────────────────────────────────────────
+  // âââ Ãtats Radar ARCHANGE âââââââââââââââââââââââââââââââââââââââââââââââââââ
   const [radarHoverId, setRadarHoverId] = useState<string|null>(null);
   const [radarResaModal, setRadarResaModal] = useState<any>(null);
   const [radarReplyModal, setRadarReplyModal] = useState<any>(null);
@@ -1252,19 +1253,19 @@ export default function App() {
   const [radarReplyText, setRadarReplyText] = useState("");
   const [radarTraites, setRadarTraites] = useState<Set<string>>(new Set());
   const [calDate, setCalDate] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
-  // ─── État onglet unifié pour la fiche événement (4 onglets : infos, mails, noteIA, relances) ───
+  // âââ Ãtat onglet unifiÃ© pour la fiche Ã©vÃ©nement (4 onglets : infos, mails, noteIA, relances) âââ
   const [resaOnglet, setResaOnglet] = useState<'infos'|'mails'|'noteIA'|'relances'>('infos');
   const [links, setLinks] = useState({website:"",instagram:"",facebook:"",other:""});
   const [linksFetched, setLinksFetched] = useState({});
   const [fetchingLink, setFetchingLink] = useState(null);
   const [customCtx, setCustomCtx] = useState("");
-  // ─── Infos établissement — remplacent les valeurs codées en dur ──────────────
-  const [nomEtab, setNomEtab] = useState("RÊVA");
+  // âââ Infos Ã©tablissement â remplacent les valeurs codÃ©es en dur ââââââââââââââ
+  const [nomEtab, setNomEtab] = useState("RÃVA");
   const [adresseEtab, setAdresseEtab] = useState("133 avenue de France, 75013 Paris");
   const [emailEtab, setEmailEtab] = useState("contact@brasserie-reva.fr");
   const [telEtab, setTelEtab] = useState("");
   const [espacesDyn, setEspacesDyn] = useState<EspaceDyn[]>(DEFAULT_ESPACES_DYN);
-  // Alias pour rétrocompatibilité — toutes les ref ESPACES utilisent maintenant espacesDyn
+  // Alias pour rÃ©trocompatibilitÃ© â toutes les ref ESPACES utilisent maintenant espacesDyn
   const ESPACES = espacesDyn;
   const [editingCtx, setEditingCtx] = useState(false);
   const [mailFilter, setMailFilter] = useState("all");
@@ -1274,7 +1275,7 @@ export default function App() {
   const [planForm, setPlanForm] = useState<any>({});
   const [planErrors, setPlanErrors] = useState<Record<string,string>>({});
   const [planFormAI, setPlanFormAI] = useState<Record<string,boolean>>({});
-  // Suggestions de modifications de fiche événement par l'IA
+  // Suggestions de modifications de fiche Ã©vÃ©nement par l'IA
   type SuggestionModif = {
     champ: string;
     label: string;
@@ -1290,7 +1291,7 @@ export default function App() {
   };
   const [pendingSuggestions, setPendingSuggestions] = useState<PendingSuggestions|null>(null);
 
-  // Général view state
+  // GÃ©nÃ©ral view state
   const [statuts, setStatuts] = useState<StatutDef[]>(DEFAULT_STATUTS);
   const [showCreateStatut, setShowCreateStatut] = useState(false);
   const [newStatutLabel, setNewStatutLabel] = useState("");
@@ -1304,21 +1305,21 @@ export default function App() {
   const [subCollapsed, setSubCollapsed] = useState(false);
   // Relances
   const [relances, setRelances] = useState<any[]>([]);
-  // Tags personnalisés — persistés en Supabase
+  // Tags personnalisÃ©s â persistÃ©s en Supabase
   type CustomTag = { id: string; label: string; color: string };
   const TAG_PALETTE = ["#EF4444","#F97316","#EAB308","#22C55E","#3B82F6","#8B5CF6","#EC4899","#14B8A6","#6B7280","#B8924F"];
   const [customTags, setCustomTags] = useState<CustomTag[]>([]);
-  const [emailTags, setEmailTags] = useState<Record<string,string[]>>({}); // emailId → tagIds
+  const [emailTags, setEmailTags] = useState<Record<string,string[]>>({}); // emailId â tagIds
   const [showTagMenu, setShowTagMenu] = useState<string|null>(null); // emailId ou null
   const [newTagLabel, setNewTagLabel] = useState("");
   const [newTagColor, setNewTagColor] = useState(TAG_PALETTE[0]);
-  const [tagFilter, setTagFilter] = useState<string|null>(null); // tagId filtré ou null
+  const [tagFilter, setTagFilter] = useState<string|null>(null); // tagId filtrÃ© ou null
   const saveCustomTags = (t: CustomTag[]) => { setCustomTags(t); saveToSupabase({custom_tags:JSON.stringify(t)}); };
   const saveEmailTags = (t: Record<string,string[]>) => { setEmailTags(t); saveToSupabase({email_tags:JSON.stringify(t)}); };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  SOURCES ARCHANGE v2 — 5 nouvelles structures (restructuration complète)
-  // ═══════════════════════════════════════════════════════════════════════════
+  // âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  //  SOURCES ARCHANGE v2 â 5 nouvelles structures (restructuration complÃ¨te)
+  // âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   // Types
   type ReglesCommerciales = {
@@ -1353,7 +1354,7 @@ export default function App() {
     regles: string;
   };
 
-  // Valeurs par défaut
+  // Valeurs par dÃ©faut
   const DEFAULT_REGLES_COMMERCIALES: ReglesCommerciales = {
     parNombrePersonnes: { petits: "", moyens: "", grands: "", xl: "" },
     parBudgetParPers: { economique: "", standard: "", premium: "" },
@@ -1381,20 +1382,20 @@ export default function App() {
   const [reglesAbsolues, setReglesAbsolues] = useState<string>("");
   // Filtre d'affichage pour les tags de section Sources ARCHANGE
   const [sourcesFilter, setSourcesFilter] = useState<string>("all"); // "all" | "infos" | "regles_com" | "ton" | "appr" | "cas_part" | "absolues"
-  // UI : quel accordéon ouvert dans chaque sous-section de règles commerciales
+  // UI : quel accordÃ©on ouvert dans chaque sous-section de rÃ¨gles commerciales
   const [openReglesComTab, setOpenReglesComTab] = useState<string>(""); // "" = aucun, sinon "dim_X_tab_Y"
-  // ── Modale "Tester ARCHANGE" — analyse à la volée d'un mail test ──────────
+  // ââ Modale "Tester ARCHANGE" â analyse Ã  la volÃ©e d'un mail test ââââââââââ
   const [showTestArchange, setShowTestArchange] = useState<boolean>(false);
   const [testMailContent, setTestMailContent] = useState<string>("");
   const [testMailSubject, setTestMailSubject] = useState<string>("");
   const [testMailFrom, setTestMailFrom] = useState<string>("");
   const [testRunning, setTestRunning] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<any>(null);
-  // ── Stats : période + focus pour la sidebar ──────────────────────────────
+  // ââ Stats : pÃ©riode + focus pour la sidebar ââââââââââââââââââââââââââââââ
   const [statsPeriode, setStatsPeriode] = useState<string>("mois"); // "semaine" | "mois" | "trimestre" | "annee" | "tout"
   const [statsFocus, setStatsFocus] = useState<string>("ensemble"); // "ensemble" | "perf_ia" | "espaces" | "types" | "profils"
 
-  // Save helpers (debounce 1s pour éviter spam)
+  // Save helpers (debounce 1s pour Ã©viter spam)
   const saveReglesCommerciales = (rc: ReglesCommerciales) => {
     setReglesCommerciales(rc);
     saveToSupabase({ regles_commerciales: JSON.stringify(rc) });
@@ -1416,7 +1417,7 @@ export default function App() {
     saveToSupabase({ regles_absolues: ra });
   };
 
-  // Liens email ↔ événement — persistés en Supabase
+  // Liens email â Ã©vÃ©nement â persistÃ©s en Supabase
   // Structure : { [emailId]: resaId }
   const [emailResaLinks, setEmailResaLinks] = useState<Record<string,string>>({});
   const [showRelanceForm, setShowRelanceForm] = useState<string|null>(null); // resaId
@@ -1429,15 +1430,15 @@ export default function App() {
   const [showKeyHelp, setShowKeyHelp] = useState(false);
   const [relanceIAText, setRelanceIAText] = useState("");
   const [genRelanceIA, setGenRelanceIA] = useState(false);
-  // Motifs de relance — personnalisables, persistés en Supabase
+  // Motifs de relance â personnalisables, persistÃ©s en Supabase
   const DEFAULT_MOTIFS_RELANCE = [
-    "Devis envoyé sans réponse",
-    "Confirmation de réservation attendue",
-    "Acompte non reçu",
+    "Devis envoyÃ© sans rÃ©ponse",
+    "Confirmation de rÃ©servation attendue",
+    "Acompte non reÃ§u",
     "Informations manquantes (date, nb personnes, menu...)",
-    "Prise de contact suite à visite",
-    "Relance à J-30 avant l'événement",
-    "Relance à J-7 avant l'événement",
+    "Prise de contact suite Ã  visite",
+    "Relance Ã  J-30 avant l'Ã©vÃ©nement",
+    "Relance Ã  J-7 avant l'Ã©vÃ©nement",
     "Autre",
   ];
   const [motifsRelance, setMotifsRelance] = useState<string[]>(DEFAULT_MOTIFS_RELANCE);
@@ -1451,25 +1452,25 @@ export default function App() {
   const [sendMailBody, setSendMailBody] = useState("");
   // Drag statuts
   const [dragStatutIdx, setDragStatutIdx] = useState<number|null>(null);
-  // Note IA par événement
+  // Note IA par Ã©vÃ©nement
   const [noteIA, setNoteIA] = useState<Record<string,{text:string,date:string}>>({});
   const [genNoteIA, setGenNoteIA] = useState<string|null>(null); // resaId en cours
   const [editResaPanel, setEditResaPanel] = useState<any>(null);
   // Planning view mode
   const [calView, setCalView] = useState<"mois"|"semaine"|"jour">("mois");
-  const [planFilter, setPlanFilter] = useState("all"); // filtre Planning legacy (rétrocompat)
+  const [planFilter, setPlanFilter] = useState("all"); // filtre Planning legacy (rÃ©trocompat)
   const [planEspaceFilter, setPlanEspaceFilter] = useState("all"); // filtre espace Planning v3
-  const [filtresStatutsEvents, setFiltresStatutsEvents] = useState<string[]>([]); // Point 2 — multi-select Événements
-  const [filtresStatutsPlanning, setFiltresStatutsPlanning] = useState<string[]>([]); // Point 2 — multi-select Planning
+  const [filtresStatutsEvents, setFiltresStatutsEvents] = useState<string[]>([]); // Point 2 â multi-select ÃvÃ©nements
+  const [filtresStatutsPlanning, setFiltresStatutsPlanning] = useState<string[]>([]); // Point 2 â multi-select Planning
   const [calWeekStart, setCalWeekStart] = useState(()=>{ const d=new Date(); d.setDate(d.getDate()-((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d; });
   // Sources IA sections open/collapsed state
   const [srcSections, setSrcSections] = useState({liens:false, menus:true, conditions:false, espaces:false, ton:false});
-  // Nouvelles sections Sources IA — texte structuré persisté en Supabase
+  // Nouvelles sections Sources IA â texte structurÃ© persistÃ© en Supabase
   const [menusCtx, setMenusCtx] = useState("");
   const [conditionsCtx, setConditionsCtx] = useState("");
   const [espacesCtx, setEspacesCtx] = useState("");
   const [tonCtx, setTonCtx] = useState("");
-  // Édition en cours pour chaque section
+  // Ãdition en cours pour chaque section
   const [editingSrc, setEditingSrc] = useState<Record<string,boolean>>({});
   const [showNewEvent, setShowNewEvent] = useState(false);
   const [newEvent, setNewEvent] = useState<any>({...EMPTY_RESA, espaceId: DEFAULT_ESPACES_DYN[0]?.id || ""});
@@ -1479,18 +1480,18 @@ export default function App() {
   const daysInMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
   const firstDay = (d: Date) => { const f = new Date(d.getFullYear(),d.getMonth(),1).getDay(); return f===0?6:f-1; };
 
-  // Ref pour tracker l'email en cours de génération IA (évite les race conditions)
+  // Ref pour tracker l'email en cours de gÃ©nÃ©ration IA (Ã©vite les race conditions)
   const genReplyForEmailId = React.useRef<string|null>(null);
-  // Fix C2 — Sémaphore pour éviter deux analyses simultanées
+  // Fix C2 â SÃ©maphore pour Ã©viter deux analyses simultanÃ©es
   const analysingRef = React.useRef(false);
   // Ref pour pointer toujours vers la version courante de loadEmailsFromApi
-  // Évite le bug de closure stale dans le setInterval du polling
+  // Ãvite le bug de closure stale dans le setInterval du polling
   const loadEmailsFromApiRef = React.useRef<(withSync?: boolean) => Promise<void>>(async () => {});
 
-  // ─── Priorités ARCHANGE — calcul JS pur, zéro appel API ─────────────────
-  // ─── getStatut — accessible partout dans le composant (Planning, Événements, modal) ──
+  // âââ PrioritÃ©s ARCHANGE â calcul JS pur, zÃ©ro appel API âââââââââââââââââ
+  // âââ getStatut â accessible partout dans le composant (Planning, ÃvÃ©nements, modal) ââ
   const getStatut = React.useCallback((r: any) =>
-    statuts.find(s => s.id === (r?.statut || "nouveau")) || { bg:"#F3F4F6", color:"#6B7280", label:"—" },
+    statuts.find(s => s.id === (r?.statut || "nouveau")) || { bg:"#F3F4F6", color:"#6B7280", label:"â" },
     [statuts]
   );
 
@@ -1498,54 +1499,54 @@ export default function App() {
     const today = new Date(); today.setHours(0,0,0,0);
     const in7 = new Date(today); in7.setDate(today.getDate() + 7);
 
-    // Construire les cartes uniquement à partir des emails avec isReservation détectée
+    // Construire les cartes uniquement Ã  partir des emails avec isReservation dÃ©tectÃ©e
     const cartes = emails.flatMap(m => {
       const cache = repliesCache[m.id];
       const ext = cache?.extracted;
       if (!ext?.isReservation) return [];
 
-      // Ignorer si marqué traité manuellement
+      // Ignorer si marquÃ© traitÃ© manuellement
       if (radarTraites.has(m.id)) return [];
 
-      // Trouver la réservation liée
+      // Trouver la rÃ©servation liÃ©e
       const resaId = emailResaLinks[m.id];
       const resa = resas.find(r => r.id === resaId) ||
         resas.find(r => r.email && m.fromEmail && r.email.toLowerCase() === m.fromEmail.toLowerCase());
 
-      // Ignorer si réservation confirmée ou annulée
+      // Ignorer si rÃ©servation confirmÃ©e ou annulÃ©e
       if (resa && (resa.statut === "confirme" || resa.statut === "annule")) return [];
 
-      // Ignorer si date passée
+      // Ignorer si date passÃ©e
       const dateStr = ext.dateDebut || resa?.dateDebut;
       if (dateStr) {
         const d = new Date(dateStr + "T12:00:00");
         if (d < today) return [];
       }
 
-      // Calculer le score de priorité
-      let priorite = 4; // neutre par défaut
+      // Calculer le score de prioritÃ©
+      let priorite = 4; // neutre par dÃ©faut
       let type: "rouge"|"or"|"neutre" = "neutre";
 
-      // Priorité 1 — événement dans -7 jours
+      // PrioritÃ© 1 â Ã©vÃ©nement dans -7 jours
       if (dateStr) {
         const d = new Date(dateStr + "T12:00:00");
         if (d >= today && d <= in7) { priorite = 1; type = "rouge"; }
       }
 
-      // Priorité 2 — relance sans réponse +3 jours (email flaggé ou aTraiter depuis longtemps)
+      // PrioritÃ© 2 â relance sans rÃ©ponse +3 jours (email flaggÃ© ou aTraiter depuis longtemps)
       if (priorite > 2 && (m.flags||[]).includes("flag")) {
-        // Vérifier si la date de l'email est ancienne (+3j)
+        // VÃ©rifier si la date de l'email est ancienne (+3j)
         const emailDateMs = m.rawDate || 0;
         if (emailDateMs && (Date.now() - emailDateMs) > 3 * 86400000) {
           priorite = 2; type = "rouge";
         }
       }
 
-      // Priorité 3 — budget + date précis
+      // PrioritÃ© 3 â budget + date prÃ©cis
       const budget = ext.budget || resa?.budget;
       if (priorite > 3 && budget && dateStr) { priorite = 3; type = "or"; }
 
-      // Priorité 4 — nouvelle demande sans date/budget
+      // PrioritÃ© 4 â nouvelle demande sans date/budget
       if (priorite > 4) { priorite = 4; type = "neutre"; }
 
       return [{ m, ext, resa, priorite, type, dateStr, budget }];
@@ -1562,16 +1563,16 @@ export default function App() {
     if (!resa) return [];
     const resaEmailLower = (resa.email || "").toLowerCase();
     return emails.filter(m => {
-      // 1. Lien explicite défini par l'utilisateur ou l'IA
+      // 1. Lien explicite dÃ©fini par l'utilisateur ou l'IA
       if (emailResaLinks[m.id] === resa.id) return true;
       // 2. Match direct fromEmail = resa.email (cas client direct)
       if (resa.email && m.fromEmail && m.fromEmail.toLowerCase() === resaEmailLower) return true;
-      // 3. CRITIQUE : match via extracted.email (cas plateforme — vrai client extrait du corps)
+      // 3. CRITIQUE : match via extracted.email (cas plateforme â vrai client extrait du corps)
       if (resaEmailLower) {
         const extractedEmail = repliesCache[m.id]?.extracted?.email;
         if (extractedEmail && extractedEmail.toLowerCase() === resaEmailLower) return true;
       }
-      // 4. Fallback nom (heuristique faible — last resort)
+      // 4. Fallback nom (heuristique faible â last resort)
       if (resa.nom && m.from) {
         const firstWord = resa.nom.toLowerCase().split(" ")[0];
         if (firstWord.length > 2 && m.from.toLowerCase().includes(firstWord)) return true;
@@ -1580,9 +1581,9 @@ export default function App() {
     });
   }, [emails, emailResaLinks, repliesCache]);
 
-  // Sauvegarde Supabase — debounce par clé pour éviter les écrasements
+  // Sauvegarde Supabase â debounce par clÃ© pour Ã©viter les Ã©crasements
   const _saveTimers = React.useRef<Record<string,any>>({});
-  // Cleanup timers à l'unmount pour éviter les appels réseau après démontage
+  // Cleanup timers Ã  l'unmount pour Ã©viter les appels rÃ©seau aprÃ¨s dÃ©montage
   useEffect(() => () => { Object.values(_saveTimers.current).forEach(clearTimeout); }, []);
   const saveToSupabase = (data: Record<string, string>) => {
     Object.entries(data).forEach(([key, value]) => {
@@ -1590,13 +1591,13 @@ export default function App() {
       _saveTimers.current[key] = setTimeout(async () => {
         const doSave = async () => {
           try {
-            const res = await fetch("/api/user-data", {
+            const res = await apiFetch("/api/user-data", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ [key]: value }),
             });
             if (res.ok) {
-              // Retirer de la queue offline si présent
+              // Retirer de la queue offline si prÃ©sent
               setOfflineQueue(q => { const n = {...q}; delete n[key]; return n; });
               setSaveIndicator(true);
               if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -1606,7 +1607,7 @@ export default function App() {
               setOfflineQueue(q => ({ ...q, [key]: value }));
             }
           } catch {
-            // Hors ligne — mettre en file d'attente
+            // Hors ligne â mettre en file d'attente
             setOfflineQueue(q => ({ ...q, [key]: value }));
           }
         };
@@ -1628,16 +1629,16 @@ export default function App() {
     setMotifsRelance(m);
     saveToSupabase({ motifs_relance: JSON.stringify(m) });
   };
-  // Sauvegarder uniquement les extractions IA (JSON léger) dans Supabase
+  // Sauvegarder uniquement les extractions IA (JSON lÃ©ger) dans Supabase
   const saveExtractions = (cache: Record<string,any>) => {
     saveToSupabase({ extractions: JSON.stringify(cache) });
   };
-  // P3 — Sauvegarder radarTraites en Supabase
+  // P3 â Sauvegarder radarTraites en Supabase
   const saveRadarTraites = (set: Set<string>) => {
     setRadarTraites(set);
     saveToSupabase({ radar_traites: JSON.stringify([...set]) });
   };
-  // On sérialise toutes les sections dans un JSON pour éviter les colonnes inconnues
+  // On sÃ©rialise toutes les sections dans un JSON pour Ã©viter les colonnes inconnues
   const saveSourcesIA = (menus: string, conditions: string, espaces: string, ton: string, custom: string, nom?: string, adresse?: string, emailEt?: string, tel?: string, esps?: EspaceDyn[]) => {
     const payload = JSON.stringify({
       menus, conditions, espaces, ton, custom,
@@ -1659,15 +1660,15 @@ export default function App() {
   const saveTelEtab = (v: string) => { setTelEtab(v); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, adresseEtab, emailEtab, v, espacesDyn); };
   const saveEspacesDyn = (esps: EspaceDyn[]) => { setEspacesDyn(esps); saveSourcesIA(menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx, nomEtab, adresseEtab, emailEtab, telEtab, esps); };
   const saveLinks = async (l: any) => { setLinks(l); saveToSupabase({links:JSON.stringify(l)}); };
-  // Sauvegarde immédiate des métadonnées email — sans debounce
-  // Utilisé pour lu/non lu, flags, aTraiter — doit être instantané
+  // Sauvegarde immÃ©diate des mÃ©tadonnÃ©es email â sans debounce
+  // UtilisÃ© pour lu/non lu, flags, aTraiter â doit Ãªtre instantanÃ©
   const saveEmailMetaImmediat = async (meta: Record<string,any>) => {
     const json = JSON.stringify(meta);
-    // localStorage en premier — synchrone, immédiat
+    // localStorage en premier â synchrone, immÃ©diat
     try { localStorage.setItem("arc_email_meta", json); } catch {}
-    // Supabase sans debounce — fire and forget
+    // Supabase sans debounce â fire and forget
     try {
-      fetch("/api/user-data", {
+      apiFetch("/api/user-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email_meta: json }),
@@ -1682,8 +1683,8 @@ export default function App() {
     saveEmailMetaImmediat(meta);
   };
 
-  // Fonction partagée de mapping email API → état React
-  // ─── Formate date_iso en heure locale (comme Gmail) ─────────────────────────
+  // Fonction partagÃ©e de mapping email API â Ã©tat React
+  // âââ Formate date_iso en heure locale (comme Gmail) âââââââââââââââââââââââââ
   const fmtEmailDate = (isoStr: string): string => {
     if (!isoStr) return "";
     try {
@@ -1694,28 +1695,28 @@ export default function App() {
       const yesterdayStart = new Date(todayStart.getTime() - 86400000);
       const weekStart = new Date(todayStart.getTime() - 6 * 86400000);
       if (d >= todayStart) {
-        // Aujourd'hui → heure locale HH:MM
+        // Aujourd'hui â heure locale HH:MM
         return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
       } else if (d >= yesterdayStart) {
         return "Hier";
       } else if (d >= weekStart) {
-        // Cette semaine → nom du jour
+        // Cette semaine â nom du jour
         return d.toLocaleDateString("fr-FR", { weekday: "long" });
       } else {
-        // Plus ancien → JJ/MM/AAAA
+        // Plus ancien â JJ/MM/AAAA
         return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
       }
     } catch { return ""; }
   };
 
   const mapEmail = (m: any) => {
-    // Champs emails_cache (body_html/body_text) + rétrocompat ancienne table (body)
+    // Champs emails_cache (body_html/body_text) + rÃ©trocompat ancienne table (body)
     const rawBodyHtml = m.body_html || null;
     const rawBodyText = m.body_text || m.body || "";
     const rawSnippet  = m.snippet || "";
 
-    // bodyHtml : priorité au HTML de emails_cache (déjà stocké proprement)
-    // Si absent, détecter si body est du HTML
+    // bodyHtml : prioritÃ© au HTML de emails_cache (dÃ©jÃ  stockÃ© proprement)
+    // Si absent, dÃ©tecter si body est du HTML
     let bodyHtml: string | null = null;
     if (rawBodyHtml) {
       bodyHtml = sanitizeHtmlForDisplay(rawBodyHtml);
@@ -1723,7 +1724,7 @@ export default function App() {
       bodyHtml = sanitizeHtmlForDisplay(rawBodyText);
     }
 
-    // Flags — is_starred de emails_cache → flag "star"
+    // Flags â is_starred de emails_cache â flag "star"
     const baseFlags = Array.isArray(m.flags) ? m.flags : [];
     const flags = m.is_starred && !baseFlags.includes("star")
       ? [...baseFlags, "star"]
@@ -1741,8 +1742,8 @@ export default function App() {
       cc:          Array.isArray(m.cc_addresses) ? m.cc_addresses : (Array.isArray(m.cc) ? m.cc : []),
       snippet:     stripHtml(rawSnippet),
       body:        stripHtml(rawBodyText),   // texte propre pour IA
-      bodyHtml,                              // HTML sanitisé pour iframe
-      bodyLoaded:  !!(rawBodyHtml || rawBodyText), // true si corps déjà chargé
+      bodyHtml,                              // HTML sanitisÃ© pour iframe
+      bodyLoaded:  !!(rawBodyHtml || rawBodyText), // true si corps dÃ©jÃ  chargÃ©
       flags,
       aTraiter:    m.a_traiter  || false,
       unread:      m.is_unread  || false,
@@ -1752,7 +1753,7 @@ export default function App() {
     };
   };
 
-  // ─── Synchronisation complète Gmail en arrière-plan ─────────────────────────
+  // âââ Synchronisation complÃ¨te Gmail en arriÃ¨re-plan âââââââââââââââââââââââââ
   const lancerSyncComplete = async () => {
     if (syncRunning.current) return;
     syncRunning.current = true;
@@ -1762,11 +1763,11 @@ export default function App() {
     let totalSynced = 0;
     let estimatedTotal = 0;
 
-    // Fonction interne — paginer UN label + gérer nextLabel automatiquement
+    // Fonction interne â paginer UN label + gÃ©rer nextLabel automatiquement
     const syncLabel = async (label: string) => {
       let pageToken: string|null = null;
       while (syncRunning.current) {
-        const res = await fetch('/api/emails/sync', {
+        const res = await apiFetch('/api/emails/sync', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ pageToken, labels: [label] }),
@@ -1800,13 +1801,13 @@ export default function App() {
     syncRunning.current = false;
   };
 
-  // ─── Recherche approfondie dans Gmail ────────────────────────────────────────
+  // âââ Recherche approfondie dans Gmail ââââââââââââââââââââââââââââââââââââââââ
   const lancerDeepSearch = async (q: string) => {
     if (!q.trim()) return;
     setDeepSearching(true);
     setDeepResults([]);
     try {
-      const res = await fetch(`/api/emails/deep-search?q=${encodeURIComponent(q)}`);
+      const res = await apiFetch(`/api/emails/deep-search?q=${encodeURIComponent(q)}`);
       if (res.ok) {
         const { results } = await res.json();
         setDeepResults((results || []).map((m: any) => ({
@@ -1818,12 +1819,12 @@ export default function App() {
     setDeepSearching(false);
   };
 
-  // Analyse IA en arrière-plan — uniquement les emails sans extraction
+  // Analyse IA en arriÃ¨re-plan â uniquement les emails sans extraction
   const analyserEmailsEnArrierePlan = async (emailsList: any[], cacheSnapshot: typeof repliesCache) => {
-    // Fix C2 — Garde-fou : une seule analyse à la fois (évite les appels Anthropic en double)
+    // Fix C2 â Garde-fou : une seule analyse Ã  la fois (Ã©vite les appels Anthropic en double)
     if (analysingRef.current) return;
-    // Fix C3 — Utiliser le cacheSnapshot passé en paramètre, pas la closure
-    // (la closure pouvait pointer vers repliesCache = {} si appelée depuis un contexte stale)
+    // Fix C3 â Utiliser le cacheSnapshot passÃ© en paramÃ¨tre, pas la closure
+    // (la closure pouvait pointer vers repliesCache = {} si appelÃ©e depuis un contexte stale)
     const aAnalyser = emailsList.filter(m => !cacheSnapshot[m.id]?.extracted);
     if (aAnalyser.length === 0) return;
     analysingRef.current = true;
@@ -1841,24 +1842,24 @@ export default function App() {
         );
         const extracted = JSON.parse(raw.replace(/```json|```/g, "").trim());
         nouvellesExtractions[m.id] = extracted;
-        // Mettre à jour le cache React au fur et à mesure (UI uniquement, pas de Supabase)
+        // Mettre Ã  jour le cache React au fur et Ã  mesure (UI uniquement, pas de Supabase)
         setRepliesCache(prev => ({
           ...prev,
           [m.id]: { ...(prev[m.id] || { reply: "", editReply: "" }), extracted },
         }));
       } catch {
-        // Fix #8 — ne pas marquer comme analysé si échec : sera retenté au prochain cycle
-        console.warn(`Analyse email ${m.id} échouée — sera retentée`);
+        // Fix #8 â ne pas marquer comme analysÃ© si Ã©chec : sera retentÃ© au prochain cycle
+        console.warn(`Analyse email ${m.id} Ã©chouÃ©e â sera retentÃ©e`);
       }
     }
-    // Sauvegarder en Supabase UNE SEULE FOIS à la fin — payload maîtrisé
+    // Sauvegarder en Supabase UNE SEULE FOIS Ã  la fin â payload maÃ®trisÃ©
     if (Object.keys(nouvellesExtractions).length > 0) {
       setRepliesCache(prev => {
         const allExtractions: Record<string,any> = {};
         Object.entries(prev).forEach(([id, v]: [string, any]) => {
           if (v.extracted) allExtractions[id] = v.extracted;
         });
-        // Limiter à 500 entrées (200 était trop bas — évinçait des analyses valides → re-analyses inutiles)
+        // Limiter Ã  500 entrÃ©es (200 Ã©tait trop bas â Ã©vinÃ§ait des analyses valides â re-analyses inutiles)
         const keys = Object.keys(allExtractions);
         if (keys.length > 500) keys.slice(0, keys.length - 500).forEach(k => delete allExtractions[k]);
         saveExtractions(allExtractions);
@@ -1866,15 +1867,15 @@ export default function App() {
       });
     }
     } finally {
-      // Fix C2 — Toujours libérer le sémaphore, même en cas d'erreur inattendue
+      // Fix C2 â Toujours libÃ©rer le sÃ©maphore, mÃªme en cas d'erreur inattendue
       analysingRef.current = false;
       setAnalysing(false);
       setAnalysingProgress("");
     }
   };
 
-  // ─── Re-analyser un email spécifique (force une nouvelle extraction) ──────
-  // Utile quand le prompt a été amélioré ou que l'extraction précédente était incorrecte
+  // âââ Re-analyser un email spÃ©cifique (force une nouvelle extraction) ââââââ
+  // Utile quand le prompt a Ã©tÃ© amÃ©liorÃ© ou que l'extraction prÃ©cÃ©dente Ã©tait incorrecte
   const [reanalysingId, setReanalysingId] = useState<string | null>(null);
   const reanalyserEmail = async (email: any) => {
     if (!email || reanalysingId) return;
@@ -1886,7 +1887,7 @@ export default function App() {
         "reanalyse_manuelle"
       );
       const nouvelle = JSON.parse(raw.replace(/```json|```/g, "").trim());
-      // Mettre à jour cache React (immédiat) + state local extracted si ce mail est sélectionné
+      // Mettre Ã  jour cache React (immÃ©diat) + state local extracted si ce mail est sÃ©lectionnÃ©
       setRepliesCache(prev => {
         const updated = {
           ...prev,
@@ -1900,16 +1901,16 @@ export default function App() {
         saveExtractions(allExtractions);
         return updated;
       });
-      // Si ce mail est celui affiché actuellement, rafraîchir l'extraction visible
+      // Si ce mail est celui affichÃ© actuellement, rafraÃ®chir l'extraction visible
       if (sel?.id === email.id) setExtracted(nouvelle);
-      toast("Mail re-analysé ✓");
+      toast("Mail re-analysÃ© â");
     } catch (e: any) {
-      toast("Re-analyse échouée : " + humanError(e), "err");
+      toast("Re-analyse Ã©chouÃ©e : " + humanError(e), "err");
     }
     setReanalysingId(null);
   };
 
-  // ─── Tester ARCHANGE sur un mail fictif (modale) ────────────────────────
+  // âââ Tester ARCHANGE sur un mail fictif (modale) ââââââââââââââââââââââââ
   const runTestArchange = async () => {
     if (!testMailContent.trim()) { toast("Collez un mail pour tester", "err"); return; }
     setTestRunning(true);
@@ -1940,29 +1941,29 @@ export default function App() {
       const plateforme = detectPlateforme(fakeEmail.fromEmail, fakeEmail.body);
       const estForward = estMailForwarde({ subject: fakeEmail.subject, body: fakeEmail.body });
       setTestResult({ extracted, duree, tokensIn: dTokensIn, tokensOut: dTokensOut, cout: dCout, plateforme, estForward });
-      toast("Test terminé ✓");
+      toast("Test terminÃ© â");
     } catch (e: any) {
-      toast("Test échoué : " + humanError(e), "err");
+      toast("Test Ã©chouÃ© : " + humanError(e), "err");
       setTestResult({ error: humanError(e) });
     }
     setTestRunning(false);
   };
 
-  // Chargement/synchronisation des emails — déclenche d'abord une sync Gmail, puis relit Supabase
+  // Chargement/synchronisation des emails â dÃ©clenche d'abord une sync Gmail, puis relit Supabase
   const loadEmailsFromApi = async (withSync = false) => {
     setLoadingMail(true);
     try {
       if (withSync) {
         try {
-          // Fix #1 — Sync différentielle via historyId (ne récupère que les nouveaux)
-          // Récupérer le dernier historyId connu depuis la route sync
-          const statusRes = await fetch("/api/emails/sync");
+          // Fix #1 â Sync diffÃ©rentielle via historyId (ne rÃ©cupÃ¨re que les nouveaux)
+          // RÃ©cupÃ©rer le dernier historyId connu depuis la route sync
+          const statusRes = await apiFetch("/api/emails/sync");
           if (statusRes.ok) {
             const { lastHistoryId, syncCompleted } = await statusRes.json();
 
             if (syncCompleted && lastHistoryId) {
-              // Sync différentielle — seulement les changements depuis la dernière sync
-              const diffRes = await fetch("/api/emails/sync", {
+              // Sync diffÃ©rentielle â seulement les changements depuis la derniÃ¨re sync
+              const diffRes = await apiFetch("/api/emails/sync", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ useHistoryId: true, lastHistoryId }),
@@ -1970,32 +1971,32 @@ export default function App() {
               if (diffRes.status === 401) {
                 const d = await diffRes.json();
                 if (d.error === "GMAIL_AUTH_EXPIRED") {
-                  toast("Session Gmail expirée — reconnectez-vous", "err");
+                  toast("Session Gmail expirÃ©e â reconnectez-vous", "err");
                   setLoadingMail(false);
                   return;
                 }
               }
             } else if (!syncCompleted) {
-              // Sync initiale pas encore terminée — relancer lancerSyncComplete
+              // Sync initiale pas encore terminÃ©e â relancer lancerSyncComplete
               lancerSyncComplete();
             }
           }
         } catch {}
       }
-      const r = await fetch(`/api/emails?limit=${emailsLimit}`);
+      const r = await apiFetch(`/api/emails?limit=${emailsLimit}`);
       if (!r.ok) throw new Error("Erreur " + r.status);
       const payload = await r.json();
-      // Nouveau format : { emails: [], syncCompleted: bool, total? } — rétrocompat avec []
+      // Nouveau format : { emails: [], syncCompleted: bool, total? } â rÃ©trocompat avec []
       const data = Array.isArray(payload) ? payload : (payload?.emails || []);
       if (payload?.total) setEmailsTotal(payload.total);
       if (data.length > 0) {
         const mapped = data.map((m: any) => mapEmail(m));
         setEmails(mapped);
-        toast(mapped.length + " emails chargés");
+        toast(mapped.length + " emails chargÃ©s");
         if (withSync) setTimeout(() => analyserEmailsEnArrierePlan(mapped, repliesCache), 500);
       } else {
         setEmails([]);
-        toast("Aucun email — vérifiez la connexion Gmail", "err");
+        toast("Aucun email â vÃ©rifiez la connexion Gmail", "err");
       }
     } catch (e: any) {
       toast(humanError(e), "err");
@@ -2003,13 +2004,13 @@ export default function App() {
     setLoadingMail(false);
   };
 
-  // Fix #4 — Charger plus d'emails (pagination cursor)
+  // Fix #4 â Charger plus d'emails (pagination cursor)
   const chargerPlusEmails = async () => {
     if (loadingMore || emails.length === 0) return;
     setLoadingMore(true);
     try {
       const oldest = emails[emails.length - 1]?.rawDate || "";
-      const r = await fetch(`/api/emails?limit=50&before=${encodeURIComponent(oldest)}`);
+      const r = await apiFetch(`/api/emails?limit=50&before=${encodeURIComponent(oldest)}`);
       if (!r.ok) throw new Error("Erreur " + r.status);
       const payload = await r.json();
       const data = Array.isArray(payload) ? payload : (payload?.emails || []);
@@ -2018,7 +2019,7 @@ export default function App() {
         setEmails(prev => [...prev, ...mapped]);
         if (payload?.total) setEmailsTotal(payload.total);
       } else {
-        toast("Tous les emails sont chargés");
+        toast("Tous les emails sont chargÃ©s");
       }
     } catch (e: any) {
       toast(humanError(e), "err");
@@ -2030,10 +2031,10 @@ export default function App() {
     let cancelled = false;
 
     const init = async () => {
-      // Chargement parallèle — user-data + emails simultanément
+      // Chargement parallÃ¨le â user-data + emails simultanÃ©ment
       const [userData, emailsData] = await Promise.allSettled([
-        fetch("/api/user-data").then(r => r.ok ? r.json() : Promise.reject("user-data:" + r.status)),
-        fetch("/api/emails").then(r => r.ok ? r.json() : Promise.reject("emails:" + r.status)),
+        apiFetch("/api/user-data").then(r => r.ok ? r.json() : Promise.reject("user-data:" + r.status)),
+        apiFetch("/api/emails").then(r => r.ok ? r.json() : Promise.reject("emails:" + r.status)),
       ]);
 
       if (cancelled) return;
@@ -2045,7 +2046,7 @@ export default function App() {
         try { if (d.links_fetched) setLinksFetched(JSON.parse(d.links_fetched)); } catch {}
         if (d.context) {
           // Le champ context contient soit un JSON avec les sections Sources IA,
-          // soit une chaîne de texte brut (ancienne valeur legacy)
+          // soit une chaÃ®ne de texte brut (ancienne valeur legacy)
           try {
             const parsed = JSON.parse(d.context);
             if (parsed && typeof parsed === "object") {
@@ -2054,7 +2055,7 @@ export default function App() {
               if (parsed.espaces)   setEspacesCtx(parsed.espaces);
               if (parsed.ton)       setTonCtx(parsed.ton);
               if (parsed.custom)    setCustomCtx(parsed.custom);
-              // Infos établissement dynamiques
+              // Infos Ã©tablissement dynamiques
               if (parsed.nomEtab)      setNomEtab(parsed.nomEtab);
               if (parsed.adresseEtab)  setAdresseEtab(parsed.adresseEtab);
               if (parsed.emailEtab)    setEmailEtab(parsed.emailEtab);
@@ -2063,7 +2064,7 @@ export default function App() {
                 setEspacesDyn(parsed.espacesDyn);
             }
           } catch {
-            // Valeur legacy texte brut → mettre dans customCtx
+            // Valeur legacy texte brut â mettre dans customCtx
             setCustomCtx(d.context);
           }
         }
@@ -2080,10 +2081,10 @@ export default function App() {
         try { if (d.sent_replies) setSentReplies(JSON.parse(d.sent_replies)); } catch {}
         try { if (d.custom_tags) setCustomTags(JSON.parse(d.custom_tags)); } catch {}
         try { if (d.email_tags) setEmailTags(JSON.parse(d.email_tags)); } catch {}
-        // ── Sources ARCHANGE v2 — chargement des 5 nouvelles structures ────
+        // ââ Sources ARCHANGE v2 â chargement des 5 nouvelles structures ââââ
         try { if (d.regles_commerciales) {
           const loaded = JSON.parse(d.regles_commerciales);
-          // Deep merge avec DEFAULT pour garantir toutes les clés même si la structure évolue
+          // Deep merge avec DEFAULT pour garantir toutes les clÃ©s mÃªme si la structure Ã©volue
           setReglesCommerciales({
             parNombrePersonnes: { ...DEFAULT_REGLES_COMMERCIALES.parNombrePersonnes, ...(loaded.parNombrePersonnes || {}) },
             parBudgetParPers: { ...DEFAULT_REGLES_COMMERCIALES.parBudgetParPers, ...(loaded.parBudgetParPers || {}) },
@@ -2114,7 +2115,7 @@ export default function App() {
           if (Array.isArray(loaded)) setCasParticuliers(loaded);
         } } catch {}
         try { if (typeof d.regles_absolues === "string") setReglesAbsolues(d.regles_absolues); } catch {}
-        // P1 — Charger les réponses IA persistées → restaure les replies après F5
+        // P1 â Charger les rÃ©ponses IA persistÃ©es â restaure les replies aprÃ¨s F5
         try { if (d.replies_cache) {
           const replies = JSON.parse(d.replies_cache);
           setRepliesCache(prev => {
@@ -2126,7 +2127,7 @@ export default function App() {
             return merged;
           });
         } } catch {}
-        // Charger les extractions IA persistées → alimente directement repliesCache
+        // Charger les extractions IA persistÃ©es â alimente directement repliesCache
         try { if (d.extractions) {
           const extr = JSON.parse(d.extractions);
           setRepliesCache(prev => {
@@ -2139,35 +2140,35 @@ export default function App() {
           });
         } } catch {}
       } else {
-        console.error("Chargement données utilisateur échoué :", userData.reason);
-        toast("⚠️ Impossible de charger vos données — vérifiez votre connexion", "err");
+        console.error("Chargement donnÃ©es utilisateur Ã©chouÃ© :", userData.reason);
+        toast("â ï¸ Impossible de charger vos donnÃ©es â vÃ©rifiez votre connexion", "err");
       }
 
       if (emailsData.status === "fulfilled") {
         const payload = emailsData.value;
-        // Nouveau format : { emails: [], syncCompleted } — rétrocompat avec []
+        // Nouveau format : { emails: [], syncCompleted } â rÃ©trocompat avec []
         const data = Array.isArray(payload) ? payload : (payload?.emails || []);
         const mapped = data.length > 0 ? data.map((m: any) => mapEmail(m)) : [];
         setEmails(mapped);
       } else {
-        console.error("Chargement emails échoué :", emailsData.reason);
+        console.error("Chargement emails Ã©chouÃ© :", emailsData.reason);
         setEmails([]);
       }
 
       if (!cancelled) {
         setInitializing(false);
         setLoadingMail(false);
-        // Lancer la synchronisation complète en arrière-plan (sans bloquer l'UI)
+        // Lancer la synchronisation complÃ¨te en arriÃ¨re-plan (sans bloquer l'UI)
         setTimeout(() => lancerSyncComplete(), 2000);
-        // Fix #5 — Vérifier et renouveler le Gmail Watch si expiré (temps réel)
+        // Fix #5 â VÃ©rifier et renouveler le Gmail Watch si expirÃ© (temps rÃ©el)
         setTimeout(async () => {
           try {
-            const watchRes = await fetch("/api/gmail/watch");
+            const watchRes = await apiFetch("/api/gmail/watch");
             if (watchRes.ok) {
               const { active } = await watchRes.json();
               if (!active) {
-                // Watch expiré ou non configuré — tenter de le renouveler
-                await fetch("/api/gmail/watch", { method: "POST" });
+                // Watch expirÃ© ou non configurÃ© â tenter de le renouveler
+                await apiFetch("/api/gmail/watch", { method: "POST" });
               }
             }
           } catch {}
@@ -2176,7 +2177,7 @@ export default function App() {
     };
 
     setLoadingMail(true);
-    // P2 — Restaurer l'état UI depuis localStorage avant le chargement
+    // P2 â Restaurer l'Ã©tat UI depuis localStorage avant le chargement
     try {
       const ui = JSON.parse(localStorage.getItem("arc_ui_state") || "{}");
       if (ui.view && ["general","mails","planning","stats","sources"].includes(ui.view)) setView(ui.view);
@@ -2190,14 +2191,14 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // Retry automatique — au retour connexion ET toutes les 30s si queue non vide
+  // Retry automatique â au retour connexion ET toutes les 30s si queue non vide
   useEffect(() => {
     const flushQueue = async () => {
       setOfflineQueue(q => {
         if (Object.keys(q).length === 0) return q;
-        // Retenter chaque entrée — saveToSupabase supprime de la queue si succès
+        // Retenter chaque entrÃ©e â saveToSupabase supprime de la queue si succÃ¨s
         Object.entries(q).forEach(([key, value]) => saveToSupabase({ [key]: value }));
-        return q; // Ne pas vider ici — saveToSupabase le fera si succès
+        return q; // Ne pas vider ici â saveToSupabase le fera si succÃ¨s
       });
     };
     window.addEventListener("online", flushQueue);
@@ -2210,9 +2211,9 @@ export default function App() {
     return () => { window.removeEventListener("online", flushQueue); clearInterval(interval); };
   }, []);
 
-  // Fix C1 — Polling automatique toutes les 2 minutes pour détecter les nouveaux emails
-  // Utilise un ref pour éviter le bug de closure stale (le setInterval capturait
-  // loadEmailsFromApi du premier render, avec repliesCache = {} vide → re-analysait tout)
+  // Fix C1 â Polling automatique toutes les 2 minutes pour dÃ©tecter les nouveaux emails
+  // Utilise un ref pour Ã©viter le bug de closure stale (le setInterval capturait
+  // loadEmailsFromApi du premier render, avec repliesCache = {} vide â re-analysait tout)
   useEffect(() => { loadEmailsFromApiRef.current = loadEmailsFromApi; });
   useEffect(() => {
     const pollingInterval = setInterval(() => {
@@ -2221,12 +2222,12 @@ export default function App() {
     return () => clearInterval(pollingInterval);
   }, []);
 
-  // Supabase Realtime — mise à jour instantanée quand emails_cache change (via webhook Pub/Sub)
+  // Supabase Realtime â mise Ã  jour instantanÃ©e quand emails_cache change (via webhook Pub/Sub)
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return;
     let channel: any = null;
     try {
-      // Lazy import pour ne pas bloquer si @supabase/supabase-js n'est pas installé côté client
+      // Lazy import pour ne pas bloquer si @supabase/supabase-js n'est pas installÃ© cÃ´tÃ© client
       import('@supabase/supabase-js').then(({ createClient }) => {
         const supabase = createClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -2245,7 +2246,7 @@ export default function App() {
               return [newEmail, ...prev];
             });
             if (newEmail.unread) {
-              toast(`Nouvel email de ${newEmail.from} — ${newEmail.subject}`);
+              toast(`Nouvel email de ${newEmail.from} â ${newEmail.subject}`);
             }
           })
           .on('postgres_changes', {
@@ -2269,38 +2270,38 @@ export default function App() {
             }
           })
           .subscribe();
-      }).catch(() => {}); // Silencieux si @supabase/supabase-js absent côté client
+      }).catch(() => {}); // Silencieux si @supabase/supabase-js absent cÃ´tÃ© client
     } catch {}
     return () => { if (channel) channel.unsubscribe?.(); };
   }, []);
 
-  // P2 — Sauvegarder l'état UI dans localStorage à chaque changement
+  // P2 â Sauvegarder l'Ã©tat UI dans localStorage Ã  chaque changement
   useEffect(() => {
     try { localStorage.setItem("arc_ui_state", JSON.stringify({ view, mailFilter, generalFilter, navCollapsed, calView, planFilter })); } catch {}
   }, [view, mailFilter, generalFilter, navCollapsed, calView, planFilter]);
 
-  // P5 — Avertir avant fermeture si réponse non sauvegardée
+  // P5 â Avertir avant fermeture si rÃ©ponse non sauvegardÃ©e
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (reply && !drafted.has(sel?.id)) {
         e.preventDefault();
-        e.returnValue = "Une réponse a été générée mais n'a pas encore été créée comme brouillon. Voulez-vous quitter ?";
+        e.returnValue = "Une rÃ©ponse a Ã©tÃ© gÃ©nÃ©rÃ©e mais n'a pas encore Ã©tÃ© crÃ©Ã©e comme brouillon. Voulez-vous quitter ?";
       }
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [reply, drafted, sel]);
-  // [bandeau alerteUrgente supprimé — point 6]
+  // [bandeau alerteUrgente supprimÃ© â point 6]
 
   const deleteEmailWithUndo = (em: any) => {
     if (undoDelete?.timer) clearTimeout(undoDelete.timer);
-    // Retirer immédiatement de la liste (optimiste)
+    // Retirer immÃ©diatement de la liste (optimiste)
     setEmails(prev => prev.filter(m => m.id !== em.id));
     if (sel?.id === em.id) setSel(null);
     const timer = setTimeout(() => {
-      // Confirmer la suppression après 4s — appel Gmail trash
+      // Confirmer la suppression aprÃ¨s 4s â appel Gmail trash
       if (em.gmailId) {
-        fetch("/api/emails", {
+        apiFetch("/api/emails", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ gmail_id: em.gmailId }),
@@ -2309,7 +2310,7 @@ export default function App() {
       setUndoDelete(null);
     }, 4000);
     setUndoDelete({ email: em, timer });
-    toast("Email supprimé — Annuler ?", "undo");
+    toast("Email supprimÃ© â Annuler ?", "undo");
   };
 
   const toggleFlag = (id: string, flag: string) => {
@@ -2322,17 +2323,17 @@ export default function App() {
     // Optimiste local
     setEmails(prev => prev.map(m => m.id === id ? { ...m, flags: newFlags } : m));
     if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, flags: newFlags } : prev);
-    // Bidirectionnel Gmail — avec rollback si échec
+    // Bidirectionnel Gmail â avec rollback si Ã©chec
     if (email.gmailId && flag === "star") {
-      fetch("/api/emails", {
+      apiFetch("/api/emails", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gmail_id: email.gmailId, action: "star", value: !hasFlag }),
       }).catch(() => {
-        // Rollback si Gmail échoue
+        // Rollback si Gmail Ã©choue
         setEmails(prev => prev.map(m => m.id === id ? { ...m, flags: email.flags || [] } : m));
         if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, flags: email.flags || [] } : prev);
-        toast("Erreur synchronisation Gmail — réessayez", "err");
+        toast("Erreur synchronisation Gmail â rÃ©essayez", "err");
       });
     }
   };
@@ -2342,42 +2343,42 @@ export default function App() {
     if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, aTraiter: !prev.aTraiter } : prev);
   };
 
-  // ─── Archivage ──────────────────────────────────────────────────────────────
+  // âââ Archivage ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const archiveEmail = (id: string) => {
     const email = emails.find(m => m.id === id);
     // Optimiste local
     setEmails(prev => prev.map(m => m.id === id ? { ...m, archived: true } : m));
     if (sel?.id === id) setSel(null);
-    // Bidirectionnel Gmail — avec rollback si échec
+    // Bidirectionnel Gmail â avec rollback si Ã©chec
     if (email?.gmailId) {
-      fetch("/api/emails", {
+      apiFetch("/api/emails", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gmail_id: email.gmailId, action: "archive" }),
       }).catch(() => {
-        // Rollback si Gmail échoue
+        // Rollback si Gmail Ã©choue
         setEmails(prev => prev.map(m => m.id === id ? { ...m, archived: false } : m));
-        toast("Erreur archivage Gmail — réessayez", "err");
+        toast("Erreur archivage Gmail â rÃ©essayez", "err");
       });
     }
-    toast("Email archivé — E pour archiver");
+    toast("Email archivÃ© â E pour archiver");
   };
 
   const unarchiveEmail = (id: string) => {
     setEmails(prev => prev.map(m => m.id === id ? { ...m, archived: false } : m));
-    toast("Email restauré dans la boîte");
+    toast("Email restaurÃ© dans la boÃ®te");
   };
 
-  // ─── Transfert email ────────────────────────────────────────────────────────
+  // âââ Transfert email ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const forwardEmail = (em: any) => {
     const body = encodeURIComponent(
-      `\n\n---------- Message transféré ----------\nDe : ${em.from} <${em.fromEmail}>\nDate : ${em.date}\nObjet : ${em.subject}\n\n${em.body || em.snippet || ""}`
+      `\n\n---------- Message transfÃ©rÃ© ----------\nDe : ${em.from} <${em.fromEmail}>\nDate : ${em.date}\nObjet : ${em.subject}\n\n${em.body || em.snippet || ""}`
     );
     const subject = encodeURIComponent(`Tr: ${em.subject || ""}`);
     window.open(`https://mail.google.com/mail/?view=cm&su=${subject}&body=${body}`, "_blank");
   };
 
-  // ─── Ouvrir l'éditeur de réponse manuelle ───────────────────────────────────
+  // âââ Ouvrir l'Ã©diteur de rÃ©ponse manuelle âââââââââââââââââââââââââââââââââââ
   const openReplyEditor = (mode: "reply"|"replyAll"|"forward" = "reply") => {
     if (!sel) return;
     setReplyEditorMode(mode);
@@ -2389,14 +2390,14 @@ export default function App() {
     } else {
       setReplyEditorTo("");
     }
-    // Pré-remplir avec la citation de l'email original
-    const sig = `\n\n--\nCordialement,\nL'équipe ${nomEtab}${adresseEtab ? "\n" + adresseEtab : ""}${emailEtab ? "\n" + emailEtab : ""}`;
-    const citation = `\n\n\n─── Message original ───\nDe : ${sel.from} <${sel.fromEmail}>\nDate : ${sel.date}\nObjet : ${sel.subject}\n\n${sel.body?.slice(0, 2000) || sel.snippet || ""}`;
+    // PrÃ©-remplir avec la citation de l'email original
+    const sig = `\n\n--\nCordialement,\nL'Ã©quipe ${nomEtab}${adresseEtab ? "\n" + adresseEtab : ""}${emailEtab ? "\n" + emailEtab : ""}`;
+    const citation = `\n\n\nâââ Message original âââ\nDe : ${sel.from} <${sel.fromEmail}>\nDate : ${sel.date}\nObjet : ${sel.subject}\n\n${sel.body?.slice(0, 2000) || sel.snippet || ""}`;
     setReplyEditorText(sig + citation);
     setShowReplyEditor(true);
   };
 
-  // ─── Envoi réel via /api/gmail/send ─────────────────────────────────────────
+  // âââ Envoi rÃ©el via /api/gmail/send âââââââââââââââââââââââââââââââââââââââââ
   const sendReply = async () => {
     if (!sel || !replyEditorTo.trim() || !replyEditorText.trim()) return;
     setSending(true);
@@ -2404,7 +2405,7 @@ export default function App() {
       const subject = replyEditorMode === "forward"
         ? `Tr: ${sel.subject || ""}`
         : sel.subject?.startsWith("Re:") ? sel.subject : `Re: ${sel.subject || ""}`;
-      const r = await fetch("/api/gmail/send", {
+      const r = await apiFetch("/api/gmail/send", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
@@ -2420,19 +2421,19 @@ export default function App() {
       saveSentReplies(upd);
       setShowReplyEditor(false);
       setReplyEditorText("");
-      toast("Email envoyé ✓");
+      toast("Email envoyÃ© â");
     } catch (e: any) {
       toast(humanError(e), "err");
     }
     setSending(false);
   };
 
-  // ─── Envoi nouveau mail ──────────────────────────────────────────────────────
+  // âââ Envoi nouveau mail ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const sendNewMail = async () => {
     if (!composeTo.trim() || !composeSubject.trim() || !composeBody.trim()) return;
     setComposeSending(true);
     try {
-      const r = await fetch("/api/gmail/send", {
+      const r = await apiFetch("/api/gmail/send", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({ to: composeTo, subject: composeSubject, body: composeBody, threadId: null }),
@@ -2440,14 +2441,14 @@ export default function App() {
       if (!r.ok) throw new Error(`Erreur ${r.status}`);
       setShowCompose(false);
       setComposeTo(""); setComposeSubject(""); setComposeBody("");
-      toast("Email envoyé ✓");
+      toast("Email envoyÃ© â");
     } catch (e: any) {
       toast(humanError(e), "err");
     }
     setComposeSending(false);
   };
 
-  // ─── Sauvegarde brouillon local ──────────────────────────────────────────────
+  // âââ Sauvegarde brouillon local ââââââââââââââââââââââââââââââââââââââââââââââ
   const saveDraft = async () => {
     if (!replyEditorText.trim() && !composeBody.trim()) return;
     const to      = showCompose ? composeTo : replyEditorTo;
@@ -2461,42 +2462,42 @@ export default function App() {
       emailId: showReplyEditor ? sel?.id : undefined,
     };
 
-    // Fix #6 — Créer le brouillon dans Gmail réel (en parallèle du stockage local)
+    // Fix #6 â CrÃ©er le brouillon dans Gmail rÃ©el (en parallÃ¨le du stockage local)
     try {
-      const res = await fetch("/api/gmail/draft", {
+      const res = await apiFetch("/api/gmail/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to, subject, body }),
       });
       if (res.ok) {
-        toast("Brouillon créé dans Gmail ✓");
+        toast("Brouillon crÃ©Ã© dans Gmail â");
       } else {
-        // Fallback : stockage local si Gmail échoue
+        // Fallback : stockage local si Gmail Ã©choue
         const updated = [...localDrafts, draft];
         setLocalDrafts(updated);
         saveToSupabase({ replies_cache: JSON.stringify(updated) });
-        toast("Brouillon sauvegardé localement ✓");
+        toast("Brouillon sauvegardÃ© localement â");
       }
     } catch {
       // Fallback hors ligne
       const updated = [...localDrafts, draft];
       setLocalDrafts(updated);
       saveToSupabase({ replies_cache: JSON.stringify(updated) });
-      toast("Brouillon sauvegardé ✓");
+      toast("Brouillon sauvegardÃ© â");
     }
 
     setShowReplyEditor(false);
     setShowCompose(false);
   };
 
-  // ─── Snooze ─────────────────────────────────────────────────────────────────
+  // âââ Snooze âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const snoozeEmail = (id: string, until: string) => {
     const upd = emails.map(m => m.id === id ? { ...m, snoozedUntil: until } : m);
     saveEmails(upd);
     if (sel?.id === id) setSel(null);
-    toast("Email reporté ⏰");
+    toast("Email reportÃ© â°");
   };
-  // Réveil des emails snoozés — au mount + toutes les 60s pour réveil automatique en session longue
+  // RÃ©veil des emails snoozÃ©s â au mount + toutes les 60s pour rÃ©veil automatique en session longue
   useEffect(() => {
     const checkWake = () => {
       const now = new Date().toISOString();
@@ -2504,7 +2505,7 @@ export default function App() {
       if (toWake.length > 0) {
         const upd = emails.map(m => m.snoozedUntil && m.snoozedUntil <= now ? { ...m, snoozedUntil: null, unread: true } : m);
         saveEmails(upd);
-        toast(`${toWake.length} email${toWake.length > 1 ? "s" : ""} reporté${toWake.length > 1 ? "s" : ""} de retour dans la boîte`);
+        toast(`${toWake.length} email${toWake.length > 1 ? "s" : ""} reportÃ©${toWake.length > 1 ? "s" : ""} de retour dans la boÃ®te`);
       }
     };
     checkWake();
@@ -2512,7 +2513,7 @@ export default function App() {
     return () => clearInterval(t);
   }, [emails.length]);
 
-  // ─── Sélection multiple ─────────────────────────────────────────────────────
+  // âââ SÃ©lection multiple âââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -2524,39 +2525,39 @@ export default function App() {
   const clearSelection = () => setSelectedIds(new Set());
   const bulkMarkRead = () => {
     const upd = emails.map(m => selectedIds.has(m.id) ? { ...m, unread: false } : m);
-    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) marqués lus`);
+    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) marquÃ©s lus`);
   };
   const bulkMarkUnread = () => {
     const upd = emails.map(m => selectedIds.has(m.id) ? { ...m, unread: true } : m);
-    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) marqués non lus`);
+    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) marquÃ©s non lus`);
   };
   const bulkArchive = () => {
     const upd = emails.map(m => selectedIds.has(m.id) ? { ...m, archived: true } : m);
-    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) archivé(s)`);
+    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) archivÃ©(s)`);
   };
   const bulkDelete = () => {
     const upd = emails.filter(m => !selectedIds.has(m.id));
-    saveEmails(upd); clearSelection(); setSel(null); toast(`${selectedIds.size} email(s) supprimé(s)`);
+    saveEmails(upd); clearSelection(); setSel(null); toast(`${selectedIds.size} email(s) supprimÃ©(s)`);
   };
   const bulkATraiter = () => {
     const upd = emails.map(m => selectedIds.has(m.id) ? { ...m, aTraiter: true } : m);
-    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) marqués à traiter`);
+    saveEmails(upd); clearSelection(); toast(`${selectedIds.size} email(s) marquÃ©s Ã  traiter`);
   };
 
   const filtered = React.useMemo(() => {
     const q = search.toLowerCase();
     let res = emails.filter(m => {
-      // Filtre "Reportés" — Point 4 : affiche UNIQUEMENT les mails snoozés
+      // Filtre "ReportÃ©s" â Point 4 : affiche UNIQUEMENT les mails snoozÃ©s
       if (mailFilter === "reported") {
         if (!m.snoozedUntil || m.snoozedUntil <= new Date().toISOString()) return false;
         if (m.archived) return false;
       } else {
-        // Comportement normal : masquer les snoozés et archivés
+        // Comportement normal : masquer les snoozÃ©s et archivÃ©s
         if (m.snoozedUntil && m.snoozedUntil > new Date().toISOString()) return false;
         if (showArchived) return !!m.archived;
         if (m.archived) return false;
       }
-      // 3 — Filtre par tag personnalisé
+      // 3 â Filtre par tag personnalisÃ©
       if (tagFilter && !(emailTags[m.id]||[]).includes(tagFilter)) return false;
       // Recherche full-text (from + subject + body + snippet)
       const matchesSearch = !q
@@ -2572,21 +2573,21 @@ export default function App() {
       if (mailFilter === "atraiter") return !!m.aTraiter;
       return true;
     });
-    // Tri — utilise rawDate (ISO) pour un ordre chronologique exact
+    // Tri â utilise rawDate (ISO) pour un ordre chronologique exact
     res = [...res].sort((a, b) => {
       if (sortOrder === "date_asc")  return (a.rawDate||a.date||"").localeCompare(b.rawDate||b.date||"");
       if (sortOrder === "from")      return (a.from||"").localeCompare(b.from||"");
       if (sortOrder === "subject")   return (a.subject||"").localeCompare(b.subject||"");
-      return (b.rawDate||b.date||"").localeCompare(a.rawDate||a.date||""); // date_desc par défaut
+      return (b.rawDate||b.date||"").localeCompare(a.rawDate||a.date||""); // date_desc par dÃ©faut
     });
     return res;
   }, [emails, search, mailFilter, sortOrder, showArchived, tagFilter, emailTags]);
 
-  // Synchroniser le ref à chaque render (avant les effects)
+  // Synchroniser le ref Ã  chaque render (avant les effects)
   filteredRef.current = filtered;
 
-  // ─── Vue Envoyés ─────────────────────────────────────────────────────────────
-  // Fix : emails SENT depuis emails_cache (vrais emails Gmail envoyés)
+  // âââ Vue EnvoyÃ©s âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Fix : emails SENT depuis emails_cache (vrais emails Gmail envoyÃ©s)
   const [sentEmails, setSentEmails] = React.useState<any[]>([]);
   const [loadingSent, setLoadingSent] = React.useState(false);
 
@@ -2594,7 +2595,7 @@ export default function App() {
   React.useEffect(() => {
     if (mailFilter !== "envoyes") return;
     setLoadingSent(true);
-    fetch("/api/emails?filter=sent&limit=100")
+    apiFetch("/api/emails?filter=sent&limit=100")
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => {
         const data = Array.isArray(d) ? d : (d?.emails || []);
@@ -2605,7 +2606,7 @@ export default function App() {
   }, [mailFilter]);
 
   const sentList = React.useMemo(() => {
-    // Fusionner les emails SENT Gmail + les réponses envoyées depuis ARCHANGE
+    // Fusionner les emails SENT Gmail + les rÃ©ponses envoyÃ©es depuis ARCHANGE
     const fromCache = sentEmails;
     const fromReplies = Object.entries(sentReplies)
       .map(([emailId, s]) => ({ _sentId: emailId, from: "Moi", fromEmail: "", subject: s.subject, date: s.date, body: s.text, snippet: s.text.slice(0,120), unread: false, flags: [], attachments: [], id: "sent_"+emailId, rawDate: s.date }));
@@ -2615,7 +2616,7 @@ export default function App() {
     return merged.sort((a: any, b: any) => (b.rawDate||"").localeCompare(a.rawDate||""));
   }, [sentEmails, sentReplies]);
 
-  // ─── Vue Brouillons ───────────────────────────────────────────────────────────
+  // âââ Vue Brouillons âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const draftList = React.useMemo(() => {
     return localDrafts.map(d => ({...d, from: "Brouillon", fromEmail: d.to, snippet: d.body.slice(0,120), unread: false, flags: [], attachments: [], id: d.id, rawDate: d.date}))
       .sort((a,b) => b.rawDate.localeCompare(a.rawDate));
@@ -2625,16 +2626,16 @@ export default function App() {
     let email = emailArg;
     setMailOrigine(null);
 
-    // Fix 5 — Sauvegarder le brouillon de réponse en cours avant de changer d'email
+    // Fix 5 â Sauvegarder le brouillon de rÃ©ponse en cours avant de changer d'email
     if (sel && sel.id !== email.id && showReplyEditor && replyEditorText.trim()) {
-      // Sauvegarder comme brouillon lié à l'email précédent
+      // Sauvegarder comme brouillon liÃ© Ã  l'email prÃ©cÃ©dent
       const draftKey = `draft_reply_${sel.id}`;
       try { localStorage.setItem(draftKey, replyEditorText); } catch {}
     }
-    // Réinitialiser l'éditeur de réponse (isolation par email)
+    // RÃ©initialiser l'Ã©diteur de rÃ©ponse (isolation par email)
     setShowReplyEditor(false);
     setReplyEditorText("");
-    // Restaurer un brouillon éventuel pour le nouvel email
+    // Restaurer un brouillon Ã©ventuel pour le nouvel email
     if (email.id) {
       try {
         const saved = localStorage.getItem(`draft_reply_${email.id}`);
@@ -2642,12 +2643,12 @@ export default function App() {
       } catch {}
     }
 
-    // Marquer comme lu — optimiste puis sync Gmail via PATCH
+    // Marquer comme lu â optimiste puis sync Gmail via PATCH
     if (email.unread) {
       email = { ...email, unread: false };
       setEmails(prev => prev.map(m => m.id === email.id ? { ...m, unread: false } : m));
       if (email.gmailId) {
-        fetch("/api/emails", {
+        apiFetch("/api/emails", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ gmail_id: email.gmailId, action: "read" }),
@@ -2655,7 +2656,7 @@ export default function App() {
       }
     }
 
-    // Restaurer la réponse mise en cache
+    // Restaurer la rÃ©ponse mise en cache
     const cached = repliesCache[email.id];
     setReply(cached?.reply || "");
     setEditReply(cached?.editReply || "");
@@ -2663,10 +2664,10 @@ export default function App() {
     setEditing(false); setShowPlanForm(false);
     setSel(email);
 
-    // Charger le corps complet à la demande (format=full) si pas encore en cache
+    // Charger le corps complet Ã  la demande (format=full) si pas encore en cache
     if (email.gmailId && !email.bodyLoaded) {
       try {
-        const res = await fetch(`/api/emails?gmail_id=${encodeURIComponent(email.gmailId)}`);
+        const res = await apiFetch(`/api/emails?gmail_id=${encodeURIComponent(email.gmailId)}`);
         if (res.ok) {
           const body = await res.json();
           if (body.body_html || body.body_text) {
@@ -2685,7 +2686,7 @@ export default function App() {
           }
         }
       } catch (e) {
-        console.warn("Chargement corps email échoué:", e);
+        console.warn("Chargement corps email Ã©chouÃ©:", e);
       }
     }
   };
@@ -2697,7 +2698,7 @@ export default function App() {
     setGenReply(true);
     setReply(""); setEditReply(""); setExtracted(null);
     try {
-      // ── Limites Option A (10-15× anciennes valeurs) ────────────────────────
+      // ââ Limites Option A (10-15Ã anciennes valeurs) ââââââââââââââââââââââââ
       const LIM = {
         body: 30000,
         menus: 15000,
@@ -2708,25 +2709,25 @@ export default function App() {
         link: 2000,
       };
 
-      // ── Détection des troncatures pour notification utilisateur ────────────
+      // ââ DÃ©tection des troncatures pour notification utilisateur ââââââââââââ
       const detectedTruncations: TruncationInfo[] = [];
       const corpsLen = (sel.body || sel.snippet || "").length;
       if (corpsLen > LIM.body) detectedTruncations.push({ label: "Corps du mail", actuel: corpsLen, limite: LIM.body });
       if ((menusCtx?.length || 0) > LIM.menus) detectedTruncations.push({ label: "Menus & Tarifs", actuel: menusCtx.length, limite: LIM.menus });
       if ((conditionsCtx?.length || 0) > LIM.conditions) detectedTruncations.push({ label: "Conditions & Politique", actuel: conditionsCtx.length, limite: LIM.conditions });
-      if ((espacesCtx?.length || 0) > LIM.espaces) detectedTruncations.push({ label: "Espaces & Capacités", actuel: espacesCtx.length, limite: LIM.espaces });
-      if ((tonCtx?.length || 0) > LIM.ton) detectedTruncations.push({ label: "Règles & Ton", actuel: tonCtx.length, limite: LIM.ton });
-      if ((customCtx?.length || 0) > LIM.custom) detectedTruncations.push({ label: "Contexte personnalisé", actuel: customCtx.length, limite: LIM.custom });
+      if ((espacesCtx?.length || 0) > LIM.espaces) detectedTruncations.push({ label: "Espaces & CapacitÃ©s", actuel: espacesCtx.length, limite: LIM.espaces });
+      if ((tonCtx?.length || 0) > LIM.ton) detectedTruncations.push({ label: "RÃ¨gles & Ton", actuel: tonCtx.length, limite: LIM.ton });
+      if ((customCtx?.length || 0) > LIM.custom) detectedTruncations.push({ label: "Contexte personnalisÃ©", actuel: customCtx.length, limite: LIM.custom });
       Object.values(linksFetched).forEach((l: any) => {
         const sumLen = (l?.summary || "").length;
         if (sumLen > LIM.link) {
-          const existing = detectedTruncations.find(t => t.label === "Liens web analysés");
-          if (!existing) detectedTruncations.push({ label: "Liens web analysés", actuel: sumLen, limite: LIM.link });
+          const existing = detectedTruncations.find(t => t.label === "Liens web analysÃ©s");
+          if (!existing) detectedTruncations.push({ label: "Liens web analysÃ©s", actuel: sumLen, limite: LIM.link });
           else if (sumLen > existing.actuel) { existing.actuel = sumLen; }
         }
       });
 
-      // ── Construire le planning temps réel (balisé XML) ─────────────────────
+      // ââ Construire le planning temps rÃ©el (balisÃ© XML) âââââââââââââââââââââ
       const planningCtx = `\n\n<planning_temps_reel>\n` + (
         resas.length > 0
           ? resas.map(r => {
@@ -2734,14 +2735,14 @@ export default function App() {
               const statut = statuts.find(s => s.id === (r.statut || "nouveau"))?.label || r.statut;
               return `  <reservation espace="${espace}" date="${r.dateDebut || "?"}" horaires="${r.heureDebut || "?"}-${r.heureFin || "?"}" personnes="${r.nombrePersonnes || "?"}" statut="${statut}">${r.nom || ""}${r.entreprise ? " ("+r.entreprise+")" : ""}${r.typeEvenement ? " - "+r.typeEvenement : ""}</reservation>`;
             }).join("\n")
-          : "  <vide>Aucune réservation enregistrée.</vide>"
+          : "  <vide>Aucune rÃ©servation enregistrÃ©e.</vide>"
       ) + `\n</planning_temps_reel>`;
 
-      // ── Liens web (résumés) ───────────────────────────────────────────────
+      // ââ Liens web (rÃ©sumÃ©s) âââââââââââââââââââââââââââââââââââââââââââââââ
       const linkCtx = Object.values(linksFetched).filter(Boolean)
         .map((l: any) => (l.summary || "").slice(0, LIM.link)).join("\n\n");
 
-      // ── Historique : on récupère TOUS les mails liés (reçus + envoyés) ────
+      // ââ Historique : on rÃ©cupÃ¨re TOUS les mails liÃ©s (reÃ§us + envoyÃ©s) ââââ
       // CRITIQUE : on cherche aussi via extracted.email (vrai client) en plus de fromEmail
       const cachedExtracted = repliesCache[sel.id]?.extracted || extracted;
       const vraiEmailClient = (cachedExtracted?.email || sel.fromEmail || "").toLowerCase();
@@ -2774,7 +2775,7 @@ export default function App() {
               || srcExtractedEmail === vraiEmailClient;
         })
         .map(([, sr]: [string, any]) => ({
-          from: nomEtab || "Établissement",
+          from: nomEtab || "Ãtablissement",
           fromEmail: emailEtab || "",
           date: sr.date,
           subject: sr.subject,
@@ -2787,7 +2788,7 @@ export default function App() {
       const historiqueMails = [...mailsRecusDuClient, ...mailsEnvoyesAuClient]
         .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
-      // ── System prompt avec sources balisées XML ────────────────────────────
+      // ââ System prompt avec sources balisÃ©es XML ââââââââââââââââââââââââââââ
       const sources = [
         menusCtx ? `  <menus>\n${menusCtx.slice(0, LIM.menus)}\n  </menus>` : "",
         conditionsCtx ? `  <conditions>\n${conditionsCtx.slice(0, LIM.conditions)}\n  </conditions>` : "",
@@ -2798,32 +2799,32 @@ export default function App() {
       ].filter(Boolean).join("\n\n");
       const sourcesBlock = sources ? `\n\n<sources_archange>\n${sources}\n</sources_archange>` : "";
 
-      // ── v2 : règles commerciales activées conditionnellement selon le mail ─
+      // ââ v2 : rÃ¨gles commerciales activÃ©es conditionnellement selon le mail â
       const reglesComActivees = activerReglesSelonContexte({
         extraction: cachedExtracted,
         regles: reglesCommerciales,
         espacesDyn,
       });
-      // Déterminer le profil client pour le ton
+      // DÃ©terminer le profil client pour le ton
       const profilDetecte = (() => {
         const entr = String(cachedExtracted?.entreprise || "").trim();
         const nom = String(cachedExtracted?.nom || "").trim();
         if (!entr || /mr|mme|m\.|mlle|madame|monsieur/i.test(nom)) return "particuliers";
-        if (/mairie|ministère|université|ambassade|préfecture/i.test(entr)) return "institutionnels";
+        if (/mairie|ministÃ¨re|universitÃ©|ambassade|prÃ©fecture/i.test(entr)) return "institutionnels";
         if (/agence|event|incentive|communication|marketing/i.test(entr)) return "agences";
         return "entreprises";
       })();
       const tonBlock = buildTonStyleBlock(tonStyle, profilDetecte);
-      // ── v2 : détection cas particulier (VIP / partenaires) ─────────────────
+      // ââ v2 : dÃ©tection cas particulier (VIP / partenaires) âââââââââââââââââ
       const casParticulierActif = matchCasParticulier({
         email: sel,
         extraction: cachedExtracted,
         liste: casParticuliers,
       });
-      const casParticulierBlock = casParticulierActif ? `\n\n<cas_particulier_actif nom="${casParticulierActif.nom}">\n  <contexte>${casParticulierActif.contexte || ""}</contexte>\n  <regles_specifiques>${casParticulierActif.regles || ""}</regles_specifiques>\n  ⚠️ Ce client est identifié comme cas particulier — respecte ses règles spécifiques.\n</cas_particulier_actif>` : "";
+      const casParticulierBlock = casParticulierActif ? `\n\n<cas_particulier_actif nom="${casParticulierActif.nom}">\n  <contexte>${casParticulierActif.contexte || ""}</contexte>\n  <regles_specifiques>${casParticulierActif.regles || ""}</regles_specifiques>\n  â ï¸ Ce client est identifiÃ© comme cas particulier â respecte ses rÃ¨gles spÃ©cifiques.\n</cas_particulier_actif>` : "";
 
-      // ── v2 : règles absolues injectées EN FIN DE PROMPT (récence bias) ─────
-      const reglesAbsoluesBlock = (reglesAbsolues || "").trim() ? `\n\n⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚠️ RÈGLES ABSOLUES — JAMAIS TRANSGRESSABLES\n⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${reglesAbsolues.trim()}\n\n⚠️ Ces règles priment sur toute autre instruction. Vérifie une dernière fois ta réponse avant de la produire.` : "";
+      // ââ v2 : rÃ¨gles absolues injectÃ©es EN FIN DE PROMPT (rÃ©cence bias) âââââ
+      const reglesAbsoluesBlock = (reglesAbsolues || "").trim() ? `\n\nâ ï¸ââââââââââââââââââââââââââââââ\nâ ï¸ RÃGLES ABSOLUES â JAMAIS TRANSGRESSABLES\nâ ï¸ââââââââââââââââââââââââââââââ\n\n${reglesAbsolues.trim()}\n\nâ ï¸ Ces rÃ¨gles priment sur toute autre instruction. VÃ©rifie une derniÃ¨re fois ta rÃ©ponse avant de la produire.` : "";
 
       const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, telEtab, espacesDyn})
         + sourcesBlock
@@ -2833,16 +2834,16 @@ export default function App() {
         + planningCtx
         + reglesAbsoluesBlock;
 
-      // ── Signature à utiliser dans la réponse ───────────────────────────────
+      // ââ Signature Ã  utiliser dans la rÃ©ponse âââââââââââââââââââââââââââââââ
       const signature = [
         "Cordialement,",
-        `L'équipe ${nomEtab || "l'établissement"}`,
+        `L'Ã©quipe ${nomEtab || "l'Ã©tablissement"}`,
         adresseEtab,
         emailEtab,
         telEtab,
       ].filter(Boolean).join("\n");
 
-      // ── Construire le message utilisateur (briefing + email + instructions)
+      // ââ Construire le message utilisateur (briefing + email + instructions)
       const userMsg = buildResponseMessage({
         email: sel,
         extracted: cachedExtracted,
@@ -2850,7 +2851,7 @@ export default function App() {
         signature,
       });
 
-      // ── Court-circuit cache : ne refaire l'extraction que si elle MANQUE ──
+      // ââ Court-circuit cache : ne refaire l'extraction que si elle MANQUE ââ
       const extractionExisteDeja = !!cachedExtracted;
       const callsToMake: Promise<string>[] = [
         callClaude(userMsg, sys, null, "generation_reponse"),
@@ -2874,8 +2875,8 @@ export default function App() {
         newReply = reponse.value;
         setReply(newReply); setEditReply(newReply);
       } else {
-        const msg = reponse.status === "rejected" ? (reponse.reason?.message || "Erreur ARCHANGE") : "Réponse vide";
-        toast("ARCHANGE n'a pas pu rédiger la réponse. " + humanError({message: msg}), "err");
+        const msg = reponse.status === "rejected" ? (reponse.reason?.message || "Erreur ARCHANGE") : "RÃ©ponse vide";
+        toast("ARCHANGE n'a pas pu rÃ©diger la rÃ©ponse. " + humanError({message: msg}), "err");
       }
 
       if (infoRaw && infoRaw.status === "fulfilled") {
@@ -2887,7 +2888,7 @@ export default function App() {
         setExtracted(cachedExtracted);
       }
 
-      // Mettre en cache la réponse pour cet email + persister en Supabase
+      // Mettre en cache la rÃ©ponse pour cet email + persister en Supabase
       if (newReply) {
         setRepliesCache(prev => {
           const dateGen = new Date().toLocaleDateString("fr-FR");
@@ -2902,39 +2903,39 @@ export default function App() {
           saveToSupabase({ replies_cache: JSON.stringify(repliesToSave) });
           return updated;
         });
-        // Enregistrer les troncatures détectées (vide = pas de notification affichée)
+        // Enregistrer les troncatures dÃ©tectÃ©es (vide = pas de notification affichÃ©e)
         setTruncations(prev => ({ ...prev, [sel.id]: detectedTruncations }));
       }
 
-      // ── Association IA email ↔ événement ────────────────────────────────────
-      // Si des événements existent et que le lien n'est pas déjà établi
+      // ââ Association IA email â Ã©vÃ©nement ââââââââââââââââââââââââââââââââââââ
+      // Si des Ã©vÃ©nements existent et que le lien n'est pas dÃ©jÃ  Ã©tabli
       if (resas.length > 0 && !emailResaLinks[sel.id]) {
         try {
           const resaList = resas.map(r =>
             `- ID:${r.id} | Nom:${r.nom || "?"} | Entreprise:${r.entreprise || "?"} | Email:${r.email || "?"} | Type:${r.typeEvenement || "?"} | Date:${r.dateDebut || "?"} | Personnes:${r.nombrePersonnes || "?"}`
           ).join("\n");
 
-          const matchPrompt = `Analyse cet email et détermine à quel événement il correspond parmi la liste ci-dessous.
+          const matchPrompt = `Analyse cet email et dÃ©termine Ã  quel Ã©vÃ©nement il correspond parmi la liste ci-dessous.
 
-EMAIL REÇU :
+EMAIL REÃU :
 De: ${sel.from} <${sel.fromEmail}>
 Objet: ${sel.subject}
 Corps: ${(sel.body || sel.snippet || "").substring(0, 800)}
 
-ÉVÉNEMENTS EN COURS :
+ÃVÃNEMENTS EN COURS :
 ${resaList}
 
-Réponds UNIQUEMENT avec un JSON valide et rien d'autre :
+RÃ©ponds UNIQUEMENT avec un JSON valide et rien d'autre :
 {"resaId": "ID_DE_L_EVENEMENT_ou_null", "confiance": "haute|moyenne|faible", "raison": "explication courte"}
 
-Critères de matching (par ordre de priorité) :
-1. Email de l'expéditeur correspond à l'email de l'événement
-2. Nom de l'expéditeur correspond au nom du contact de l'événement
-3. Entreprise mentionnée dans le mail correspond à l'entreprise de l'événement
-4. Date ou type d'événement mentionné correspond
-5. Si aucune correspondance évidente → resaId: null`;
+CritÃ¨res de matching (par ordre de prioritÃ©) :
+1. Email de l'expÃ©diteur correspond Ã  l'email de l'Ã©vÃ©nement
+2. Nom de l'expÃ©diteur correspond au nom du contact de l'Ã©vÃ©nement
+3. Entreprise mentionnÃ©e dans le mail correspond Ã  l'entreprise de l'Ã©vÃ©nement
+4. Date ou type d'Ã©vÃ©nement mentionnÃ© correspond
+5. Si aucune correspondance Ã©vidente â resaId: null`;
 
-          const matchResult = await callClaude(matchPrompt, "Tu es un assistant qui analyse des emails pour les associer aux bons événements. Réponds uniquement en JSON valide.", null, "match_email_resa");
+          const matchResult = await callClaude(matchPrompt, "Tu es un assistant qui analyse des emails pour les associer aux bons Ã©vÃ©nements. RÃ©ponds uniquement en JSON valide.", null, "match_email_resa");
           const match = JSON.parse(matchResult.replace(/```json|```/g, "").trim());
 
           if (match.resaId && match.confiance !== "faible") {
@@ -2943,42 +2944,42 @@ Critères de matching (par ordre de priorité) :
               const newLinks = { ...emailResaLinks, [sel.id]: match.resaId };
               saveEmailResaLinks(newLinks);
 
-              // ── Détecter les modifications sur la fiche événement ──────────
+              // ââ DÃ©tecter les modifications sur la fiche Ã©vÃ©nement ââââââââââ
               try {
                 const ficheActuelle = { ...resaExists };
                 delete ficheActuelle.id; // on ne modifie pas l'id
 
                 // Labels lisibles pour chaque champ (extensible automatiquement)
                 const LABELS_CHAMPS: Record<string,string> = {
-                  nom: "Nom du contact", email: "Email", telephone: "Téléphone",
-                  entreprise: "Entreprise", typeEvenement: "Type d'événement",
+                  nom: "Nom du contact", email: "Email", telephone: "TÃ©lÃ©phone",
+                  entreprise: "Entreprise", typeEvenement: "Type d'Ã©vÃ©nement",
                   nombrePersonnes: "Nombre de personnes", espaceId: "Espace",
-                  dateDebut: "Date", heureDebut: "Heure de début", heureFin: "Heure de fin",
+                  dateDebut: "Date", heureDebut: "Heure de dÃ©but", heureFin: "Heure de fin",
                   statut: "Statut", notes: "Notes", budget: "Budget",
                   noteDirecteur: "Note directeur",
                 };
 
-                const modifPrompt = `Tu es un assistant qui analyse un email pour détecter si le client communique des informations modifiant sa réservation.
+                const modifPrompt = `Tu es un assistant qui analyse un email pour dÃ©tecter si le client communique des informations modifiant sa rÃ©servation.
 
-FICHE ÉVÉNEMENT ACTUELLE :
+FICHE ÃVÃNEMENT ACTUELLE :
 ${JSON.stringify(ficheActuelle, null, 2)}
 
-EMAIL REÇU :
+EMAIL REÃU :
 De: ${sel.from} <${sel.fromEmail}>
 Objet: ${sel.subject}
 ${sel.body || sel.snippet || ""}
 
 INSTRUCTIONS :
-- Analyse uniquement les informations EXPLICITEMENT mentionnées dans l'email
-- Ne propose une modification que si l'email contient clairement une nouvelle valeur différente de l'actuelle
+- Analyse uniquement les informations EXPLICITEMENT mentionnÃ©es dans l'email
+- Ne propose une modification que si l'email contient clairement une nouvelle valeur diffÃ©rente de l'actuelle
 - Pour le statut, utilise uniquement ces valeurs : nouveau, en_cours, en_attente, confirme, annule
-- Si aucune modification n'est détectée, retourne {"modifications": []}
-- Pour les champs absents de la fiche actuelle mais mentionnés dans l'email, inclus-les quand même
+- Si aucune modification n'est dÃ©tectÃ©e, retourne {"modifications": []}
+- Pour les champs absents de la fiche actuelle mais mentionnÃ©s dans l'email, inclus-les quand mÃªme
 
 Retourne UNIQUEMENT ce JSON valide :
-{"modifications": [{"champ": "nomDuChamp", "ancienne": "valeurActuelle", "nouvelle": "nouvelleValeur", "raison": "explication courte en français"}]}`;
+{"modifications": [{"champ": "nomDuChamp", "ancienne": "valeurActuelle", "nouvelle": "nouvelleValeur", "raison": "explication courte en franÃ§ais"}]}`;
 
-                const modifResult = await callClaude(modifPrompt, "Tu analyses des emails pour détecter des modifications de réservation. Réponds uniquement en JSON valide.", null, "detection_modif_resa");
+                const modifResult = await callClaude(modifPrompt, "Tu analyses des emails pour dÃ©tecter des modifications de rÃ©servation. RÃ©ponds uniquement en JSON valide.", null, "detection_modif_resa");
                 const modifData = JSON.parse(modifResult.replace(/```json|```/g, "").trim());
 
                 if (modifData.modifications && modifData.modifications.length > 0) {
@@ -2988,14 +2989,14 @@ Retourne UNIQUEMENT ce JSON valide :
                     ancienne: m.ancienne,
                     nouvelle: m.nouvelle,
                     raison: m.raison,
-                    selectionnee: true, // cochée par défaut
+                    selectionnee: true, // cochÃ©e par dÃ©faut
                   }));
                   setPendingSuggestions({ resaId: resaExists.id, emailId: sel.id, suggestions });
                 }
-              } catch { /* détection silencieuse */ }
+              } catch { /* dÃ©tection silencieuse */ }
             }
           }
-        } catch { /* matching silencieux — ne bloque pas la génération */ }
+        } catch { /* matching silencieux â ne bloque pas la gÃ©nÃ©ration */ }
       }
     } catch (e: any) {
       toast(humanError(e), "err");
@@ -3003,7 +3004,7 @@ Retourne UNIQUEMENT ce JSON valide :
     setGenReply(false);
   };
 
-  // P7 — Autosave du formulaire de réservation en cours
+  // P7 â Autosave du formulaire de rÃ©servation en cours
   const updatePlanForm = (updates: any) => {
     const next = { ...planForm, ...updates };
     setPlanForm(next);
@@ -3012,7 +3013,7 @@ Retourne UNIQUEMENT ce JSON valide :
 
   const openPlanForm = () => {
     const pers = parseInt(String(extracted?.nombrePersonnes || "0"), 10);
-    // Split "Prénom Nom" depuis ce que l'IA ou le From a extrait
+    // Split "PrÃ©nom Nom" depuis ce que l'IA ou le From a extrait
     const splitNom = (full: string) => {
       const parts = (full || "").trim().split(/\s+/).filter(Boolean);
       if (parts.length === 0) return { prenom: "", nom: "" };
@@ -3021,12 +3022,12 @@ Retourne UNIQUEMENT ce JSON valide :
     };
     const rawFull = extracted?.nom || sel?.from || "";
     const { prenom, nom } = splitNom(rawFull);
-    // Attribution dynamique selon type d'événement (assis vs debout) et nombre de personnes
+    // Attribution dynamique selon type d'Ã©vÃ©nement (assis vs debout) et nombre de personnes
     const getEspaceAuto = () => {
       if (extracted?.espaceDetecte) return extracted.espaceDetecte;
       if (espacesDyn.length === 0) return "";
       if (pers === 0) return espacesDyn[0].id;
-      // Détecter si l'événement est debout (cocktail, afterwork, standing…)
+      // DÃ©tecter si l'Ã©vÃ©nement est debout (cocktail, afterwork, standingâ¦)
       const typeEvt = (extracted?.typeEvenement || "").toLowerCase();
       const isDebout = typeEvt.includes("cocktail") || typeEvt.includes("afterwork") || typeEvt.includes("standing") || typeEvt.includes("reception");
       const withCap = espacesDyn.map(e => {
@@ -3045,7 +3046,7 @@ Retourne UNIQUEMENT ce JSON valide :
     const espaceAuto = getEspaceAuto();
     const min = extracted?.nombrePersonnesMin;
     const max = extracted?.nombrePersonnes;
-    const fourchette = (min && max && min !== max) ? `Fourchette : ${min}–${max} personnes. ` : "";
+    const fourchette = (min && max && min !== max) ? `Fourchette : ${min}â${max} personnes. ` : "";
     const f = {
       prenom:         prenom,
       nom:            nom,
@@ -3064,7 +3065,7 @@ Retourne UNIQUEMENT ce JSON valide :
       noteDirecteur:  "",
       _emailId:       sel?.id,
     };
-    // Marquer les champs pré-remplis par l'IA (pour afficher le badge ✦ IA)
+    // Marquer les champs prÃ©-remplis par l'IA (pour afficher le badge â¦ IA)
     const aiFields = {
       prenom:         Boolean(extracted?.nom),
       nom:            Boolean(extracted?.nom),
@@ -3078,7 +3079,7 @@ Retourne UNIQUEMENT ce JSON valide :
       budget:         Boolean(extracted?.budget),
       notes:          Boolean(extracted?.notes) || Boolean(fourchette),
     };
-    // P7 — Proposer de restaurer un brouillon si disponible pour ce même email
+    // P7 â Proposer de restaurer un brouillon si disponible pour ce mÃªme email
     try {
       const draft = JSON.parse(localStorage.getItem("arc_draft_planform") || "null");
       if (draft && draft._emailId === sel?.id && draft.nom && window.confirm(`Un brouillon existe pour "${draft.nom}". Restaurer ?`)) {
@@ -3091,24 +3092,24 @@ Retourne UNIQUEMENT ce JSON valide :
 
   const submitPlanForm = () => {
     const errs: Record<string, string> = {};
-    if (!planForm.prenom?.trim())         errs.prenom         = "Prénom obligatoire";
+    if (!planForm.prenom?.trim())         errs.prenom         = "PrÃ©nom obligatoire";
     if (!planForm.nom?.trim())            errs.nom            = "Nom obligatoire";
     if (!planForm.dateDebut)              errs.dateDebut      = "Date obligatoire";
     if (!planForm.nombrePersonnes)        errs.nombrePersonnes= "Nombre de personnes obligatoire";
-    if (!planForm.heureDebut)             errs.heureDebut     = "Heure de début obligatoire";
+    if (!planForm.heureDebut)             errs.heureDebut     = "Heure de dÃ©but obligatoire";
     if (!planForm.heureFin)               errs.heureFin       = "Heure de fin obligatoire";
     if (Object.keys(errs).length > 0)    { setPlanErrors(errs); return; }
     const pers = parseInt(String(planForm.nombrePersonnes), 10);
     const r = { ...planForm, id: "r" + Date.now(), nombrePersonnes: isNaN(pers) ? planForm.nombrePersonnes : pers };
     saveResas([...resas, r]);
-    try { localStorage.removeItem("arc_draft_planform"); } catch {} // P7 — effacer le draft
-    // Lier l'email source à la réservation créée et persister en Supabase
+    try { localStorage.removeItem("arc_draft_planform"); } catch {} // P7 â effacer le draft
+    // Lier l'email source Ã  la rÃ©servation crÃ©Ã©e et persister en Supabase
     if (sel?.id) saveEmailResaLinks({ ...emailResaLinks, [sel.id]: r.id });
-    toast("Réservation ajoutée au planning !");
+    toast("RÃ©servation ajoutÃ©e au planning !");
     setShowPlanForm(false); setExtracted(null);
-    // 2D — Proposer de voir la fiche événement créée (setTimeout pour laisser resas se mettre à jour)
+    // 2D â Proposer de voir la fiche Ã©vÃ©nement crÃ©Ã©e (setTimeout pour laisser resas se mettre Ã  jour)
     setTimeout(() => {
-      if (window.confirm(`Événement créé pour ${r.nom}. Ouvrir la fiche ?`)) {
+      if (window.confirm(`ÃvÃ©nement crÃ©Ã© pour ${r.nom}. Ouvrir la fiche ?`)) {
         setSelResaGeneral(r);
         setView("general");
       }
@@ -3119,13 +3120,13 @@ Retourne UNIQUEMENT ce JSON valide :
     if (!url?.trim()) return;
     setFetchingLink(key);
     try {
-      const prompt = `Recherche et analyse ce site web pour ${nomEtab} : ${url}\nRésume en 200 mots max : ce que fait ce site, ses services, son ambiance, pour aider à répondre à des emails professionnels.`;
-      const sys = "Tu es un assistant qui analyse des sites web pour une brasserie parisienne. Réponds en français, de façon concise et utile.";
+      const prompt = `Recherche et analyse ce site web pour ${nomEtab} : ${url}\nRÃ©sume en 200 mots max : ce que fait ce site, ses services, son ambiance, pour aider Ã  rÃ©pondre Ã  des emails professionnels.`;
+      const sys = "Tu es un assistant qui analyse des sites web pour une brasserie parisienne. RÃ©ponds en franÃ§ais, de faÃ§on concise et utile.";
       const txt = await callClaude(prompt, sys, null, "analyse_lien_web");
-      const upd = { ...linksFetched, [key]: { url, summary: txt || "Analyse effectuée.", fetchedAt: new Date().toLocaleDateString("fr-FR") } };
+      const upd = { ...linksFetched, [key]: { url, summary: txt || "Analyse effectuÃ©e.", fetchedAt: new Date().toLocaleDateString("fr-FR") } };
       setLinksFetched(upd);
       saveToSupabase({ links_fetched: JSON.stringify(upd) });
-      toast("Analysé !");
+      toast("AnalysÃ© !");
     } catch (e: any) {
       toast(humanError(e), "err");
     }
@@ -3136,77 +3137,77 @@ Retourne UNIQUEMENT ce JSON valide :
     setRelanceIAText(""); setGenRelanceIA(true);
     try {
       const linkedMails = getLinkedEmails(resa);
-      // Garder les 3 emails les plus récents, corps tronqué à 800 chars chacun
+      // Garder les 3 emails les plus rÃ©cents, corps tronquÃ© Ã  800 chars chacun
       const mailsRecents = linkedMails.slice(0, 3);
       const hist = mailsRecents.length > 0
         ? mailsRecents.map(m => {
             const corps = (m.body || m.snippet || "").slice(0, 800);
-            return `---\nDe: ${m.from}\nDate: ${m.date}\nObjet: ${m.subject}\n${corps}${(m.body||"").length > 800 ? "\n[…tronqué]" : ""}`;
+            return `---\nDe: ${m.from}\nDate: ${m.date}\nObjet: ${m.subject}\n${corps}${(m.body||"").length > 800 ? "\n[â¦tronquÃ©]" : ""}`;
           }).join("\n\n")
-        : "Aucun échange précédent.";
+        : "Aucun Ã©change prÃ©cÃ©dent.";
 
       // Calculer le dernier contact
       const dernierMail = linkedMails.length > 0 ? linkedMails[0] : null;
       const dernierContact = dernierMail
-        ? `${dernierMail.date} — "${dernierMail.subject}"`
-        : "Aucun échange précédent";
+        ? `${dernierMail.date} â "${dernierMail.subject}"`
+        : "Aucun Ã©change prÃ©cÃ©dent";
 
-      // Date du jour et délai avant événement
+      // Date du jour et dÃ©lai avant Ã©vÃ©nement
       const today = new Date().toLocaleDateString("fr-FR", {day:"2-digit", month:"2-digit", year:"numeric"});
       const statutLabel = statuts.find(s => s.id === (resa.statut || "nouveau"))?.label || resa.statut || "Nouveau";
-      const espaceName = ESPACES.find(e => e.id === resa.espaceId)?.nom || "—";
+      const espaceName = ESPACES.find(e => e.id === resa.espaceId)?.nom || "â";
 
-      // Motif final — personnalisé ou sélectionné
+      // Motif final â personnalisÃ© ou sÃ©lectionnÃ©
       const motifFinal = motifSelectionne === "Autre"
-        ? (motifPersonnalise || "Relance générale")
-        : (motifSelectionne || "Relance sans motif spécifique");
+        ? (motifPersonnalise || "Relance gÃ©nÃ©rale")
+        : (motifSelectionne || "Relance sans motif spÃ©cifique");
 
       const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, telEtab, espacesDyn});
 
-      const prompt = `Tu dois rédiger un email de relance pour ${nomEtab}.
+      const prompt = `Tu dois rÃ©diger un email de relance pour ${nomEtab}.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DOSSIER ÉVÉNEMENT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Client : ${resa.nom || "—"}${resa.entreprise ? " (" + resa.entreprise + ")" : ""}
-Email : ${resa.email || "—"}
-Type : ${resa.typeEvenement || "—"} | Espace : ${espaceName}
-Date événement : ${resa.dateDebut || "non définie"} | Horaires : ${resa.heureDebut || "—"} → ${resa.heureFin || "—"}
-Personnes : ${resa.nombrePersonnes || "—"} | Budget : ${resa.budget || "non mentionné"}
+ââââââââââââââââââââââââââââââ
+DOSSIER ÃVÃNEMENT
+ââââââââââââââââââââââââââââââ
+Client : ${resa.nom || "â"}${resa.entreprise ? " (" + resa.entreprise + ")" : ""}
+Email : ${resa.email || "â"}
+Type : ${resa.typeEvenement || "â"} | Espace : ${espaceName}
+Date Ã©vÃ©nement : ${resa.dateDebut || "non dÃ©finie"} | Horaires : ${resa.heureDebut || "â"} â ${resa.heureFin || "â"}
+Personnes : ${resa.nombrePersonnes || "â"} | Budget : ${resa.budget || "non mentionnÃ©"}
 Statut actuel : ${statutLabel}
-Notes internes : ${resa.notes || "—"}
+Notes internes : ${resa.notes || "â"}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MISSION PRÉALABLE — ANALYSE DU DOSSIER (silencieuse)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Avant de rédiger, analyse silencieusement :
+ââââââââââââââââââââââââââââââ
+MISSION PRÃALABLE â ANALYSE DU DOSSIER (silencieuse)
+ââââââââââââââââââââââââââââââ
+Avant de rÃ©diger, analyse silencieusement :
 1. Le statut actuel du dossier : ${statutLabel}
-2. Le dernier échange : ${dernierContact}
-3. Ce qui est en suspens dans les échanges (réponse non reçue, validation attendue, acompte non confirmé, détail non résolu)
-4. Le délai restant avant l'événement (${resa.dateDebut || "date inconnue"} vs date du jour ${today})
+2. Le dernier Ã©change : ${dernierContact}
+3. Ce qui est en suspens dans les Ã©changes (rÃ©ponse non reÃ§ue, validation attendue, acompte non confirmÃ©, dÃ©tail non rÃ©solu)
+4. Le dÃ©lai restant avant l'Ã©vÃ©nement (${resa.dateDebut || "date inconnue"} vs date du jour ${today})
 
-Le directeur a identifié le motif suivant : ${motifFinal}
+Le directeur a identifiÃ© le motif suivant : ${motifFinal}
 Base ta relance principalement sur ce motif.
 
-En complément, si ton analyse révèle d'autres points en suspens importants non couverts par ce motif, mentionne-les subtilement dans l'email sans les imposer. Cela sert de double vérification bienveillante.
+En complÃ©ment, si ton analyse rÃ©vÃ¨le d'autres points en suspens importants non couverts par ce motif, mentionne-les subtilement dans l'email sans les imposer. Cela sert de double vÃ©rification bienveillante.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-HISTORIQUE DES ÉCHANGES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ââââââââââââââââââââââââââââââ
+HISTORIQUE DES ÃCHANGES
+ââââââââââââââââââââââââââââââ
 ${hist}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-INSTRUCTIONS DE RÉDACTION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Rédige un email de relance complet
-- Première ligne obligatoirement : Objet: [objet du mail]
+ââââââââââââââââââââââââââââââ
+INSTRUCTIONS DE RÃDACTION
+ââââââââââââââââââââââââââââââ
+- RÃ©dige un email de relance complet
+- PremiÃ¨re ligne obligatoirement : Objet: [objet du mail]
 - Puis le corps du mail
 - Ton chaleureux, professionnel, jamais insistant
 - Personnalise selon le profil et l'historique du client
-- Appel à l'action clair en fin de mail
-- Signature : L'équipe ${nomEtab}${adresseEtab ? "\n" + adresseEtab : ""}${emailEtab ? "\n" + emailEtab : ""}${telEtab ? "\n" + telEtab : ""}`;
+- Appel Ã  l'action clair en fin de mail
+- Signature : L'Ã©quipe ${nomEtab}${adresseEtab ? "\n" + adresseEtab : ""}${emailEtab ? "\n" + emailEtab : ""}${telEtab ? "\n" + telEtab : ""}`;
 
-      // Docs exclus volontairement — non nécessaires pour une relance et trop lourds (PDFs base64)
+      // Docs exclus volontairement â non nÃ©cessaires pour une relance et trop lourds (PDFs base64)
       const txt = await callClaude(prompt, sys, null, "generation_relance");
       setRelanceIAText(txt);
     } catch (e: any) {
@@ -3222,75 +3223,75 @@ INSTRUCTIONS DE RÉDACTION
       const linkedMails = getLinkedEmails(resa);
       const hist = linkedMails.length > 0
         ? linkedMails.map(m => `---\nDe: ${m.from} <${m.fromEmail}>\nObjet: ${m.subject}\n${m.body || m.snippet || ""}`).join("\n\n")
-        : "Aucun échange email trouvé pour cet événement.";
-      const espaceName = ESPACES.find(e => e.id === resa.espaceId)?.nom || "—";
-      const statutLabel = statuts.find(s => s.id === (resa.statut || "nouveau"))?.label || resa.statut || "—";
-      const prompt = `DOSSIER ÉVÉNEMENT :
-Nom : ${resa.nom || "—"}${resa.entreprise ? " (" + resa.entreprise + ")" : ""}
-Email : ${resa.email || "—"} | Tél : ${resa.telephone || "—"}
-Type : ${resa.typeEvenement || "—"} | Date : ${resa.dateDebut || "—"} | Horaires : ${resa.heureDebut || "—"} → ${resa.heureFin || "—"}
-Espace : ${espaceName} | Personnes : ${resa.nombrePersonnes || "—"} | Budget : ${resa.budget || "—"}
+        : "Aucun Ã©change email trouvÃ© pour cet Ã©vÃ©nement.";
+      const espaceName = ESPACES.find(e => e.id === resa.espaceId)?.nom || "â";
+      const statutLabel = statuts.find(s => s.id === (resa.statut || "nouveau"))?.label || resa.statut || "â";
+      const prompt = `DOSSIER ÃVÃNEMENT :
+Nom : ${resa.nom || "â"}${resa.entreprise ? " (" + resa.entreprise + ")" : ""}
+Email : ${resa.email || "â"} | TÃ©l : ${resa.telephone || "â"}
+Type : ${resa.typeEvenement || "â"} | Date : ${resa.dateDebut || "â"} | Horaires : ${resa.heureDebut || "â"} â ${resa.heureFin || "â"}
+Espace : ${espaceName} | Personnes : ${resa.nombrePersonnes || "â"} | Budget : ${resa.budget || "â"}
 Statut : ${statutLabel}
-Notes internes : ${resa.notes || "—"}
+Notes internes : ${resa.notes || "â"}
 
-ÉCHANGES EMAILS :
+ÃCHANGES EMAILS :
 ${hist}`;
 
-      const sys = `Tu es un coordinateur événementiel senior chez ${nomEtab}, expert dans la lecture et l'analyse d'échanges clients. Tu as lu l'intégralité des emails de ce dossier.
+      const sys = `Tu es un coordinateur Ã©vÃ©nementiel senior chez ${nomEtab}, expert dans la lecture et l'analyse d'Ã©changes clients. Tu as lu l'intÃ©gralitÃ© des emails de ce dossier.
 
-Rédige une note de briefing destinée au directeur de ${nomEtab}. Cette note a deux niveaux de lecture distincts.
+RÃ©dige une note de briefing destinÃ©e au directeur de ${nomEtab}. Cette note a deux niveaux de lecture distincts.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NIVEAU 1 — FICHE ÉVÉNEMENT (faits bruts)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ââââââââââââââââââââââââââââââ
+NIVEAU 1 â FICHE ÃVÃNEMENT (faits bruts)
+ââââââââââââââââââââââââââââââ
 
-Synthétise les informations factuelles confirmées :
-- Interlocuteur : nom, email, téléphone, entreprise si applicable
-- Type d'événement
-- Date et horaires (arrivée / fin)
-- Espace réservé
+SynthÃ©tise les informations factuelles confirmÃ©es :
+- Interlocuteur : nom, email, tÃ©lÃ©phone, entreprise si applicable
+- Type d'Ã©vÃ©nement
+- Date et horaires (arrivÃ©e / fin)
+- Espace rÃ©servÃ©
 - Nombre de personnes (min / max si fourchette)
-- Prestations demandées (restauration, sono, décoration, etc.)
-- Budget mentionné ou budget indicatif
+- Prestations demandÃ©es (restauration, sono, dÃ©coration, etc.)
+- Budget mentionnÃ© ou budget indicatif
 - Statut actuel du dossier
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NIVEAU 2 — ANALYSE PERSONNALISÉE ⚠️ PRIORITÉ HAUTE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ââââââââââââââââââââââââââââââ
+NIVEAU 2 â ANALYSE PERSONNALISÃE â ï¸ PRIORITÃ HAUTE
+ââââââââââââââââââââââââââââââ
 
-C'est la partie la plus importante de cette note. Elle ne se substitue pas aux faits — elle les dépasse.
+C'est la partie la plus importante de cette note. Elle ne se substitue pas aux faits â elle les dÃ©passe.
 
-Analyse les échanges en profondeur et réponds à ces questions :
+Analyse les Ã©changes en profondeur et rÃ©ponds Ã  ces questions :
 
 PROFIL CLIENT
-→ Quel type de client est-ce ? (professionnel aguerri, particulier stressé, client exigeant, organisateur expérimenté, premier événement, etc.)
-→ Quel est son niveau d'implication et d'exigence perçu dans les échanges ?
-→ Y a-t-il des signaux d'inquiétude, d'hésitation ou au contraire de grande confiance ?
+â Quel type de client est-ce ? (professionnel aguerri, particulier stressÃ©, client exigeant, organisateur expÃ©rimentÃ©, premier Ã©vÃ©nement, etc.)
+â Quel est son niveau d'implication et d'exigence perÃ§u dans les Ã©changes ?
+â Y a-t-il des signaux d'inquiÃ©tude, d'hÃ©sitation ou au contraire de grande confiance ?
 
-DEMANDES PARTICULIÈRES & HORS CADRE
-→ Quelles sont les demandes qui sortent du cadre standard de ${nomEtab} ? (décoration, contraintes alimentaires, exigences techniques, flexibilité horaires, etc.)
-→ Y a-t-il des points non résolus ou en attente de confirmation dans les échanges ?
-→ Des promesses ou engagements ont-ils été pris dans les emails ? Lesquels exactement ?
+DEMANDES PARTICULIÃRES & HORS CADRE
+â Quelles sont les demandes qui sortent du cadre standard de ${nomEtab} ? (dÃ©coration, contraintes alimentaires, exigences techniques, flexibilitÃ© horaires, etc.)
+â Y a-t-il des points non rÃ©solus ou en attente de confirmation dans les Ã©changes ?
+â Des promesses ou engagements ont-ils Ã©tÃ© pris dans les emails ? Lesquels exactement ?
 
 POINTS DE VIGILANCE
-→ Quels sont les risques ou points de friction potentiels ? (malentendu sur un tarif, attente irréaliste, délai serré, détail oublié)
-→ Y a-t-il des non-dits ou des sous-entendus importants à interpréter ?
+â Quels sont les risques ou points de friction potentiels ? (malentendu sur un tarif, attente irrÃ©aliste, dÃ©lai serrÃ©, dÃ©tail oubliÃ©)
+â Y a-t-il des non-dits ou des sous-entendus importants Ã  interprÃ©ter ?
 
 INFORMATIONS MANQUANTES
-→ Liste explicitement les informations cruciales absentes des échanges et à obtenir impérativement avant de confirmer (budget, date définitive, nombre exact de personnes, choix du menu, acompte, etc.)
+â Liste explicitement les informations cruciales absentes des Ã©changes et Ã  obtenir impÃ©rativement avant de confirmer (budget, date dÃ©finitive, nombre exact de personnes, choix du menu, acompte, etc.)
 
 RECOMMANDATION DIRECTEUR
-→ En 2-3 phrases maximum : ce que le directeur doit absolument savoir avant de rencontrer ou recontacter ce client. Le ton, l'état d'esprit, ce qui compte vraiment pour lui.
+â En 2-3 phrases maximum : ce que le directeur doit absolument savoir avant de rencontrer ou recontacter ce client. Le ton, l'Ã©tat d'esprit, ce qui compte vraiment pour lui.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ââââââââââââââââââââââââââââââ
 FORMAT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ââââââââââââââââââââââââââââââ
 
 - Bullet points pour le Niveau 1
 - Paragraphes courts et directs pour le Niveau 2
 - Pas de formules de politesse
-- Pas d'informations inventées : si un élément est absent des échanges, indique "non mentionné" plutôt que de supposer
-- Longueur totale : aussi longue que nécessaire pour le Niveau 2 — ne sacrifie jamais la profondeur d'analyse par souci de concision`;
+- Pas d'informations inventÃ©es : si un Ã©lÃ©ment est absent des Ã©changes, indique "non mentionnÃ©" plutÃ´t que de supposer
+- Longueur totale : aussi longue que nÃ©cessaire pour le Niveau 2 â ne sacrifie jamais la profondeur d'analyse par souci de concision`;
       const txt = await callClaude(prompt, sys, null, "note_briefing");
       const upd = { ...noteIA, [resa.id]: { text: txt, date: new Date().toLocaleDateString("fr-FR") } };
       saveNoteIA(upd);
@@ -3304,9 +3305,9 @@ FORMAT
     setRadarReplyLoading(true);
     setRadarReplyText("");
     try {
-      // Utilise l'extraction déjà faite si disponible (zéro travail en double)
+      // Utilise l'extraction dÃ©jÃ  faite si disponible (zÃ©ro travail en double)
       const cachedExtractedRadar = repliesCache[m.id]?.extracted || null;
-      const signature = ["Cordialement,", `L'équipe ${nomEtab || "l'établissement"}`, adresseEtab, emailEtab, telEtab].filter(Boolean).join("\n");
+      const signature = ["Cordialement,", `L'Ã©quipe ${nomEtab || "l'Ã©tablissement"}`, adresseEtab, emailEtab, telEtab].filter(Boolean).join("\n");
 
       const sourcesRadar = [
         menusCtx ? `  <menus>\n${menusCtx.slice(0, 15000)}\n  </menus>` : "",
@@ -3335,13 +3336,13 @@ FORMAT
 
   const openSendMail = (resa) => {
     setShowSendMail(resa);
-    setSendMailSubject(`Votre événement chez ${nomEtab} — ${resa.typeEvenement||""}`);
+    setSendMailSubject(`Votre Ã©vÃ©nement chez ${nomEtab} â ${resa.typeEvenement||""}`);
     setSendMailBody("");
   };
 
   const fmt = s => s>1048576?(s/1048576).toFixed(1)+" Mo":Math.round(s/1024)+" Ko";
 
-  // Split un nom complet en {prenom, nom} pour rétrocompatibilité des anciennes résas
+  // Split un nom complet en {prenom, nom} pour rÃ©trocompatibilitÃ© des anciennes rÃ©sas
   const splitNomPrenom = (r: any) => {
     if (r.prenom) return { prenom: r.prenom, nom: r.nom || "" };
     const full = (r.nom || "").trim();
@@ -3352,10 +3353,10 @@ FORMAT
   };
   const displayNom = (r: any) => {
     const { prenom, nom } = splitNomPrenom(r);
-    return [prenom, nom].filter(Boolean).join(" ") || "—";
+    return [prenom, nom].filter(Boolean).join(" ") || "â";
   };
 
-  // ═══ Helpers vue Événements v3 ═══
+  // âââ Helpers vue ÃvÃ©nements v3 âââ
   const computeEventsKPIs = React.useMemo(() => {
     const today = new Date(); today.setHours(0,0,0,0);
     const in7 = new Date(today); in7.setDate(in7.getDate() + 7);
@@ -3374,7 +3375,7 @@ FORMAT
       return isNouveau;
     });
 
-    // CA prévisionnel : somme des budgets des résas confirmées/en cours du mois courant
+    // CA prÃ©visionnel : somme des budgets des rÃ©sas confirmÃ©es/en cours du mois courant
     const thisMonth = today.getMonth(), thisYear = today.getFullYear();
     let totalBudget = 0;
     resas.forEach(r => {
@@ -3404,19 +3405,19 @@ FORMAT
       if (!r.dateDebut) return false;
       try { const d = new Date(r.dateDebut); return d.getMonth()===m && d.getFullYear()===y; } catch { return false; }
     });
-    // Jours uniques avec au moins 1 événement
+    // Jours uniques avec au moins 1 Ã©vÃ©nement
     const uniqueDays = new Set(monthResas.map(r => r.dateDebut)).size;
     const occupation = Math.round((uniqueDays / daysInM) * 100);
-    // Confirmés = statut label contient "confirm"/"valid"
+    // ConfirmÃ©s = statut label contient "confirm"/"valid"
     const confirmed = monthResas.filter(r => {
       const st = statuts.find(s=>s.id===(r.statut||"nouveau"));
       return st && (st.label.toLowerCase().includes("confirm") || st.label.toLowerCase().includes("valid"));
     }).length;
-    // Prochain événement
+    // Prochain Ã©vÃ©nement
     const upcoming = resas
       .filter(r => r.dateDebut && r.dateDebut >= todayISO)
       .sort((a,b) => (a.dateDebut||"").localeCompare(b.dateDebut||"") || (a.heureDebut||"").localeCompare(b.heureDebut||""))[0];
-    // Budget prévisionnel : confirmés + en cours + devis
+    // Budget prÃ©visionnel : confirmÃ©s + en cours + devis
     let totalBudget = 0;
     monthResas.forEach(r => {
       const st = statuts.find(s=>s.id===(r.statut||"nouveau"));
@@ -3466,17 +3467,17 @@ FORMAT
     // Optimiste local
     setEmails(prev => prev.map(m => m.id === id ? { ...m, unread: newUnread } : m));
     if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, unread: newUnread } : prev);
-    // Bidirectionnel Gmail — avec rollback si échec
+    // Bidirectionnel Gmail â avec rollback si Ã©chec
     if (email.gmailId) {
-      fetch("/api/emails", {
+      apiFetch("/api/emails", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gmail_id: email.gmailId, action: newUnread ? "unread" : "read" }),
       }).catch(() => {
-        // Rollback si Gmail échoue
+        // Rollback si Gmail Ã©choue
         setEmails(prev => prev.map(m => m.id === id ? { ...m, unread: email.unread } : m));
         if (sel?.id === id) setSel((prev: any) => prev ? { ...prev, unread: email.unread } : prev);
-        toast("Erreur synchronisation Gmail — réessayez", "err");
+        toast("Erreur synchronisation Gmail â rÃ©essayez", "err");
       });
     }
   };
@@ -3496,35 +3497,35 @@ FORMAT
     [linksFetched, menusCtx, conditionsCtx, espacesCtx, tonCtx, customCtx]
   );
 
-  // ─── Icônes SVG Céleste pour la navigation ──────────────────────────────────
+  // âââ IcÃ´nes SVG CÃ©leste pour la navigation ââââââââââââââââââââââââââââââââââ
   const NavIcon = ({id, active}: {id:string, active:boolean}) => {
     const c = active ? "#1A1A1E" : "#6B6E7E";
     const icons: Record<string, JSX.Element> = {
-      // Événements — calendrier avec étoile
+      // ÃvÃ©nements â calendrier avec Ã©toile
       general: <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
         <rect x="1.5" y="2.5" width="13" height="12" rx="1" stroke={c} strokeWidth="1.1"/>
         <path d="M1.5 6h13" stroke={c} strokeWidth="1.1"/>
         <path d="M5 1v3M11 1v3" stroke={c} strokeWidth="1.1" strokeLinecap="round"/>
         <path d="M8 9l.8 1.6L11 11l-1.5 1.4.3 2L8 13.5l-1.8.9.3-2L5 11l2.2-.4L8 9z" fill={active?"#B8924F":"none"} stroke="#B8924F" strokeWidth="0.8"/>
       </svg>,
-      // Mails — enveloppe avec sceau
+      // Mails â enveloppe avec sceau
       mails: <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
         <rect x="1.5" y="3.5" width="13" height="9" rx="1" stroke={c} strokeWidth="1.1"/>
         <path d="M1.5 4.5l6.5 5 6.5-5" stroke={c} strokeWidth="1.1" strokeLinecap="round"/>
       </svg>,
-      // Planning — grille semaine
+      // Planning â grille semaine
       planning: <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
         <rect x="1.5" y="1.5" width="6" height="6" rx="0.8" stroke={c} strokeWidth="1.1"/>
         <rect x="8.5" y="1.5" width="6" height="6" rx="0.8" stroke={c} strokeWidth="1.1"/>
         <rect x="1.5" y="8.5" width="6" height="6" rx="0.8" stroke={c} strokeWidth="1.1"/>
         <rect x="8.5" y="8.5" width="6" height="6" rx="0.8" stroke={active?"#B8924F":c} strokeWidth="1.1" fill={active?"rgba(184,146,79,0.1)":"none"}/>
       </svg>,
-      // Stats — lignes ascendantes
+      // Stats â lignes ascendantes
       stats: <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
         <path d="M2 12l3.5-4 3 2 3-5 2.5 3" stroke={active?"#B8924F":c} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
         <path d="M2 14h12" stroke={c} strokeWidth="1.1" strokeLinecap="round"/>
       </svg>,
-      // Sources IA — sceau Archange miniature
+      // Sources IA â sceau Archange miniature
       sources: <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
         <circle cx="8" cy="8" r="7" stroke={active?"#B8924F":c} strokeWidth="1.1"/>
         <path d="M5.5 6.5L10.5 6.5" stroke="#B8924F" strokeWidth="1" strokeLinecap="round"/>
@@ -3537,7 +3538,7 @@ FORMAT
   };
 
   const NAV=[
-    {id:"general",  label:"Événements", badge:resas.filter(r=>r.statut==="nouveau"||!r.statut).length||null},
+    {id:"general",  label:"ÃvÃ©nements", badge:resas.filter(r=>r.statut==="nouveau"||!r.statut).length||null},
     {id:"mails",    label:"Mails",       badge:emails.filter(m=>m.unread).length||null},
     {id:"planning", label:"Planning"},
     {id:"stats",    label:"Stats"},
@@ -3554,13 +3555,13 @@ FORMAT
     <div style={{display:"flex",height:"100vh",overflow:"hidden",fontFamily:"'Geist','system-ui',sans-serif",background:"#F5F4F0"}}>
       <style>{"@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Geist:wght@300;400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#E0DED7;border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:#B8924F;}.mail-row:hover .mail-actions{opacity:1!important}.mail-row:hover .mail-checkbox{opacity:1!important}.celeste-nav-btn:hover{background:#EBEAE5!important;}.fade-in{animation:fadeIn .25s ease}@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}.snooze-wrap:hover .snooze-menu{display:block!important}.snooze-menu button:hover{background:#FAFAF7!important}.celeste-email-item:hover{background:#FAFAF7!important}.plan-statut-wrap>div>button:hover{background:#FAFAF7!important}@keyframes celesteBlink{0%,50%{opacity:1}51%,100%{opacity:0}}"}</style>
 
-      {/* Écran de chargement initial */}
+      {/* Ãcran de chargement initial */}
       {initializing && (
         <div style={{position:"fixed",inset:0,background:"#1A1A1E",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:9999}}>
           <div style={{fontSize:11,fontWeight:700,color:"#1A1A1E",letterSpacing:"0.28em",textTransform:"uppercase"}}>ARCHANGE</div>
-          <div style={{fontSize:8,color:"#6B6E7E",letterSpacing:"0.18em",textTransform:"uppercase",marginTop:-8}}>{nomEtab} · AGENT ARCHANGE</div>
+          <div style={{fontSize:8,color:"#6B6E7E",letterSpacing:"0.18em",textTransform:"uppercase",marginTop:-8}}>{nomEtab} Â· AGENT ARCHANGE</div>
           <Spin s={18}/>
-          <div style={{fontSize:11,color:"#6B6E7E",letterSpacing:"0.08em"}}>Chargement en cours…</div>
+          <div style={{fontSize:11,color:"#6B6E7E",letterSpacing:"0.08em"}}>Chargement en coursâ¦</div>
         </div>
       )}
 
@@ -3570,43 +3571,43 @@ FORMAT
           if(undoDelete.timer) clearTimeout(undoDelete.timer);
           saveEmails([undoDelete.email,...emails]);
           setUndoDelete(null); setNotif(null);
-          toast("Email restauré ✓");
+          toast("Email restaurÃ© â");
         }} style={{fontSize:12,fontWeight:700,color:"#B8924F",background:"none",border:"1px solid rgba(184,146,79,.4)",borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Annuler</button>}
       </div>}
 
-      {/* ── Modal raccourcis clavier ── */}
+      {/* ââ Modal raccourcis clavier ââ */}
       {showKeyHelp&&(
         <div onClick={()=>setShowKeyHelp(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:9990,display:"flex",alignItems:"center",justifyContent:"center"}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#FFFFFF",borderRadius:16,padding:"28px 32px",minWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,.2)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-              <div style={{fontSize:16,fontWeight:700,color:"#1A1A1E"}}>⌨️ Raccourcis clavier</div>
-              <button onClick={()=>setShowKeyHelp(false)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"#6B6E7E"}}>×</button>
+              <div style={{fontSize:16,fontWeight:700,color:"#1A1A1E"}}>â¨ï¸ Raccourcis clavier</div>
+              <button onClick={()=>setShowKeyHelp(false)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"#6B6E7E"}}>Ã</button>
             </div>
             {[
-              ["/","Rechercher"],["J / K","Email suivant / précédent"],["R","Répondre"],
-              ["F","Transférer"],["E","Archiver"],["U","Marquer lu / non lu"],
-              ["S","Étoile"],["#","Supprimer"],["Del","Supprimer"],["?","Afficher cette aide"],
+              ["/","Rechercher"],["J / K","Email suivant / prÃ©cÃ©dent"],["R","RÃ©pondre"],
+              ["F","TransfÃ©rer"],["E","Archiver"],["U","Marquer lu / non lu"],
+              ["S","Ãtoile"],["#","Supprimer"],["Del","Supprimer"],["?","Afficher cette aide"],
             ].map(([k,v])=>(
               <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #F5F4F0"}}>
                 <span style={{fontSize:12,color:"#6B6E7E"}}>{v}</span>
                 <kbd style={{fontSize:11,background:"#F5F4F0",border:"1px solid #EBEAE5",borderRadius:5,padding:"2px 8px",color:"#1A1A1E",fontFamily:"monospace",fontWeight:600}}>{k}</kbd>
               </div>
             ))}
-            <div style={{fontSize:11,color:"#6B6E7E",marginTop:12,textAlign:"center"}}>Appuie sur ? ou Échap pour fermer</div>
+            <div style={{fontSize:11,color:"#6B6E7E",marginTop:12,textAlign:"center"}}>Appuie sur ? ou Ãchap pour fermer</div>
           </div>
         </div>
       )}
 
-      {/* ── Indicateur de sauvegarde ── */}
-      {saveIndicator&&<div style={{position:"fixed",top:12,right:16,zIndex:9998,padding:"5px 12px",borderRadius:20,background:"#1F2E1A",color:"#6EE7B7",fontSize:11,fontWeight:600,letterSpacing:"0.04em",border:"1px solid rgba(52,211,153,.2)",pointerEvents:"none"}}>✓ Sauvegardé</div>}
-      {Object.keys(offlineQueue).length>0&&<div style={{position:"fixed",top:12,right:16,zIndex:9998,padding:"5px 12px",borderRadius:20,background:"#431407",color:"#FED7AA",fontSize:11,fontWeight:600,letterSpacing:"0.04em",border:"1px solid rgba(251,146,60,.2)",cursor:"default"}} title="Les modifications seront sauvegardées dès le retour de connexion">⚠ Non sauvegardé</div>}
+      {/* ââ Indicateur de sauvegarde ââ */}
+      {saveIndicator&&<div style={{position:"fixed",top:12,right:16,zIndex:9998,padding:"5px 12px",borderRadius:20,background:"#1F2E1A",color:"#6EE7B7",fontSize:11,fontWeight:600,letterSpacing:"0.04em",border:"1px solid rgba(52,211,153,.2)",pointerEvents:"none"}}>â SauvegardÃ©</div>}
+      {Object.keys(offlineQueue).length>0&&<div style={{position:"fixed",top:12,right:16,zIndex:9998,padding:"5px 12px",borderRadius:20,background:"#431407",color:"#FED7AA",fontSize:11,fontWeight:600,letterSpacing:"0.04em",border:"1px solid rgba(251,146,60,.2)",cursor:"default"}} title="Les modifications seront sauvegardÃ©es dÃ¨s le retour de connexion">â  Non sauvegardÃ©</div>}
 
-      {/* ── Indicateur usage API ARCHANGE — discret en bas à droite ── */}
+      {/* ââ Indicateur usage API ARCHANGE â discret en bas Ã  droite ââ */}
       {apiStatsView.totalCalls > 0 && (
         <div style={{position:"fixed",bottom:12,right:16,zIndex:9998}}>
           <button
             onClick={()=>setApiStatsOpen(v=>!v)}
-            title="Détails de l'usage ARCHANGE"
+            title="DÃ©tails de l'usage ARCHANGE"
             style={{
               padding:"6px 12px",
               borderRadius:20,
@@ -3624,7 +3625,7 @@ FORMAT
               boxShadow:"0 2px 6px rgba(184,146,79,0.1)",
             }}
           >
-            ✦ {apiStatsView.totalCalls} appel{apiStatsView.totalCalls>1?"s":""} · ${apiStatsView.totalCostUSD.toFixed(4)}
+            â¦ {apiStatsView.totalCalls} appel{apiStatsView.totalCalls>1?"s":""} Â· ${apiStatsView.totalCostUSD.toFixed(4)}
           </button>
           {apiStatsOpen && (
             <div style={{
@@ -3642,22 +3643,22 @@ FORMAT
               fontFamily:"'Geist','system-ui',sans-serif",
             }}>
               <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,fontWeight:500,marginBottom:10,color:"#1A1A1E",letterSpacing:"-0.01em"}}>
-                Usage ARCHANGE — session
+                Usage ARCHANGE â session
               </div>
               <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 14px",fontVariantNumeric:"tabular-nums"}}>
                 <span style={{color:"#6B6E7E"}}>Appels API :</span>
                 <span style={{textAlign:"right",fontWeight:500}}>{apiStatsView.totalCalls}</span>
-                <span style={{color:"#6B6E7E"}}>Tokens entrée :</span>
+                <span style={{color:"#6B6E7E"}}>Tokens entrÃ©e :</span>
                 <span style={{textAlign:"right",fontWeight:500}}>{apiStatsView.totalInputTokens.toLocaleString("fr-FR")}</span>
                 <span style={{color:"#6B6E7E"}}>Tokens sortie :</span>
                 <span style={{textAlign:"right",fontWeight:500}}>{apiStatsView.totalOutputTokens.toLocaleString("fr-FR")}</span>
-                <span style={{color:"#6B6E7E",borderTop:"1px solid rgba(184,146,79,0.15)",paddingTop:6}}>Coût session :</span>
+                <span style={{color:"#6B6E7E",borderTop:"1px solid rgba(184,146,79,0.15)",paddingTop:6}}>CoÃ»t session :</span>
                 <span style={{textAlign:"right",fontWeight:600,color:"#B8924F",borderTop:"1px solid rgba(184,146,79,0.15)",paddingTop:6}}>${apiStatsView.totalCostUSD.toFixed(4)}</span>
-                <span style={{color:"#6B6E7E"}}>Coût en € (~) :</span>
-                <span style={{textAlign:"right",fontWeight:500}}>≈ {(apiStatsView.totalCostUSD * 0.92).toFixed(4)} €</span>
+                <span style={{color:"#6B6E7E"}}>CoÃ»t en â¬ (~) :</span>
+                <span style={{textAlign:"right",fontWeight:500}}>â {(apiStatsView.totalCostUSD * 0.92).toFixed(4)} â¬</span>
               </div>
               <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid rgba(184,146,79,0.15)",fontSize:11,color:"#A5A4A0",lineHeight:1.4}}>
-                Compteur depuis le chargement de la page. Tarif Claude Sonnet 4 : $3/M tokens entrée, $15/M sortie.
+                Compteur depuis le chargement de la page. Tarif Claude Sonnet 4 : $3/M tokens entrÃ©e, $15/M sortie.
               </div>
               <button onClick={()=>setApiStatsOpen(false)} style={{marginTop:8,width:"100%",padding:"6px 0",background:"none",border:"1px solid rgba(184,146,79,0.22)",borderRadius:6,color:"#6B6E7E",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>
                 Fermer
@@ -3667,9 +3668,9 @@ FORMAT
         </div>
       )}
 
-      {/* bandeau alerteUrgente supprimé */}
+      {/* bandeau alerteUrgente supprimÃ© */}
 
-      {/* Nav principale — Céleste */}
+      {/* Nav principale â CÃ©leste */}
       <aside style={{width:navCollapsed?52:220,background:"#FAFAF7",display:"flex",flexDirection:"column",flexShrink:0,transition:"width .3s cubic-bezier(.4,0,.2,1)",overflow:"hidden",borderRight:"1px solid #EBEAE5"}}>
         <div style={{padding:navCollapsed?"14px 0 12px":"18px 18px 14px",display:"flex",alignItems:"center",justifyContent:navCollapsed?"center":"space-between",flexShrink:0,borderBottom:"1px solid #EBEAE5"}}>
           {!navCollapsed&&<div style={{display:"flex",alignItems:"center",gap:9}}>
@@ -3688,8 +3689,8 @@ FORMAT
             </div>
           </div>}
           {navCollapsed&&<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B8924F" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B8924F" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B8924F"/><path d="M12 9.6 L 12 18.2" stroke="#B8924F" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B8924F"/></svg>}
-          <button onClick={()=>setNavCollapsed(v=>!v)} title={navCollapsed?"Agrandir":"Réduire"} style={{width:20,height:20,borderRadius:2,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:navCollapsed?0:6}}>
-            {navCollapsed?"›":"‹"}
+          <button onClick={()=>setNavCollapsed(v=>!v)} title={navCollapsed?"Agrandir":"RÃ©duire"} style={{width:20,height:20,borderRadius:2,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:navCollapsed?0:6}}>
+            {navCollapsed?"âº":"â¹"}
           </button>
         </div>
         <div style={{flex:1,padding:navCollapsed?"6px 5px":"8px 8px",display:"flex",flexDirection:"column",gap:1,overflowY:"auto"}}>
@@ -3708,7 +3709,7 @@ FORMAT
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:11,fontWeight:500,color:"#1A1A1E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{session?.user?.name||"Directeur"}</div>
-              <button onClick={()=>signOut({callbackUrl:"/"})} style={{fontSize:9.5,color:"#6B6E7E",background:"none",border:"none",cursor:"pointer",padding:0,letterSpacing:"0.05em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>⎋ Déconnexion</button>
+              <button onClick={()=>signOut({callbackUrl:"/"})} style={{fontSize:9.5,color:"#6B6E7E",background:"none",border:"none",cursor:"pointer",padding:0,letterSpacing:"0.05em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>â DÃ©connexion</button>
             </div>
           </div>
         </div>}
@@ -3716,19 +3717,19 @@ FORMAT
 
       <main style={{flex:1,display:"flex",overflow:"hidden",minWidth:0}}>
 
-        {/* ══ ÉVÉNEMENTS v3 — Apple Mail 2026 ══ */}
+        {/* ââ ÃVÃNEMENTS v3 â Apple Mail 2026 ââ */}
         {view==="general" && (()=>{
           const kpi = computeEventsKPIs;
           // Filtrage par recherche
           const q = searchEvt.toLowerCase();
           const matchesSearch = (r: any) => !q || r.nom?.toLowerCase().includes(q) || r.entreprise?.toLowerCase().includes(q) || r.typeEvenement?.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q) || r.dateDebut?.includes(q);
-          // Filtrage par statut (multi-select) — Point 2
+          // Filtrage par statut (multi-select) â Point 2
           const inStatusFilter = (r: any) => {
-            // Cas "Relances" traité séparément via generalFilter (onglet spécial sidebar)
+            // Cas "Relances" traitÃ© sÃ©parÃ©ment via generalFilter (onglet spÃ©cial sidebar)
             if (generalFilter === "arelancer") return true;
-            // Si aucun filtre multi actif ET generalFilter="all" → tous les statuts
+            // Si aucun filtre multi actif ET generalFilter="all" â tous les statuts
             if (filtresStatutsEvents.length === 0) return true;
-            // Sinon : l'événement doit avoir l'un des statuts cochés
+            // Sinon : l'Ã©vÃ©nement doit avoir l'un des statuts cochÃ©s
             return filtresStatutsEvents.includes(r.statut || "nouveau");
           };
           const filteredResas = resas.filter(r => matchesSearch(r) && inStatusFilter(r));
@@ -3743,9 +3744,9 @@ FORMAT
           const IcPin = () => <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><path d="M7 12.5s3.8-3.4 3.8-7A3.8 3.8 0 107 1.7c0 3.5 3.8 7 3.8 7z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="7" cy="5.3" r="1.3" stroke="currentColor" strokeWidth="1.3"/></svg>;
           const IcMail = () => <svg width="10" height="10" viewBox="0 0 14 14" fill="none" style={{opacity:0.6}}><path d="M1 4l6 4.5L13 4M1 3.5h12v7H1z" stroke="currentColor" strokeWidth="1.2"/></svg>;
 
-          // Composant carte événement réutilisable
+          // Composant carte Ã©vÃ©nement rÃ©utilisable
           const EventCard = ({r, relance}: {r: any, relance?: any}) => {
-            const st = statuts.find(s=>s.id===(r.statut||"nouveau"))||statuts[0]||{bg:"#F5F4F0",color:"#6B6B72",label:"—"};
+            const st = statuts.find(s=>s.id===(r.statut||"nouveau"))||statuts[0]||{bg:"#F5F4F0",color:"#6B6B72",label:"â"};
             const linkedEmails = getLinkedEmails(r);
             const espace = espacesDyn.find(e=>e.id===r.espaceId);
             const isActive = selResaGeneral?.id===r.id;
@@ -3758,19 +3759,19 @@ FORMAT
                 <Avatar name={r.nom||"?"} size={38}/>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:5}}>
-                    <div style={{fontSize:13.5,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'Geist','system-ui',sans-serif"}}>{r.nom||"—"}</div>
-                    {r.entreprise&&<div style={{fontSize:12,color:"#6B6B72",whiteSpace:"nowrap",fontFamily:"'Geist','system-ui',sans-serif"}}>· {r.entreprise}</div>}
+                    <div style={{fontSize:13.5,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'Geist','system-ui',sans-serif"}}>{r.nom||"â"}</div>
+                    {r.entreprise&&<div style={{fontSize:12,color:"#6B6B72",whiteSpace:"nowrap",fontFamily:"'Geist','system-ui',sans-serif"}}>Â· {r.entreprise}</div>}
                     {isOverdue&&<span style={{fontSize:10,fontWeight:500,color:"#A84B45",background:"#FAEDEB",padding:"2px 8px",borderRadius:4,textTransform:"uppercase",letterSpacing:"0.06em",marginLeft:6,display:"inline-flex",alignItems:"center",gap:4,fontFamily:"'Geist','system-ui',sans-serif"}}>{daysOverdue} jour{daysOverdue>1?"s":""} de retard</span>}
                   </div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",fontFamily:"'Geist','system-ui',sans-serif"}}>
                     {r.dateDebut&&<span style={chipStyle}><IcCal/>{fmtDateFr(r.dateDebut)}</span>}
-                    {(r.heureDebut||r.heureFin)&&<span style={chipStyle}><IcClock/>{r.heureDebut||"?"}{r.heureFin?"–"+r.heureFin:""}</span>}
+                    {(r.heureDebut||r.heureFin)&&<span style={chipStyle}><IcClock/>{r.heureDebut||"?"}{r.heureFin?"â"+r.heureFin:""}</span>}
                     {r.nombrePersonnes&&<span style={chipStyle}><IcPeople/>{r.nombrePersonnes} pers.</span>}
-                    <span style={espace?chipStyle:chipFaint}><IcPin/>{espace?.nom||"Espace à définir"}</span>
+                    <span style={espace?chipStyle:chipFaint}><IcPin/>{espace?.nom||"Espace Ã  dÃ©finir"}</span>
                     {r.budget&&<span style={chipMoney}>{r.budget}</span>}
                     {r.typeEvenement&&<span style={chipStyle}>{r.typeEvenement}</span>}
                   </div>
-                  {relance&&relance.note&&<div style={{fontSize:11.5,color:"#6B6B72",marginTop:6,display:"flex",alignItems:"center",gap:6,fontFamily:"'Geist','system-ui',sans-serif"}}><svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{color:"#B17D2E",opacity:0.8,flexShrink:0}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>Relance prévue le {fmtDateFr(relance.date)}{relance.note?" — "+relance.note:""}</div>}
+                  {relance&&relance.note&&<div style={{fontSize:11.5,color:"#6B6B72",marginTop:6,display:"flex",alignItems:"center",gap:6,fontFamily:"'Geist','system-ui',sans-serif"}}><svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{color:"#B17D2E",opacity:0.8,flexShrink:0}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>Relance prÃ©vue le {fmtDateFr(relance.date)}{relance.note?" â "+relance.note:""}</div>}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
                   <span style={{fontSize:10.5,fontWeight:500,padding:"3px 10px",borderRadius:100,background:st.bg,color:st.color,letterSpacing:"0.02em",fontFamily:"'Geist','system-ui',sans-serif"}}>{st.label}</span>
@@ -3791,11 +3792,11 @@ FORMAT
 
           return (
           <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-            {/* ─── Sub-sidebar filtres statuts ─── */}
+            {/* âââ Sub-sidebar filtres statuts âââ */}
             <div style={{width:subCollapsed?44:220,background:"#FAFAF7",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid #EBEAE5",transition:"width .2s ease",overflow:"hidden"}}>
               <div style={{padding:subCollapsed?"10px 6px":"16px 10px 10px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0}}>
                 {!subCollapsed&&<div style={{fontSize:10,fontWeight:500,color:"#A5A4A0",letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif",padding:"0 1px"}}>Filtrer par statut</div>}
-                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"#EBEAE5",color:"#6B6B72",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{subCollapsed?"›":"‹"}</button>
+                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"RÃ©duire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"#EBEAE5",color:"#6B6B72",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{subCollapsed?"âº":"â¹"}</button>
               </div>
               {subCollapsed?(
                 <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center"}}>
@@ -3829,7 +3830,7 @@ FORMAT
                           </button>
                           <div style={{display:"flex",alignItems:"center",gap:5}}>
                             {count>0&&<span style={{fontSize:11,color:active?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{count}</span>}
-                            <button onClick={e=>{e.stopPropagation();const ok=window.confirm('Supprimer "'+s.label+'" ? Les événements avec ce statut passeront à "Nouveau".');if(!ok) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);setFiltresStatutsEvents(filtresStatutsEvents.filter(x=>x!==s.id));setFiltresStatutsPlanning(filtresStatutsPlanning.filter(x=>x!==s.id));toast("Statut supprimé");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(27,30,43,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(168,75,69,0.8)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(27,30,43,0.2)")}>✕</button>
+                            <button onClick={e=>{e.stopPropagation();const ok=window.confirm('Supprimer "'+s.label+'" ? Les Ã©vÃ©nements avec ce statut passeront Ã  "Nouveau".');if(!ok) return;const arr=statuts.filter(x=>x.id!==s.id);saveStatuts(arr);setFiltresStatutsEvents(filtresStatutsEvents.filter(x=>x!==s.id));setFiltresStatutsPlanning(filtresStatutsPlanning.filter(x=>x!==s.id));toast("Statut supprimÃ©");}} title="Supprimer ce statut" style={{width:16,height:16,borderRadius:4,border:"none",background:"transparent",color:"rgba(27,30,43,0.2)",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,flexShrink:0}} onMouseEnter={e=>(e.currentTarget.style.color="rgba(168,75,69,0.8)")} onMouseLeave={e=>(e.currentTarget.style.color="rgba(27,30,43,0.2)")}>â</button>
                           </div>
                         </div>
                       );
@@ -3845,21 +3846,21 @@ FORMAT
                     {showCreateStatut?(
                       <div>
                         <div style={{fontSize:11,color:"#6B6B72",marginBottom:8,fontFamily:"'Geist','system-ui',sans-serif"}}>Nouveau statut</div>
-                        <input value={newStatutLabel} onChange={e=>setNewStatutLabel(e.target.value)} placeholder="Nom du statut…" style={{width:"100%",padding:"7px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",fontSize:12,marginBottom:8,outline:"none",fontFamily:"'Geist','system-ui',sans-serif"}}/>
+                        <input value={newStatutLabel} onChange={e=>setNewStatutLabel(e.target.value)} placeholder="Nom du statutâ¦" style={{width:"100%",padding:"7px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",fontSize:12,marginBottom:8,outline:"none",fontFamily:"'Geist','system-ui',sans-serif"}}/>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                           <span style={{fontSize:11,color:"#6B6B72",fontFamily:"'Geist','system-ui',sans-serif"}}>Couleur</span>
                           <input type="color" value={newStatutColor} onChange={e=>setNewStatutColor(e.target.value)} style={{width:32,height:24,borderRadius:5,border:"none",cursor:"pointer",background:"transparent"}}/>
                           <div style={{width:16,height:16,borderRadius:"50%",background:newStatutColor}}/>
                         </div>
                         <div style={{display:"flex",gap:6}}>
-                          <button onClick={()=>{if(!newStatutLabel.trim()) return;const hex=newStatutColor;const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);const bg=`rgba(${r},${g},${b},0.12)`;const ns:StatutDef={id:"s_"+Date.now(),label:newStatutLabel.trim(),bg,color:hex};saveStatuts([...statuts,ns]);setNewStatutLabel("");setNewStatutColor("#6366f1");setShowCreateStatut(false);toast("Statut créé !");}} style={{flex:1,padding:"7px",borderRadius:8,border:"none",background:"#1A1A1E",color:"#FFFFFF",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>Créer</button>
-                          <button onClick={()=>{setShowCreateStatut(false);setNewStatutLabel("");}} style={{padding:"7px 10px",borderRadius:8,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6B72",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>✕</button>
+                          <button onClick={()=>{if(!newStatutLabel.trim()) return;const hex=newStatutColor;const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);const bg=`rgba(${r},${g},${b},0.12)`;const ns:StatutDef={id:"s_"+Date.now(),label:newStatutLabel.trim(),bg,color:hex};saveStatuts([...statuts,ns]);setNewStatutLabel("");setNewStatutColor("#6366f1");setShowCreateStatut(false);toast("Statut crÃ©Ã© !");}} style={{flex:1,padding:"7px",borderRadius:8,border:"none",background:"#1A1A1E",color:"#FFFFFF",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>CrÃ©er</button>
+                          <button onClick={()=>{setShowCreateStatut(false);setNewStatutLabel("");}} style={{padding:"7px 10px",borderRadius:8,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6B72",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>â</button>
                         </div>
                       </div>
                     ):(
                       <button onClick={()=>setShowCreateStatut(true)} style={{width:"100%",padding:"9px 11px",borderRadius:8,border:"1px dashed #E0DED7",background:"transparent",color:"#A5A4A0",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Geist','system-ui',sans-serif"}}>
                         <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                        Créer un statut
+                        CrÃ©er un statut
                       </button>
                     )}
                   </div>
@@ -3867,16 +3868,16 @@ FORMAT
               )}
             </div>
 
-            {/* ─── Zone principale ─── */}
+            {/* âââ Zone principale âââ */}
             <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#FAFAF7"}}>
               {/* Header : titre + toggle + bouton nouvelle */}
               <div style={{padding:"22px 28px 14px",flexShrink:0,display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:16}}>
                 <div>
-                  <h1 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:28,fontWeight:400,color:"#1A1A1E",letterSpacing:"-0.02em",lineHeight:1.1,margin:0}}>Événements</h1>
+                  <h1 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:28,fontWeight:400,color:"#1A1A1E",letterSpacing:"-0.02em",lineHeight:1.1,margin:0}}>ÃvÃ©nements</h1>
                   <div style={{fontSize:12.5,color:"#6B6B72",marginTop:4,fontFamily:"'Geist','system-ui',sans-serif"}}>
                     {generalFilter==="arelancer"?`${relances.length} relance${relances.length!==1?"s":""}`:
                      filtresStatutsEvents.length===0?`${resas.length} demande${resas.length!==1?"s":""}`:
-                     `${filteredResas.length} demande${filteredResas.length!==1?"s":""} · Filtré par ${filtresStatutsEvents.length} statut${filtresStatutsEvents.length!==1?"s":""}`}
+                     `${filteredResas.length} demande${filteredResas.length!==1?"s":""} Â· FiltrÃ© par ${filtresStatutsEvents.length} statut${filtresStatutsEvents.length!==1?"s":""}`}
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -3893,10 +3894,10 @@ FORMAT
               {/* Recherche */}
               <div style={{padding:"0 28px 18px",flexShrink:0,position:"relative"}}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:42,top:"50%",transform:"translateY(calc(-50% - 9px))",color:"#A5A4A0",pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                <input value={searchEvt} onChange={e=>setSearchEvt(e.target.value)} placeholder="Rechercher par nom, entreprise, type, date…" style={{width:"100%",padding:"10px 14px 10px 38px",border:"1px solid #EBEAE5",borderRadius:10,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,color:"#1A1A1E",outline:"none",transition:"border-color .12s ease"}}/>
-                {searchEvt&&<button onClick={()=>setSearchEvt("")} style={{position:"absolute",right:36,top:"50%",transform:"translateY(calc(-50% - 9px))",background:"none",border:"none",color:"#A5A4A0",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>×</button>}
+                <input value={searchEvt} onChange={e=>setSearchEvt(e.target.value)} placeholder="Rechercher par nom, entreprise, type, dateâ¦" style={{width:"100%",padding:"10px 14px 10px 38px",border:"1px solid #EBEAE5",borderRadius:10,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,color:"#1A1A1E",outline:"none",transition:"border-color .12s ease"}}/>
+                {searchEvt&&<button onClick={()=>setSearchEvt("")} style={{position:"absolute",right:36,top:"50%",transform:"translateY(calc(-50% - 9px))",background:"none",border:"none",color:"#A5A4A0",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>Ã</button>}
               </div>
-              {/* Barre des filtres statuts actifs — Point 2 */}
+              {/* Barre des filtres statuts actifs â Point 2 */}
               {filtresStatutsEvents.length>0 && (
                 <div style={{padding:"0 28px 14px",flexShrink:0,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>
                   <span style={{fontSize:11.5,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500,marginRight:2}}>Filtres actifs</span>
@@ -3907,7 +3908,7 @@ FORMAT
                       <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{marginLeft:2,opacity:0.7}}><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                     </button>
                   );})}
-                  <button onClick={()=>setFiltresStatutsEvents([])} style={{padding:"4px 10px",borderRadius:100,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#6B6B72",fontSize:11.5,fontWeight:500,cursor:"pointer",fontFamily:"inherit",marginLeft:4}}>Réinitialiser les filtres</button>
+                  <button onClick={()=>setFiltresStatutsEvents([])} style={{padding:"4px 10px",borderRadius:100,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#6B6B72",fontSize:11.5,fontWeight:500,cursor:"pointer",fontFamily:"inherit",marginLeft:4}}>RÃ©initialiser les filtres</button>
                 </div>
               )}
               {/* Hero dashboard 4 KPI */}
@@ -3920,14 +3921,14 @@ FORMAT
                     <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Cette semaine</div>
                   </div>
                   <div style={{fontFamily:"'Fraunces',serif",fontSize:30,fontWeight:500,color:"#A84B45",letterSpacing:"-0.03em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.cetteSemaine.length}</div>
-                  <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>événement{kpi.cetteSemaine.length!==1?"s":""} dans les <strong style={{color:"#1A1A1E",fontWeight:500}}>7 prochains jours</strong></div>
+                  <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>Ã©vÃ©nement{kpi.cetteSemaine.length!==1?"s":""} dans les <strong style={{color:"#1A1A1E",fontWeight:500}}>7 prochains jours</strong></div>
                 </div>
                 <div onClick={()=>setGeneralFilter("arelancer")} style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease",position:"relative",overflow:"hidden"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                     <div style={{width:26,height:26,borderRadius:7,background:"#F7EDD8",color:"#B17D2E",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                     </div>
-                    <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>À relancer</div>
+                    <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Ã relancer</div>
                   </div>
                   <div style={{fontFamily:"'Fraunces',serif",fontSize:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.03em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{relances.length}</div>
                   <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>{kpi.enRetard.length>0?<>dont <strong style={{color:"#A84B45",fontWeight:500}}>{kpi.enRetard.length} en retard</strong></>:<>aucune en retard</>}</div>
@@ -3947,14 +3948,14 @@ FORMAT
                     <div style={{width:26,height:26,borderRadius:7,background:"#F4EEDF",color:"#B8924F",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 3H5a2 2 0 000 4h4a2 2 0 010 4H3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M6.5 1.5v11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                     </div>
-                    <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Prévisionnel</div>
+                    <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>PrÃ©visionnel</div>
                   </div>
-                  <div style={{fontFamily:"'Fraunces',serif",fontSize:kpi.totalBudget>999?24:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.totalBudget.toLocaleString("fr-FR")} €</div>
-                  <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>mois en cours</strong> · en cours + confirmés</div>
+                  <div style={{fontFamily:"'Fraunces',serif",fontSize:kpi.totalBudget>999?24:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.totalBudget.toLocaleString("fr-FR")} â¬</div>
+                  <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>mois en cours</strong> Â· en cours + confirmÃ©s</div>
                 </div>
               </div>
 
-              {/* ─── Liste ─── */}
+              {/* âââ Liste âââ */}
               <div style={{flex:1,overflowY:"auto",padding:"0 28px 40px"}}>
 
                 {/* Vue Relances (depuis filter ou KPI) */}
@@ -3964,8 +3965,8 @@ FORMAT
                     {relances.length===0?(
                       <div style={{textAlign:"center",padding:"60px 24px",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>
                         <svg width="32" height="32" viewBox="0 0 14 14" fill="none" style={{color:"#C5C3BE",marginBottom:10}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
-                        <div style={{fontSize:14,color:"#6B6B72"}}>Aucune relance programmée</div>
-                        <div style={{fontSize:12,marginTop:4}}>Ouvrez un événement et cliquez sur "Relance date"</div>
+                        <div style={{fontSize:14,color:"#6B6B72"}}>Aucune relance programmÃ©e</div>
+                        <div style={{fontSize:12,marginTop:4}}>Ouvrez un Ã©vÃ©nement et cliquez sur "Relance date"</div>
                       </div>
                     ):(
                       relances.sort((a,b)=>a.date.localeCompare(b.date)).map(rel=>{
@@ -3978,13 +3979,13 @@ FORMAT
                 ):resas.length===0?(
                   <div style={{textAlign:"center",padding:"80px 24px",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>
                     <svg width="40" height="40" viewBox="0 0 14 14" fill="none" style={{color:"#C5C3BE",marginBottom:12}}><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1"/><path d="M1.5 5.5h11" stroke="currentColor" strokeWidth="1"/></svg>
-                    <div style={{fontSize:14,color:"#6B6B72"}}>Aucune demande de réservation</div>
-                    <div style={{fontSize:12,marginTop:4}}>Les demandes détectées dans vos mails apparaîtront ici.</div>
+                    <div style={{fontSize:14,color:"#6B6B72"}}>Aucune demande de rÃ©servation</div>
+                    <div style={{fontSize:12,marginTop:4}}>Les demandes dÃ©tectÃ©es dans vos mails apparaÃ®tront ici.</div>
                   </div>
                 ):searchEvt&&filteredResas.length===0?(
                   <div style={{textAlign:"center",padding:"60px 24px",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>
                     <svg width="32" height="32" viewBox="0 0 14 14" fill="none" style={{color:"#C5C3BE",marginBottom:10}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1"/><path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
-                    <div style={{fontSize:14,color:"#6B6B72"}}>Aucun résultat pour "{searchEvt}"</div>
+                    <div style={{fontSize:14,color:"#6B6B72"}}>Aucun rÃ©sultat pour "{searchEvt}"</div>
                     <button onClick={()=>setSearchEvt("")} style={{marginTop:12,background:"none",border:"none",color:"#B8924F",fontSize:12,cursor:"pointer",fontWeight:500,fontFamily:"'Geist','system-ui',sans-serif"}}>Effacer la recherche</button>
                   </div>
                 ):eventsGroupBy==="urgency"?(()=>{
@@ -4015,10 +4016,10 @@ FORMAT
                         {grp.enCours.map(r=><EventCard key={r.id} r={r}/>)}
                       </div>}
                       {grp.confirmees.length>0&&<div style={{marginBottom:26}}>
-                        <GroupHead color="#3F5B32" title="Confirmées" count={grp.confirmees.length}/>
+                        <GroupHead color="#3F5B32" title="ConfirmÃ©es" count={grp.confirmees.length}/>
                         {grp.confirmees.map(r=><EventCard key={r.id} r={r}/>)}
                       </div>}
-                      {filteredResas.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13}}>Aucun événement avec ce filtre</div>}
+                      {filteredResas.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13}}>Aucun Ã©vÃ©nement avec ce filtre</div>}
                     </>
                   );
                 })():(() => {
@@ -4028,7 +4029,7 @@ FORMAT
                     return (
                       <>
                         <GroupHead color="#C5C3BE" title="Sans statut" count={group.length}/>
-                        {group.length===0?<div style={{textAlign:"center",padding:"60px 0",color:"#A5A4A0",fontSize:13,fontFamily:"'Geist','system-ui',sans-serif"}}>Aucun événement sans statut</div>:group.map(r=><EventCard key={r.id} r={r}/>)}
+                        {group.length===0?<div style={{textAlign:"center",padding:"60px 0",color:"#A5A4A0",fontSize:13,fontFamily:"'Geist','system-ui',sans-serif"}}>Aucun Ã©vÃ©nement sans statut</div>:group.map(r=><EventCard key={r.id} r={r}/>)}
                       </>
                     );
                   }
@@ -4053,22 +4054,22 @@ FORMAT
               </div>
             </div>
 
-            {/* Panel détail réservation (général) — ouvert comme modale via selResaGeneral */}
+            {/* Panel dÃ©tail rÃ©servation (gÃ©nÃ©ral) â ouvert comme modale via selResaGeneral */}
           </div>
           );
         })()}
 
-        {/* ══ MAILS ══ */}
+        {/* ââ MAILS ââ */}
         {view==="mails" && (
           <>
-            {/* Sidebar catégories mails — collapsible */}
+            {/* Sidebar catÃ©gories mails â collapsible */}
             <div style={{width:subCollapsed?44:240,background:"#FAFAF7",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid #EBEAE5",transition:"width .2s ease",overflow:"hidden"}}>
               {/* Barre de progression synchronisation */}
               {!subCollapsed&&syncStatus==="running"&&(
                 <div style={{padding:"6px 10px",background:"rgba(184,146,79,0.08)",borderBottom:"1px solid #EBEAE5",flexShrink:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
                     <Spin s={9}/>
-                    <span style={{fontSize:9,color:"#B8924F",letterSpacing:"0.06em",fontFamily:"'Geist','system-ui',sans-serif"}}>Synchronisation…</span>
+                    <span style={{fontSize:9,color:"#B8924F",letterSpacing:"0.06em",fontFamily:"'Geist','system-ui',sans-serif"}}>Synchronisationâ¦</span>
                   </div>
                   <div style={{height:2,background:"#EBEAE5",borderRadius:1,overflow:"hidden"}}>
                     <div style={{height:"100%",background:"#B8924F",borderRadius:1,width:syncProgress.total>0?`${Math.min(100,syncProgress.synced/syncProgress.total*100)}%`:"30%",transition:"width .5s ease"}}/>
@@ -4078,33 +4079,33 @@ FORMAT
               )}
               {!subCollapsed&&syncStatus==="done"&&(
                 <div style={{padding:"4px 10px",borderBottom:"1px solid #EBEAE5",flexShrink:0,display:"flex",alignItems:"center",gap:4}}>
-                  <span style={{fontSize:9,color:"#059669",fontFamily:"'Geist','system-ui',sans-serif"}}>✓ Synchronisé</span>
+                  <span style={{fontSize:9,color:"#059669",fontFamily:"'Geist','system-ui',sans-serif"}}>â SynchronisÃ©</span>
                   {syncLastDate&&<span style={{fontSize:8,color:"#6B6E7E"}}>{new Date(syncLastDate).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>}
                 </div>
               )}
               <div style={{padding:subCollapsed?"10px 6px":"10px 10px 8px",display:"flex",alignItems:"center",justifyContent:subCollapsed?"center":"space-between",flexShrink:0,gap:6}}>
                 {!subCollapsed&&<>
-                  <button onClick={()=>{setShowCompose(true);setComposeTo("");setComposeSubject("");setComposeBody(`\n\n--\nCordialement,\nL'équipe ${nomEtab}`);}} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
-                    ✏ Nouveau mail
+                  <button onClick={()=>{setShowCompose(true);setComposeTo("");setComposeSubject("");setComposeBody(`\n\n--\nCordialement,\nL'Ã©quipe ${nomEtab}`);}} style={{...gold,flex:1,fontSize:10,padding:"7px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:5,letterSpacing:"0.06em"}}>
+                    â Nouveau mail
                   </button>
                   <button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:28,height:28,borderRadius:6,border:"1px solid rgba(209,196,178,0.2)",background:"rgba(201,168,118,0.08)",color:"#C9A876",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    {loadingMail?<Spin s={10}/>:"↺"}
+                    {loadingMail?<Spin s={10}/>:"âº"}
                   </button>
                 </>}
-                {subCollapsed&&<button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(201,168,118,0.1)",color:"#C9A876",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>{loadingMail?<Spin s={10}/>:"↺"}</button>}
-                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"Réduire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"#EBEAE5",color:"#6B6E7E",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  {subCollapsed?"›":"‹"}
+                {subCollapsed&&<button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(201,168,118,0.1)",color:"#C9A876",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>{loadingMail?<Spin s={10}/>:"âº"}</button>}
+                <button onClick={()=>setSubCollapsed(v=>!v)} title={subCollapsed?"Agrandir":"RÃ©duire"} style={{width:22,height:22,borderRadius:5,border:"none",background:"#EBEAE5",color:"#6B6E7E",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  {subCollapsed?"âº":"â¹"}
                 </button>
               </div>
               {subCollapsed?(
                 <div style={{padding:"4px 6px",display:"flex",flexDirection:"column",gap:4,alignItems:"center",height:"100%"}}>
-                  <button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(201,168,118,0.1)",color:"#C9A876",cursor:"pointer",fontSize:13}}>↺</button>
-                  {/* Radar ARCHANGE — en premier */}
+                  <button onClick={()=>loadEmailsFromApi(true)} title="Actualiser" style={{width:32,height:32,borderRadius:8,border:"none",background:"rgba(201,168,118,0.1)",color:"#C9A876",cursor:"pointer",fontSize:13}}>âº</button>
+                  {/* Radar ARCHANGE â en premier */}
                   <button onClick={()=>setMailFilter("priorites")} title="Radar ARCHANGE" style={{width:32,height:32,borderRadius:8,border:`1px solid ${mailFilter==="priorites"?"rgba(184,146,79,0.5)":"rgba(184,146,79,0.2)"}`,background:mailFilter==="priorites"?"rgba(184,146,79,0.15)":"rgba(184,146,79,0.06)",cursor:"pointer",fontSize:12,color:"#B8924F",fontWeight:700,position:"relative"}}>
-                    ◆
+                    â
                     {prioritesArchange.length>0&&<span style={{position:"absolute",top:1,right:1,width:8,height:8,borderRadius:"50%",background:"#A84B45"}}/>}
                   </button>
-                  <button onClick={()=>{setMailFilter("all");setShowArchived(false);setTagFilter(null);setSearch("");}} title="Tous les mails" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="all"&&!showArchived&&!tagFilter?"rgba(201,168,118,0.1)":"transparent",cursor:"pointer",fontSize:14}}>📬</button>
+                  <button onClick={()=>{setMailFilter("all");setShowArchived(false);setTagFilter(null);setSearch("");}} title="Tous les mails" style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter==="all"&&!showArchived&&!tagFilter?"rgba(201,168,118,0.1)":"transparent",cursor:"pointer",fontSize:14}}>ð¬</button>
                   {MAIL_CATS.map(c=>(
                     <button key={c.id} onClick={()=>setMailFilter(c.id)} title={c.label} style={{width:32,height:32,borderRadius:8,border:"none",background:mailFilter===c.id?"rgba(201,168,118,0.1)":"transparent",cursor:"pointer",fontSize:14}}>
                       {c.icon}
@@ -4113,25 +4114,25 @@ FORMAT
                 </div>
               ):(
                 <div style={{padding:"10px 10px",flex:1,display:"flex",flexDirection:"column"}}>
-                  {/* Radar ARCHANGE — en premier, hero */}
+                  {/* Radar ARCHANGE â en premier, hero */}
                   <div style={{paddingBottom:10,marginBottom:8,borderBottom:"1px solid #EBEAE5"}}>
                     {analysing&&(
                       <div style={{display:"flex",alignItems:"center",gap:7,padding:"4px 11px",marginBottom:5}}>
                         <Spin s={10}/>
-                        <span style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Geist','system-ui',sans-serif"}}>Analyse {analysingProgress}…</span>
+                        <span style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Geist','system-ui',sans-serif"}}>Analyse {analysingProgress}â¦</span>
                       </div>
                     )}
                     <button onClick={()=>setMailFilter("priorites")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"11px 12px",borderRadius:10,border:`1px solid ${mailFilter==="priorites"?"rgba(184,146,79,0.45)":"rgba(184,146,79,0.25)"}`,background:mailFilter==="priorites"?"linear-gradient(180deg, rgba(184,146,79,0.14) 0%, rgba(184,146,79,0.08) 100%)":"linear-gradient(180deg, rgba(184,146,79,0.08) 0%, rgba(184,146,79,0.04) 100%)",textAlign:"left",cursor:"pointer",transition:"all .15s ease",position:"relative",overflow:"hidden",fontFamily:"'Geist','system-ui',sans-serif"}}>
                       <span style={{position:"absolute",left:0,top:0,bottom:0,width:2,background:"#B8924F"}}/>
-                      <span style={{fontSize:14,color:"#B8924F",lineHeight:1,flexShrink:0}}>✦</span>
+                      <span style={{fontSize:14,color:"#B8924F",lineHeight:1,flexShrink:0}}>â¦</span>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontWeight:600,fontSize:12.5,color:"#B8924F",letterSpacing:"-0.005em"}}>Radar ARCHANGE</div>
-                        <div style={{fontSize:11,color:"#6B6E7E",marginTop:1,fontVariantNumeric:"tabular-nums"}}>{analysing?"Analyse en cours…":`${prioritesArchange.length} demande${prioritesArchange.length!==1?"s":""}`}</div>
+                        <div style={{fontSize:11,color:"#6B6E7E",marginTop:1,fontVariantNumeric:"tabular-nums"}}>{analysing?"Analyse en coursâ¦":`${prioritesArchange.length} demande${prioritesArchange.length!==1?"s":""}`}</div>
                       </div>
                       {prioritesArchange.length>0&&<span style={{fontSize:11,background:"#A84B45",color:"#fff",padding:"2px 8px",borderRadius:100,fontWeight:600,flexShrink:0,fontVariantNumeric:"tabular-nums",minWidth:22,textAlign:"center"}}>{prioritesArchange.length}</span>}
                     </button>
                   </div>
-                  {/* Catégories standard */}
+                  {/* CatÃ©gories standard */}
                   {[
                     {id:"all", label:"Tous les mails", count:emails.filter(m=>m.unread&&!m.archived).length||null,
                       icon:<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="9" rx="1" stroke="currentColor" strokeWidth="1.1"/><path d="M1 4l6 4.5L13 4" stroke="currentColor" strokeWidth="1.1"/></svg>},
@@ -4152,18 +4153,18 @@ FORMAT
                       <span style={{fontSize:11,color:isActive?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{cnt||""}</span>
                     </button>
                   );})}
-                  {/* Séparateur */}
+                  {/* SÃ©parateur */}
                   <div style={{height:1,background:"#EBEAE5",margin:"10px 4px"}}/>
-                  {/* Archivés */}
+                  {/* ArchivÃ©s */}
                   <button onClick={()=>setShowArchived(v=>!v)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:showArchived?"#F5F4F0":"transparent",color:showArchived?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:showArchived?500:400,transition:"background .12s ease"}}>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{color:showArchived?"#1A1A1E":"#6B6E7E"}}><rect x="1" y="2.5" width="12" height="3" rx="0.8" stroke="currentColor" strokeWidth="1"/><rect x="2" y="5.5" width="10" height="7" rx="0.8" stroke="currentColor" strokeWidth="1"/></svg>
-                    <span style={{flex:1}}>Archivés</span>
+                    <span style={{flex:1}}>ArchivÃ©s</span>
                     <span style={{fontSize:11,color:showArchived?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{emails.filter(m=>m.archived).length||""}</span>
                   </button>
-                  {/* Envoyés */}
+                  {/* EnvoyÃ©s */}
                   <button onClick={()=>{setMailFilter("envoyes");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="envoyes"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="envoyes"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="envoyes"&&!showArchived?500:400,transition:"background .12s ease"}}>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{color:mailFilter==="envoyes"&&!showArchived?"#1A1A1E":"#6B6E7E"}}><path d="M1 7L13 1L9.5 13L7 8L1 7z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-                    <span style={{flex:1}}>Envoyés</span>
+                    <span style={{flex:1}}>EnvoyÃ©s</span>
                   </button>
                   {/* Brouillons */}
                   <button onClick={()=>{setMailFilter("brouillons");setShowArchived(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="brouillons"&&!showArchived?"#F5F4F0":"transparent",color:mailFilter==="brouillons"&&!showArchived?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="brouillons"&&!showArchived?500:400,transition:"background .12s ease"}}>
@@ -4171,15 +4172,15 @@ FORMAT
                     <span style={{flex:1}}>Brouillons</span>
                     <span style={{fontSize:11,color:localDrafts.length>0?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{localDrafts.length||""}</span>
                   </button>
-                  {/* Reportés — Point 4 */}
+                  {/* ReportÃ©s â Point 4 */}
                   {(()=>{const reportedCount=emails.filter(m=>m.snoozedUntil&&m.snoozedUntil>new Date().toISOString()&&!m.archived).length;return (
                     <button onClick={()=>{setMailFilter("reported");setShowArchived(false);setTagFilter(null);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 11px",borderRadius:8,border:"none",background:mailFilter==="reported"?"#F5F4F0":"transparent",color:mailFilter==="reported"?"#1A1A1E":"#4A4A52",fontSize:12.5,textAlign:"left",cursor:"pointer",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif",fontWeight:mailFilter==="reported"?500:400,transition:"background .12s ease"}}>
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{color:mailFilter==="reported"?"#1A1A1E":"#6B6E7E"}}><circle cx="7" cy="7.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 5v3l2 1M4 2.5L2 4M10 2.5L12 4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                      <span style={{flex:1}}>Reportés</span>
+                      <span style={{flex:1}}>ReportÃ©s</span>
                       {reportedCount>0&&<span style={{fontSize:11,color:mailFilter==="reported"?"#B8924F":"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{reportedCount}</span>}
                     </button>
                   );})()}
-                  {/* 3 — Filtres par tag personnalisé */}
+                  {/* 3 â Filtres par tag personnalisÃ© */}
                   {customTags.length>0&&<>
                     <div style={{height:1,background:"#EBEAE5",margin:"10px 4px"}}/>
                     <div style={{fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:"#A5A4A0",padding:"10px 11px 6px",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>Tags</div>
@@ -4204,11 +4205,11 @@ FORMAT
               )}
             </div>
 
-            {/* ══ VUE RADAR ARCHANGE ══ */}
+            {/* ââ VUE RADAR ARCHANGE ââ */}
             {mailFilter==="priorites" && (
               <div style={{flex:sel?undefined:1,width:sel?560:undefined,display:"flex",overflow:"hidden",flexShrink:0}}>
 
-                {/* ── Panel gauche — liste des cartes ── */}
+                {/* ââ Panel gauche â liste des cartes ââ */}
                 <div style={{flex:1,overflowY:"auto",background:"#F5F4F0",padding:"20px 20px",borderRight:sel?"1px solid #EBEAE5":"none"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                     <div>
@@ -4219,15 +4220,15 @@ FORMAT
 
                   {prioritesArchange.length===0?(
                     <div style={{textAlign:"center",padding:"60px 24px",color:"#6B6E7E"}}>
-                      <div style={{fontSize:36,marginBottom:12}}>◆</div>
+                      <div style={{fontSize:36,marginBottom:12}}>â</div>
                       <div style={{fontSize:14,color:"#1A1A1E",marginBottom:6}}>Aucune demande en attente</div>
-                      <div style={{fontSize:12}}>Les demandes de réservation détectées par ARCHANGE apparaîtront ici</div>
+                      <div style={{fontSize:12}}>Les demandes de rÃ©servation dÃ©tectÃ©es par ARCHANGE apparaÃ®tront ici</div>
                     </div>
                   ):(()=>{
                     let lastType: string|null = null;
                     const sectionLabels: Record<string,string> = {
                       rouge: "Urgences",
-                      or: "Leads confirmés",
+                      or: "Leads confirmÃ©s",
                       neutre: "Nouvelles demandes",
                     };
                     return prioritesArchange.map((item, idx) => {
@@ -4247,7 +4248,7 @@ FORMAT
                       const avBg = isRouge ? "#F7C1C1" : isOr ? "#FAC775" : "#E5E2DD";
                       const avCol = isRouge ? "#791F1F" : isOr ? "#412402" : "#6B6B72";
 
-                      const nom = ext.nom || m.from || "—";
+                      const nom = ext.nom || m.from || "â";
                       const initiales = nom.split(" ").map((w:string)=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase() || "?";
                       const entreprise = ext.entreprise || resa?.entreprise;
                       const telephone = ext.telephone || resa?.telephone || null;
@@ -4261,21 +4262,21 @@ FORMAT
 
                       const hasDraft = drafted.has(m.id);
                       const hasResa = !!emailResaLinks[m.id];
-                      const statutLabel = hasResa ? "Réservation créée" : hasDraft ? "Réponse rédigée" : "Nouveau";
+                      const statutLabel = hasResa ? "RÃ©servation crÃ©Ã©e" : hasDraft ? "RÃ©ponse rÃ©digÃ©e" : "Nouveau";
                       const statutBg = hasResa ? "#D1FAE5" : hasDraft ? "#DBEAFE" : "#F1EFE8";
                       const statutCol = hasResa ? "#3F5B32" : hasDraft ? "#1D4ED8" : "#5F5E5A";
 
                       const today = new Date(); today.setHours(0,0,0,0);
-                      let badgeLabel = isRouge ? (dateStr && new Date(dateStr+"T12:00:00") < new Date(today.getTime()+2*86400000) ? "⚡ Demain" : "⚡ Urgent") : isOr ? `💰 ${budget}` : "Nouveau";
-                      if(isRouge && (m.flags||[]).includes("flag")) badgeLabel = "⚡ Relance";
+                      let badgeLabel = isRouge ? (dateStr && new Date(dateStr+"T12:00:00") < new Date(today.getTime()+2*86400000) ? "â¡ Demain" : "â¡ Urgent") : isOr ? `ð° ${budget}` : "Nouveau";
+                      if(isRouge && (m.flags||[]).includes("flag")) badgeLabel = "â¡ Relance";
 
                       const cells: [string,string][] = [
-                        ["Type", type_evt||"—"],
-                        ["Date", dateStr ? fmtDateFr(dateStr) : "—"],
-                        ["Personnes", nbPers ? `${nbPers} pers.` : "—"],
-                        ["Budget", budget||"—"],
-                        ...(heureDebut ? [["Horaires", heureDebut+(heureFin?` → ${heureFin}`:"")]] : [["Horaires","—"]]),
-                        ...(espaceNom ? [["Espace", espaceNom]] : [["Espace","—"]]),
+                        ["Type", type_evt||"â"],
+                        ["Date", dateStr ? fmtDateFr(dateStr) : "â"],
+                        ["Personnes", nbPers ? `${nbPers} pers.` : "â"],
+                        ["Budget", budget||"â"],
+                        ...(heureDebut ? [["Horaires", heureDebut+(heureFin?` â ${heureFin}`:"")]] : [["Horaires","â"]]),
+                        ...(espaceNom ? [["Espace", espaceNom]] : [["Espace","â"]]),
                       ];
 
                       return (
@@ -4283,7 +4284,7 @@ FORMAT
                           {showSection&&<div style={{fontSize:10,fontWeight:500,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",margin:idx===0?"0 0 10px":"20px 0 10px"}}>{sectionLabels[type]}</div>}
                           <div
                             onClick={()=>{
-                              // Fix 8 — Ouvrir le lecteur complet à droite du Radar (split view)
+                              // Fix 8 â Ouvrir le lecteur complet Ã  droite du Radar (split view)
                               // handleSel charge le corps et marque lu, sans naviguer ailleurs
                               setMailOrigine({type:'radar', resaId: resa?.id||'', nom: 'Radar ARCHANGE'});
                               setRadarReplyModal(null); setRadarReplyText("");
@@ -4293,14 +4294,14 @@ FORMAT
                             onMouseEnter={()=>setRadarHoverId(m.id)}
                             onMouseLeave={()=>setRadarHoverId(null)}>
 
-                            {/* Header — nom, email, téléphone */}
+                            {/* Header â nom, email, tÃ©lÃ©phone */}
                             <div style={{padding:"10px 14px",background:headerBg,display:"flex",alignItems:"center",gap:10}}>
                               <div style={{width:34,height:34,borderRadius:"50%",background:avBg,color:avCol,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,flexShrink:0}}>{initiales}</div>
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:13,fontWeight:600,color:nameCol,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nom}{entreprise?` — ${entreprise}`:""}</div>
+                                <div style={{fontSize:13,fontWeight:600,color:nameCol,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nom}{entreprise?` â ${entreprise}`:""}</div>
                                 <div style={{display:"flex",alignItems:"center",gap:8,marginTop:2,flexWrap:"wrap"}}>
                                   <span style={{fontSize:11,color:contactCol}}>{m.fromEmail}</span>
-                                  {telephone&&<span style={{fontSize:11,color:contactCol,display:"flex",alignItems:"center",gap:3}}>· 📞 {telephone}</span>}
+                                  {telephone&&<span style={{fontSize:11,color:contactCol,display:"flex",alignItems:"center",gap:3}}>Â· ð {telephone}</span>}
                                 </div>
                               </div>
                               <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
@@ -4314,7 +4315,7 @@ FORMAT
                               {cells.map(([lbl,val],i)=>(
                                 <div key={lbl} style={{padding:"8px 14px",borderBottom:i<3?"0.5px solid #EBEAE5":"none",borderRight:(i+1)%3!==0?"0.5px solid #EBEAE5":"none"}}>
                                   <div style={{fontSize:10,color:"#6B6E7E",marginBottom:2,fontFamily:"'Geist','system-ui',sans-serif"}}>{lbl}</div>
-                                  <div style={{fontSize:12,fontWeight:val==="—"?400:500,color:val==="—"?"#C5C3BE":"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif"}}>{val}</div>
+                                  <div style={{fontSize:12,fontWeight:val==="â"?400:500,color:val==="â"?"#C5C3BE":"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif"}}>{val}</div>
                                 </div>
                               ))}
                             </div>
@@ -4331,17 +4332,17 @@ FORMAT
                                 Ajouter au planning
                               </button>
                               <button onClick={e=>{e.stopPropagation();
-                                // Ouvrir le lecteur complet (panel droit) plutôt qu'une modale séparée
+                                // Ouvrir le lecteur complet (panel droit) plutÃ´t qu'une modale sÃ©parÃ©e
                                 // genererReponse sera accessible depuis le lecteur avec tout le contexte
                                 setMailOrigine({type:'radar', resaId: resa?.id||'', nom: 'Radar ARCHANGE'});
                                 handleSel(m);
                                 setRadarSelEmail(m);
                               }} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:9,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease"}}>
-                                <span style={{color:"#B8924F",fontSize:13,lineHeight:1}}>✦</span>
-                                Générer réponse
+                                <span style={{color:"#B8924F",fontSize:13,lineHeight:1}}>â¦</span>
+                                GÃ©nÃ©rer rÃ©ponse
                               </button>
-                              <button onClick={e=>{e.stopPropagation(); saveRadarTraites(new Set([...radarTraites,m.id])); toast("Demande archivée du Radar");}} style={{marginLeft:"auto",padding:"7px 11px",borderRadius:9,border:"none",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease"}} title="Archiver cette carte">
-                                ✓ Traité
+                              <button onClick={e=>{e.stopPropagation(); saveRadarTraites(new Set([...radarTraites,m.id])); toast("Demande archivÃ©e du Radar");}} style={{marginLeft:"auto",padding:"7px 11px",borderRadius:9,border:"none",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease"}} title="Archiver cette carte">
+                                â TraitÃ©
                               </button>
                             </div>
                           </div>
@@ -4351,8 +4352,8 @@ FORMAT
                   })()}
                 </div>
 
-                {/* ── Panel droit — lecteur email (même rendu que la boîte mail, via sel) ── */}
-                {/* Lecteur standard partagé — affiché via la zone ci-dessous */}
+                {/* ââ Panel droit â lecteur email (mÃªme rendu que la boÃ®te mail, via sel) ââ */}
+                {/* Lecteur standard partagÃ© â affichÃ© via la zone ci-dessous */}
               </div>
             )}
 
@@ -4360,17 +4361,17 @@ FORMAT
             {mailFilter!=="priorites" && (
             <div style={{width:330,borderRight:"1px solid #EBEAE5",background:"#F5F4F0",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
 
-              {/* ── Vues Envoyés / Brouillons ── */}
+              {/* ââ Vues EnvoyÃ©s / Brouillons ââ */}
               {(mailFilter==="envoyes"||mailFilter==="brouillons")&&(
                 <div style={{flex:1,overflowY:"auto"}}>
                   <div style={{padding:"16px 18px 10px",borderBottom:"1px solid #EBEAE5"}}>
                     <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:22,fontWeight:500,color:"#1A1A1E"}}>
-                      {mailFilter==="envoyes"?"Envoyés":"Brouillons"}
+                      {mailFilter==="envoyes"?"EnvoyÃ©s":"Brouillons"}
                     </div>
                   </div>
                   {(mailFilter==="envoyes"?sentList:draftList).length===0&&(
                     <div style={{padding:"40px 16px",textAlign:"center",color:"#6B6E7E",fontSize:12}}>
-                      {mailFilter==="envoyes"?"Aucun email envoyé depuis ARCHANGE":"Aucun brouillon sauvegardé"}
+                      {mailFilter==="envoyes"?"Aucun email envoyÃ© depuis ARCHANGE":"Aucun brouillon sauvegardÃ©"}
                     </div>
                   )}
                   {(mailFilter==="envoyes"?sentList:draftList).map(em=>(
@@ -4382,7 +4383,7 @@ FORMAT
                       <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,fontWeight:500,color:"#1A1A1E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}}>{em.subject}</div>
                       <div style={{fontSize:11,color:"#6B6E7E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{em.snippet}</div>
                       {mailFilter==="brouillons"&&(
-                        <button onClick={e=>{e.stopPropagation();const d=em as any;setComposeTo(d.to);setComposeSubject(d.subject);setComposeBody(d.body);setShowCompose(true);setLocalDrafts(prev=>prev.filter(x=>x.id!==d.id));}} style={{marginTop:6,fontSize:10,padding:"3px 10px",borderRadius:2,border:"1px solid #B8924F",background:"transparent",color:"#B8924F",cursor:"pointer",letterSpacing:"0.04em"}}>Reprendre →</button>
+                        <button onClick={e=>{e.stopPropagation();const d=em as any;setComposeTo(d.to);setComposeSubject(d.subject);setComposeBody(d.body);setShowCompose(true);setLocalDrafts(prev=>prev.filter(x=>x.id!==d.id));}} style={{marginTop:6,fontSize:10,padding:"3px 10px",borderRadius:2,border:"1px solid #B8924F",background:"transparent",color:"#B8924F",cursor:"pointer",letterSpacing:"0.04em"}}>Reprendre â</button>
                       )}
                     </div>
                   ))}
@@ -4391,13 +4392,13 @@ FORMAT
 
               {/* Vue standard */}
               {mailFilter!=="envoyes"&&mailFilter!=="brouillons"&&<>
-              {/* Header liste — v3 Apple Mail 2026 */}
+              {/* Header liste â v3 Apple Mail 2026 */}
               <div style={{borderBottom:"1px solid #EBEAE5",flexShrink:0,background:"#FFFFFF"}}>
                 {/* 1. Barre de recherche */}
                 <div style={{padding:"12px 16px 10px",position:"relative"}}>
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:28,top:"50%",transform:"translateY(-50%)",color:"#A5A4A0",pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                  <input value={search} onChange={e=>{setSearch(e.target.value);setDeepResults([]);}} placeholder="Rechercher un mail…" style={{width:"100%",padding:"8px 32px 8px 34px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FAFAF7",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,color:"#1A1A1E",outline:"none",transition:"all .12s ease"}} onFocus={e=>{e.currentTarget.style.borderColor="#B8924F";e.currentTarget.style.background="#FFFFFF";}} onBlur={e=>{e.currentTarget.style.borderColor="#EBEAE5";e.currentTarget.style.background="#FAFAF7";}}/>
-                  {search&&<button onClick={()=>{setSearch("");setDeepResults([]);}} title="Effacer" style={{position:"absolute",right:22,top:"50%",transform:"translateY(-50%)",width:20,height:20,background:"transparent",border:"none",color:"#A5A4A0",cursor:"pointer",borderRadius:4,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:14,lineHeight:1}} onMouseEnter={e=>{e.currentTarget.style.background="#EBEAE5";e.currentTarget.style.color="#1A1A1E";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color="#A5A4A0";}}>×</button>}
+                  <input value={search} onChange={e=>{setSearch(e.target.value);setDeepResults([]);}} placeholder="Rechercher un mailâ¦" style={{width:"100%",padding:"8px 32px 8px 34px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FAFAF7",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,color:"#1A1A1E",outline:"none",transition:"all .12s ease"}} onFocus={e=>{e.currentTarget.style.borderColor="#B8924F";e.currentTarget.style.background="#FFFFFF";}} onBlur={e=>{e.currentTarget.style.borderColor="#EBEAE5";e.currentTarget.style.background="#FAFAF7";}}/>
+                  {search&&<button onClick={()=>{setSearch("");setDeepResults([]);}} title="Effacer" style={{position:"absolute",right:22,top:"50%",transform:"translateY(-50%)",width:20,height:20,background:"transparent",border:"none",color:"#A5A4A0",cursor:"pointer",borderRadius:4,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:14,lineHeight:1}} onMouseEnter={e=>{e.currentTarget.style.background="#EBEAE5";e.currentTarget.style.color="#1A1A1E";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color="#A5A4A0";}}>Ã</button>}
                 </div>
                 {/* Recherche approfondie Gmail */}
                 {search&&filtered.length===0&&deepResults.length===0&&!deepSearching&&(
@@ -4411,20 +4412,20 @@ FORMAT
                 {deepSearching&&(
                   <div style={{padding:"0 16px 8px",display:"flex",alignItems:"center",gap:8}}>
                     <Spin s={11}/>
-                    <span style={{fontSize:11.5,color:"#6B6B72",fontFamily:"'Geist','system-ui',sans-serif"}}>Recherche dans tous vos emails…</span>
+                    <span style={{fontSize:11.5,color:"#6B6B72",fontFamily:"'Geist','system-ui',sans-serif"}}>Recherche dans tous vos emailsâ¦</span>
                   </div>
                 )}
-                {/* 2. Ligne de contexte : catégorie + compteur */}
+                {/* 2. Ligne de contexte : catÃ©gorie + compteur */}
                 <div style={{padding:"2px 18px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
                   <div style={{display:"flex",alignItems:"baseline",gap:10,minWidth:0}}>
                     <h2 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,letterSpacing:"-0.01em",color:"#1A1A1E",margin:0,whiteSpace:"nowrap"}}>
                       {(()=>{
                         if(showArchived) return "Archives";
-                        if(mailFilter==="reported") return "Reportés";
+                        if(mailFilter==="reported") return "ReportÃ©s";
                         if(mailFilter==="nonlus") return "Non lus";
-                        if(mailFilter==="atraiter") return "À traiter";
+                        if(mailFilter==="atraiter") return "Ã traiter";
                         if(mailFilter==="star") return "Favoris";
-                        if(mailFilter==="flag") return "Flaggés";
+                        if(mailFilter==="flag") return "FlaggÃ©s";
                         if(mailFilter==="priorites") return "Radar ARCHANGE";
                         if(tagFilter){const t=customTags.find(x=>x.id===tagFilter);return t?.label||"Tag";}
                         return "Tous les mails";
@@ -4445,22 +4446,22 @@ FORMAT
                 {/* 3. Barre tri + actions */}
                 <div style={{padding:"0 16px 10px",display:"flex",alignItems:"center",gap:6}}>
                   <button onClick={selectedIds.size>0?clearSelection:selectAll} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:`1px solid ${selectedIds.size>0?"#B8924F":"#EBEAE5"}`,background:selectedIds.size>0?"#F4EEDF":"#FFFFFF",color:selectedIds.size>0?"#B8924F":"#6B6B72",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,fontVariantNumeric:"tabular-nums"}}>
-                    {selectedIds.size>0?`${selectedIds.size} sélectionné${selectedIds.size>1?"s":""}`:"Tout sélectionner"}
+                    {selectedIds.size>0?`${selectedIds.size} sÃ©lectionnÃ©${selectedIds.size>1?"s":""}`:"Tout sÃ©lectionner"}
                   </button>
                   <div style={{flex:1}}/>
                   <select value={sortOrder} onChange={e=>setSortOrder(e.target.value as any)} style={{fontSize:11.5,border:"1px solid #EBEAE5",borderRadius:7,padding:"5px 26px 5px 10px",background:"#FFFFFF url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'%3E%3Cpath d='M2 3.5L5 6.5L8 3.5' stroke='%236B6B72' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\") no-repeat right 8px center",color:"#1A1A1E",cursor:"pointer",appearance:"none",WebkitAppearance:"none",fontFamily:"'Geist','system-ui',sans-serif",outline:"none",fontWeight:500}}>
-                    <option value="date_desc">Plus récent</option>
+                    <option value="date_desc">Plus rÃ©cent</option>
                     <option value="date_asc">Plus ancien</option>
-                    <option value="from">Expéditeur (A→Z)</option>
-                    <option value="subject">Objet (A→Z)</option>
+                    <option value="from">ExpÃ©diteur (AâZ)</option>
+                    <option value="subject">Objet (AâZ)</option>
                   </select>
                 </div>
-                {/* Actions groupées (si sélection) */}
+                {/* Actions groupÃ©es (si sÃ©lection) */}
                 {selectedIds.size>0&&(
                   <div style={{display:"flex",gap:4,padding:"0 16px 10px",flexWrap:"wrap"}}>
                     <button onClick={bulkMarkRead} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.3"/></svg>Marquer lu</button>
                     <button onClick={bulkMarkUnread} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" fill="currentColor"/></svg>Non lu</button>
-                    <button onClick={bulkATraiter} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><rect x="2.5" y="1.5" width="9" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M5 5h4M5 7.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>À traiter</button>
+                    <button onClick={bulkATraiter} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><rect x="2.5" y="1.5" width="9" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M5 5h4M5 7.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>Ã traiter</button>
                     <button onClick={bulkArchive} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="3" rx="0.7" stroke="currentColor" strokeWidth="1.2"/><rect x="2.5" y="5.5" width="9" height="7" rx="0.7" stroke="currentColor" strokeWidth="1.2"/></svg>Archiver</button>
                     <button onClick={bulkDelete} style={{fontSize:11.5,padding:"5px 10px",borderRadius:7,border:"1px solid rgba(168,75,69,0.3)",background:"#FFFFFF",color:"#A84B45",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><svg width="10" height="10" viewBox="0 0 14 14" fill="none"><path d="M2.5 4h9M5.5 4V2.5h3V4M4 4l0.5 8a1 1 0 001 1h3a1 1 0 001-1L10 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>Supprimer</button>
                   </div>
@@ -4469,22 +4470,22 @@ FORMAT
               <div ref={mailListRef} style={{flex:1,overflowY:"auto"}}>
                 {filtered.length===0&&(
                   <div style={{padding:"32px 16px",textAlign:"center",color:"#6B6E7E"}}>
-                    <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:32,marginBottom:8,opacity:.3}}>✦</div>
+                    <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:32,marginBottom:8,opacity:.3}}>â¦</div>
                     <div style={{fontSize:12,fontWeight:500,marginBottom:4}}>
-                      {mailFilter==="nonlus"?"Aucun email non lu":mailFilter==="atraiter"?"Aucun email à traiter":mailFilter==="star"?"Aucun favori":mailFilter==="flag"?"Aucun email flaggé":search?"Aucun résultat":"Aucun email"}
+                      {mailFilter==="nonlus"?"Aucun email non lu":mailFilter==="atraiter"?"Aucun email Ã  traiter":mailFilter==="star"?"Aucun favori":mailFilter==="flag"?"Aucun email flaggÃ©":search?"Aucun rÃ©sultat":"Aucun email"}
                     </div>
                     {(mailFilter!=="all"||tagFilter)&&<button onClick={()=>{setMailFilter("all");setSearch("");setTagFilter(null);setShowArchived(false);}} style={{fontSize:11,color:"#B8924F",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Voir tous les mails</button>}
                   </div>
                 )}
                 {filtered.map(em=>{
-                  // Tags Céleste : statut IA + espace + état fonctionnel
+                  // Tags CÃ©leste : statut IA + espace + Ã©tat fonctionnel
                   const ext = repliesCache[em.id]?.extracted;
                   const isActive = sel?.id===em.id;
                   const isSelected = selectedIds.has(em.id);
-                  // Trouver le statut resa lié
+                  // Trouver le statut resa liÃ©
                   const linkedResa = resas.find(r=>emailResaLinks[em.id]===r.id);
                   const linkedStatut = linkedResa ? (statuts.find(s=>s.id===(linkedResa.statut||"nouveau"))||statuts[0]) : null;
-                  // Espace détecté
+                  // Espace dÃ©tectÃ©
                   const detectedEspace = ext?.espaceDetecte ? espacesDyn.find(e=>e.id===ext.espaceDetecte) : null;
 
                   return (
@@ -4493,13 +4494,13 @@ FORMAT
                       background:isSelected?"#EEF2FF":isActive?"#FAFAF7":"transparent",
                       boxShadow:isActive?"0 1px 2px rgba(15,15,20,0.05), 0 0 0 1px rgba(184,146,79,0.18)":"none",
                       transition:"background .12s ease, box-shadow .12s ease"}}>
-                    {/* Checkbox sélection */}
+                    {/* Checkbox sÃ©lection */}
                     <div className="mail-checkbox" onClick={e=>{e.stopPropagation();toggleSelect(em.id);}} style={{position:"absolute",top:14,left:8,width:16,height:16,borderRadius:4,border:`1.5px solid ${isSelected?"#7BA8C4":"#E0DED7"}`,background:isSelected?"#7BA8C4":"transparent",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,opacity:isSelected?1:0,transition:"opacity .1s",cursor:"pointer"}}>
-                      {isSelected&&<span style={{color:"#fff",fontSize:10,lineHeight:1}}>✓</span>}
+                      {isSelected&&<span style={{color:"#fff",fontSize:10,lineHeight:1}}>â</span>}
                     </div>
                     {/* Corps de la carte */}
                     <div onClick={()=>handleSel(em)} style={{padding:"14px 14px 12px 14px"}}>
-                      {/* Ligne 1 — expéditeur + date */}
+                      {/* Ligne 1 â expÃ©diteur + date */}
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3,gap:8}}>
                         <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
                           {em.unread&&<div style={{width:6,height:6,borderRadius:"50%",background:"#B8924F",flexShrink:0}}/>}
@@ -4507,11 +4508,11 @@ FORMAT
                         </div>
                         <span style={{fontSize:11,color:"#6B6E7E",flexShrink:0,fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>{em.date}</span>
                       </div>
-                      {/* Ligne 2 — objet en serif */}
+                      {/* Ligne 2 â objet en serif */}
                       <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14.5,fontWeight:em.unread?500:400,color:"#1A1A1E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:5,lineHeight:1.25,letterSpacing:"-0.01em"}}>{em.subject||"(sans objet)"}</div>
-                      {/* Ligne 3 — snippet */}
+                      {/* Ligne 3 â snippet */}
                       <div style={{fontSize:12,color:"#6B6E7E",overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:1.5,marginBottom:9}}>{em.snippet}</div>
-                      {/* Tags enrichis Céleste */}
+                      {/* Tags enrichis CÃ©leste */}
                       <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                         {/* Statut resa */}
                         {linkedStatut&&(
@@ -4520,7 +4521,7 @@ FORMAT
                             {linkedStatut.label}
                           </span>
                         )}
-                        {/* Espace détecté */}
+                        {/* Espace dÃ©tectÃ© */}
                         {detectedEspace&&(
                           <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 9px",borderRadius:100,fontSize:10,letterSpacing:"0.04em",textTransform:"uppercase",color:"#4A4A52",background:"#F5F4F0",border:"1px solid #EBEAE5",fontWeight:500}}>
                             <span style={{width:5,height:5,borderRadius:"50%",background:detectedEspace.color,flexShrink:0}}/>
@@ -4530,27 +4531,27 @@ FORMAT
                         {/* Personnes + type */}
                         {ext?.nombrePersonnes&&(
                           <span style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>
-                            <strong style={{fontWeight:500,color:"#1A1A1E"}}>{ext.nombrePersonnes} pers.</strong>{ext.typeEvenement?` · ${ext.typeEvenement}`:""}
+                            <strong style={{fontWeight:500,color:"#1A1A1E"}}>{ext.nombrePersonnes} pers.</strong>{ext.typeEvenement?` Â· ${ext.typeEvenement}`:""}
                           </span>
                         )}
                         {/* Flags fonctionnels */}
-                        {em.aTraiter&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:100,background:"rgba(184,146,79,0.1)",color:"#B8924F",border:"1px solid rgba(184,146,79,0.25)",letterSpacing:"0.05em",textTransform:"uppercase",fontWeight:600}}>À traiter</span>}
-                        {(em.flags||[]).includes("star")&&<span style={{fontSize:12,color:"#B8924F"}}>✦</span>}
-                        {em.snoozedUntil&&(()=>{const d=new Date(em.snoozedUntil);const label=d.toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" · "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}).replace(":","h");return <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,padding:"2px 7px",borderRadius:100,background:"rgba(184,146,79,0.1)",color:"#B8924F",border:"1px solid rgba(184,146,79,0.25)",fontWeight:500,fontVariantNumeric:"tabular-nums"}}><svg width="9" height="9" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M7 5.5v2l1.5 1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>{label}</span>;})()}
-                        {/* 5 — Indicateur brouillon de réponse en cours */}
+                        {em.aTraiter&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:100,background:"rgba(184,146,79,0.1)",color:"#B8924F",border:"1px solid rgba(184,146,79,0.25)",letterSpacing:"0.05em",textTransform:"uppercase",fontWeight:600}}>Ã traiter</span>}
+                        {(em.flags||[]).includes("star")&&<span style={{fontSize:12,color:"#B8924F"}}>â¦</span>}
+                        {em.snoozedUntil&&(()=>{const d=new Date(em.snoozedUntil);const label=d.toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" Â· "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}).replace(":","h");return <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,padding:"2px 7px",borderRadius:100,background:"rgba(184,146,79,0.1)",color:"#B8924F",border:"1px solid rgba(184,146,79,0.25)",fontWeight:500,fontVariantNumeric:"tabular-nums"}}><svg width="9" height="9" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M7 5.5v2l1.5 1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>{label}</span>;})()}
+                        {/* 5 â Indicateur brouillon de rÃ©ponse en cours */}
                         {(()=>{try{return localStorage.getItem(`draft_reply_${em.id}`);}catch{return null;}})()&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:100,background:"#EFF6FF",color:"#3B82F6",border:"1px solid #BFDBFE",letterSpacing:"0.04em",textTransform:"uppercase",fontWeight:600}}>Brouillon</span>}
-                        {/* 3 — Badges tags personnalisés */}
+                        {/* 3 â Badges tags personnalisÃ©s */}
                         {(emailTags[em.id]||[]).map((tid:string)=>{const t=customTags.find(x=>x.id===tid);return t?<span key={tid} style={{fontSize:9.5,padding:"2px 8px",borderRadius:100,background:t.color+"1A",color:t.color,border:`1px solid ${t.color}40`,fontWeight:600,letterSpacing:"0.03em"}}>{t.label}</span>:null;})}
                       </div>
                     </div>
-                    {/* Barre d'actions au survol — v3 */}
+                    {/* Barre d'actions au survol â v3 */}
                     <div className="mail-actions" style={{display:"flex",gap:3,opacity:0,transition:"opacity .15s ease",borderTop:"1px solid #EBEAE5",padding:"5px 10px",background:isActive?"rgba(245,244,240,0.7)":"rgba(250,250,247,0.7)",justifyContent:"flex-end",alignItems:"center",borderRadius:"0 0 10px 10px"}}>
                       {(()=>{const starred=(em.flags||[]).includes("star");return (
                       <button onClick={e=>{e.stopPropagation();toggleFlag(em.id,"star");}} title={starred?"Retirer des favoris":"Ajouter aux favoris"} style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:starred?"rgba(184,146,79,0.12)":"transparent",color:starred?"#B8924F":"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease,color .12s ease"}} onMouseEnter={e=>{if(!starred)e.currentTarget.style.background="rgba(184,146,79,0.08)";e.currentTarget.style.color="#B8924F";}} onMouseLeave={e=>{if(!starred){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#6B6B72";}}}>
                         <svg width="13" height="13" viewBox="0 0 14 14" fill={starred?"currentColor":"none"}><path d="M7 1.5l1.8 3.7 4 0.6-2.9 2.8 0.7 4L7 10.7l-3.6 1.9 0.7-4L1.2 5.8l4-0.6L7 1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
                       </button>
                       );})()}
-                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title={em.aTraiter?"Retirer de À traiter":"Marquer À traiter"} style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:em.aTraiter?"rgba(107,138,91,0.14)":"transparent",color:em.aTraiter?"#3F5B32":"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"all .12s ease"}} onMouseEnter={e=>{if(!em.aTraiter)e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{if(!em.aTraiter)e.currentTarget.style.background="transparent";}}>
+                      <button onClick={e=>{e.stopPropagation();toggleATraiter(em.id);}} title={em.aTraiter?"Retirer de Ã traiter":"Marquer Ã traiter"} style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:em.aTraiter?"rgba(107,138,91,0.14)":"transparent",color:em.aTraiter?"#3F5B32":"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"all .12s ease"}} onMouseEnter={e=>{if(!em.aTraiter)e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{if(!em.aTraiter)e.currentTarget.style.background="transparent";}}>
                         <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="2.5" y="1.5" width="9" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M5 5h4M5 7.5h4M5 10h2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
                       </button>
                       <button onClick={e=>{e.stopPropagation();toggleUnread(em.id);}} title={em.unread?"Marquer comme lu":"Marquer comme non lu"} style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:"transparent",color:em.unread?"#1A1A1E":"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
@@ -4559,13 +4560,13 @@ FORMAT
                       <button onClick={e=>{e.stopPropagation();archiveEmail(em.id);}} title="Archiver" style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:"transparent",color:"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
                         <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="3" rx="0.7" stroke="currentColor" strokeWidth="1.2"/><rect x="2.5" y="5.5" width="9" height="7" rx="0.7" stroke="currentColor" strokeWidth="1.2"/><path d="M5.5 8h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
                       </button>
-                      {/* SNOOZE — menu moderne v3 */}
+                      {/* SNOOZE â menu moderne v3 */}
                       <div style={{position:"relative"}} className="snooze-wrap">
                         <button onClick={e=>{e.stopPropagation(); const el=e.currentTarget.nextElementSibling as HTMLElement; if(el) el.style.display=el.style.display==="block"?"none":"block";}} title="Reporter" style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:em.snoozedUntil?"rgba(184,146,79,0.14)":"transparent",color:em.snoozedUntil?"#B8924F":"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}} onMouseEnter={e=>{if(!em.snoozedUntil)e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{if(!em.snoozedUntil)e.currentTarget.style.background="transparent";}}>
                           <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7.5" r="4.5" stroke="currentColor" strokeWidth="1.2"/><path d="M7 5.5v2l1.5 1M3.5 2.5L2 4M10.5 2.5L12 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
                         </button>
                         <div className="snooze-menu" style={{display:"none",position:"absolute",bottom:"calc(100% + 4px)",right:0,background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:10,boxShadow:"0 8px 24px rgba(15,15,20,0.1), 0 0 0 1px rgba(15,15,20,0.02)",zIndex:100,minWidth:200,padding:5,fontFamily:"'Geist','system-ui',sans-serif"}}>
-                          <div style={{padding:"6px 10px 4px",fontSize:10.5,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500}}>Reporter à</div>
+                          <div style={{padding:"6px 10px 4px",fontSize:10.5,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500}}>Reporter Ã </div>
                           {[
                             {label:"Ce soir",sub:"18h",tonight:18},
                             {label:"Demain matin",sub:"9h",days:1,h:9},
@@ -4576,7 +4577,7 @@ FORMAT
                             if((opt as any).tonight) { d.setDate(d.getDate()+(d.getHours()>=(opt as any).tonight?1:0)); d.setHours((opt as any).tonight,0,0,0); }
                             else if((opt as any).days) { d.setDate(d.getDate()+(opt as any).days); d.setHours((opt as any).h||9,0,0,0); }
                             else if((opt as any).nextMonday) { const cd=new Date(); const addDays=((8-cd.getDay())%7)||7; d.setDate(d.getDate()+addDays); d.setHours(9,0,0,0); }
-                            const label=d.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})+" · "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}).replace(":","h");
+                            const label=d.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})+" Â· "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}).replace(":","h");
                             return <button key={opt.label} onClick={e=>{e.stopPropagation();snoozeEmail(em.id,d.toISOString()); const menu=(e.currentTarget.closest(".snooze-menu") as HTMLElement); if(menu) menu.style.display="none";}} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,width:"100%",padding:"7px 10px",fontSize:12.5,color:"#1A1A1E",background:"none",border:"none",cursor:"pointer",borderRadius:6,fontFamily:"inherit",textAlign:"left"}}>
                               <span style={{fontWeight:500}}>{opt.label}</span>
                               <span style={{fontSize:11,color:"#A5A4A0",fontVariantNumeric:"tabular-nums"}}>{label}</span>
@@ -4590,7 +4591,7 @@ FORMAT
                         </div>
                       </div>
                       {em.snoozedUntil && (
-                        <button onClick={e=>{e.stopPropagation();const upd=emails.map(m=>m.id===em.id?{...m,snoozedUntil:null}:m);saveEmails(upd);toast("Report annulé");}} title="Annuler le report" style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:"transparent",color:"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+                        <button onClick={e=>{e.stopPropagation();const upd=emails.map(m=>m.id===em.id?{...m,snoozedUntil:null}:m);saveEmails(upd);toast("Report annulÃ©");}} title="Annuler le report" style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",background:"transparent",color:"#6B6B72",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.background="#EBEAE5";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
                           <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M4 4l-2 3 2 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         </button>
                       )}
@@ -4602,7 +4603,7 @@ FORMAT
                   </div>
                 );})}
 
-                {/* ── Fix #4 — Charger plus d'emails ── */}
+                {/* ââ Fix #4 â Charger plus d'emails ââ */}
                 {!search && emails.length > 0 && emails.length % 100 === 0 && (
                   <div style={{padding:"12px 16px",textAlign:"center",borderTop:"1px solid #EBEAE5"}}>
                     <button
@@ -4610,16 +4611,16 @@ FORMAT
                       disabled={loadingMore}
                       style={{fontSize:11,padding:"6px 18px",borderRadius:2,border:"1px solid #EBEAE5",background:"transparent",color:"#B8924F",cursor:loadingMore?"wait":"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"'Geist','system-ui',sans-serif",letterSpacing:"0.04em"}}
                     >
-                      {loadingMore ? <><Spin s={10}/> Chargement…</> : `↓ Charger plus (${emails.length} chargés)`}
+                      {loadingMore ? <><Spin s={10}/> Chargementâ¦</> : `â Charger plus (${emails.length} chargÃ©s)`}
                     </button>
                   </div>
                 )}
-                {/* ── Résultats recherche approfondie Gmail ── */}
+                {/* ââ RÃ©sultats recherche approfondie Gmail ââ */}
                 {deepResults.length>0&&(
                   <>
                     <div style={{padding:"8px 14px 4px",display:"flex",alignItems:"center",gap:6,borderTop:"1px solid #EBEAE5",marginTop:4}}>
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#B8924F" strokeWidth="1.3"><circle cx="5" cy="5" r="3.5"/><path d="M8 8l3 3"/></svg>
-                      <span style={{fontSize:10,color:"#B8924F",fontWeight:500,letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>RÉSULTATS GMAIL ({deepResults.length})</span>
+                      <span style={{fontSize:10,color:"#B8924F",fontWeight:500,letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>RÃSULTATS GMAIL ({deepResults.length})</span>
                     </div>
                     {deepResults.map(em=>(
                       <div key={em.id} onClick={()=>handleSel(em)} style={{padding:"10px 14px 8px 14px",borderBottom:"1px solid #EBEAE5",cursor:"pointer",background:"rgba(184,146,79,0.03)",borderLeft:"2px solid rgba(184,146,79,0.3)"}}>
@@ -4641,7 +4642,7 @@ FORMAT
             </div>
             )}
 
-            {/* Zone lecture — Céleste */}
+            {/* Zone lecture â CÃ©leste */}
             {(mailFilter!=="priorites" || (mailFilter==="priorites" && sel)) && <div style={{flex:1,overflowY:"auto",background:"#F5F4F0"}}>
               {!sel ? (
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:12,color:"#6B6E7E"}}>
@@ -4652,12 +4653,12 @@ FORMAT
                     <path d="M12 9.6 L 12 18.2" stroke="#B8924F" strokeWidth="1.2" strokeLinecap="round"/>
                     <path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B8924F"/>
                   </svg>
-                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:15,fontStyle:"italic",color:"#6B6E7E"}}>Sélectionnez un email</div>
+                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:15,fontStyle:"italic",color:"#6B6E7E"}}>SÃ©lectionnez un email</div>
                 </div>
               ) : (
                 <div style={{maxWidth:720,margin:"0 auto",padding:"20px 28px 80px"}}>
 
-                  {/* ── Fil d'Ariane retour événement ou Radar ── */}
+                  {/* ââ Fil d'Ariane retour Ã©vÃ©nement ou Radar ââ */}
                   {mailOrigine&&(
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"6px 10px",background:"rgba(184,146,79,0.08)",borderRadius:2,border:"1px solid rgba(184,146,79,0.2)"}}>
                       <button onClick={()=>{
@@ -4671,26 +4672,26 @@ FORMAT
                         setMailOrigine(null);
                       }} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:"#B8924F",fontSize:11,fontWeight:500,padding:0,fontFamily:"'Geist','system-ui',sans-serif",letterSpacing:"0.02em"}}>
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="#B8924F" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                        {mailOrigine.type==="radar" ? "← Retour au Radar" : `Retour à ${mailOrigine.nom}`}
+                        {mailOrigine.type==="radar" ? "â Retour au Radar" : `Retour Ã  ${mailOrigine.nom}`}
                       </button>
                     </div>
                   )}
 
-                  {/* ── Barre d'actions Reader v3 — icon buttons sobres ── */}
+                  {/* ââ Barre d'actions Reader v3 â icon buttons sobres ââ */}
                   <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:0,padding:"10px 18px",background:"rgba(255,255,255,0.72)",backdropFilter:"saturate(180%) blur(8px)",WebkitBackdropFilter:"saturate(180%) blur(8px)",borderBottom:"1px solid #EBEAE5",flexWrap:"wrap"}}>
-                    {/* Action principale : Répondre */}
-                    <button onClick={()=>openReplyEditor("reply")} title="Répondre (R)" style={{fontSize:13,padding:"7px 13px",borderRadius:8,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",cursor:"pointer",fontWeight:500,display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease"}}>
+                    {/* Action principale : RÃ©pondre */}
+                    <button onClick={()=>openReplyEditor("reply")} title="RÃ©pondre (R)" style={{fontSize:13,padding:"7px 13px",borderRadius:8,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",cursor:"pointer",fontWeight:500,display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease"}}>
                       <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M12 10L8 6l4-4M2 2v4a3 3 0 003 3h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      Répondre
+                      RÃ©pondre
                     </button>
                     {sel.cc?.length>0&&(
-                      <button onClick={()=>openReplyEditor("replyAll")} title="Répondre à tous" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,transition:"all .14s ease"}}>À tous</button>
+                      <button onClick={()=>openReplyEditor("replyAll")} title="RÃ©pondre Ã  tous" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,transition:"all .14s ease"}}>Ã tous</button>
                     )}
-                    <button onClick={()=>openReplyEditor("forward")} title="Transférer" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,transition:"all .14s ease"}}>
+                    <button onClick={()=>openReplyEditor("forward")} title="TransfÃ©rer" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,transition:"all .14s ease"}}>
                       <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2 10l4-4L2 2M12 2v4a3 3 0 01-3 3H3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      Transférer
+                      TransfÃ©rer
                     </button>
-                    {/* Bouton Re-analyser — force une nouvelle extraction IA avec le prompt à jour */}
+                    {/* Bouton Re-analyser â force une nouvelle extraction IA avec le prompt Ã  jour */}
                     <button
                       onClick={()=>reanalyserEmail(sel)}
                       disabled={reanalysingId===sel.id}
@@ -4712,51 +4713,51 @@ FORMAT
                       }}
                     >
                       {reanalysingId===sel.id ? (
-                        <><Spin s={11}/> Analyse…</>
+                        <><Spin s={11}/> Analyseâ¦</>
                       ) : (
-                        <>✦ Re-analyser</>
+                        <>â¦ Re-analyser</>
                       )}
                     </button>
-                    {/* NB : Les boutons "Planning" et "Événement lié" sont rendus par la résa card directement
-                        (affichée au-dessus du corps du mail), donc pas de doublon ici. */}
+                    {/* NB : Les boutons "Planning" et "ÃvÃ©nement liÃ©" sont rendus par la rÃ©sa card directement
+                        (affichÃ©e au-dessus du corps du mail), donc pas de doublon ici. */}
                     <div style={{width:1,height:20,background:"#EBEAE5",margin:"0 4px"}}/>
-                    {/* Toggles d'état — icon buttons 30x30 */}
-                    <button onClick={()=>toggleFlag(sel.id,"star")} title={(sel.flags||[]).includes("star")?"Retirer des favoris":"Ajouter aux favoris"} style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:(sel.flags||[]).includes("star")?"#B8924F":"#A5A4A0",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease, color .12s ease"}}>✦</button>
-                    <button onClick={()=>toggleUnread(sel.id)} title={sel.unread?"Marquer comme lu":"Marquer comme non lu"} style={{width:30,height:30,borderRadius:6,border:"none",background:sel.unread?"rgba(184,146,79,0.1)":"transparent",color:sel.unread?"#B8924F":"#A5A4A0",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>●</button>
-                    <button onClick={()=>toggleATraiter(sel.id)} title={sel.aTraiter?"Retirer de À traiter":"Marquer À traiter"} style={{width:30,height:30,borderRadius:6,border:"none",background:sel.aTraiter?"rgba(184,146,79,0.1)":"transparent",color:sel.aTraiter?"#B8924F":"#6B6E7E",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>📋</button>
-                    <button onClick={()=>archiveEmail(sel.id)} title={sel.archived?"Archivé":"Archiver"} style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:sel.archived?"#B8924F":"#6B6E7E",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>📦</button>
+                    {/* Toggles d'Ã©tat â icon buttons 30x30 */}
+                    <button onClick={()=>toggleFlag(sel.id,"star")} title={(sel.flags||[]).includes("star")?"Retirer des favoris":"Ajouter aux favoris"} style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:(sel.flags||[]).includes("star")?"#B8924F":"#A5A4A0",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease, color .12s ease"}}>â¦</button>
+                    <button onClick={()=>toggleUnread(sel.id)} title={sel.unread?"Marquer comme lu":"Marquer comme non lu"} style={{width:30,height:30,borderRadius:6,border:"none",background:sel.unread?"rgba(184,146,79,0.1)":"transparent",color:sel.unread?"#B8924F":"#A5A4A0",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>â</button>
+                    <button onClick={()=>toggleATraiter(sel.id)} title={sel.aTraiter?"Retirer de Ã traiter":"Marquer Ã traiter"} style={{width:30,height:30,borderRadius:6,border:"none",background:sel.aTraiter?"rgba(184,146,79,0.1)":"transparent",color:sel.aTraiter?"#B8924F":"#6B6E7E",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>ð</button>
+                    <button onClick={()=>archiveEmail(sel.id)} title={sel.archived?"ArchivÃ©":"Archiver"} style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:sel.archived?"#B8924F":"#6B6E7E",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>ð¦</button>
                     <div style={{flex:1}}/>
-                    {/* 3 — Bouton tag personnalisé */}
+                    {/* 3 â Bouton tag personnalisÃ© */}
                     <div style={{position:"relative"}}>
-                      <button onClick={()=>setShowTagMenu(showTagMenu===sel.id?null:sel.id)} title="Tags" style={{width:30,height:30,borderRadius:6,border:"none",background:showTagMenu===sel.id?"rgba(184,146,79,0.1)":"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>🏷️</button>
+                      <button onClick={()=>setShowTagMenu(showTagMenu===sel.id?null:sel.id)} title="Tags" style={{width:30,height:30,borderRadius:6,border:"none",background:showTagMenu===sel.id?"rgba(184,146,79,0.1)":"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>ð·ï¸</button>
                       {showTagMenu===sel.id&&(
                         <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",zIndex:300,background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:10,boxShadow:"0 8px 24px rgba(15,15,20,0.10)",minWidth:200,padding:8}}>
-                          {customTags.length===0&&<div style={{fontSize:11.5,color:"#A5A4A0",padding:"6px 10px"}}>Aucun tag — créez-en dans Sources ARCHANGE</div>}
+                          {customTags.length===0&&<div style={{fontSize:11.5,color:"#A5A4A0",padding:"6px 10px"}}>Aucun tag â crÃ©ez-en dans Sources ARCHANGE</div>}
                           {customTags.map(t=>{const applied=(emailTags[sel.id]||[]).includes(t.id);return(
                             <div key={t.id} onClick={()=>{const cur=emailTags[sel.id]||[];saveEmailTags({...emailTags,[sel.id]:applied?cur.filter((x:string)=>x!==t.id):[...cur,t.id]});}} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",borderRadius:6,cursor:"pointer",background:applied?"rgba(184,146,79,0.08)":"transparent",transition:"background .12s ease"}}>
                               <span style={{width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0,boxShadow:applied?"0 0 0 2px #1A1A1E":undefined}}/>
                               <span style={{fontSize:12.5,flex:1,color:"#1A1A1E"}}>{t.label}</span>
-                              {applied&&<span style={{fontSize:11,color:"#B8924F"}}>✓</span>}
+                              {applied&&<span style={{fontSize:11,color:"#B8924F"}}>â</span>}
                             </div>);
                           })}
                         </div>
                       )}
                     </div>
-                    <button onClick={()=>deleteEmailWithUndo(sel)} title="Supprimer" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:"#A84B45",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",opacity:0.75,transition:"background .12s ease, opacity .12s ease"}}>✕</button>
+                    <button onClick={()=>deleteEmailWithUndo(sel)} title="Supprimer" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:"#A84B45",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",opacity:0.75,transition:"background .12s ease, opacity .12s ease"}}>â</button>
                   </div>
 
-                  {/* ── En-tête éditorial Reader v3 — sujet display ── */}
+                  {/* ââ En-tÃªte Ã©ditorial Reader v3 â sujet display ââ */}
                   <div style={{padding:"24px 32px 20px",borderBottom:"1px solid #EBEAE5"}}>
                     {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext&&(
                       <div style={{fontSize:10.5,letterSpacing:"0.08em",textTransform:"uppercase",color:"#B8924F",marginBottom:10,fontWeight:500,display:"flex",alignItems:"center",gap:8,fontFamily:"'Geist','system-ui',sans-serif"}}>
                         {ext.statutSuggere&&<span>{ext.statutSuggere.replace(/_/g," ")}</span>}
-                        {ext.typeEvenement&&<><span style={{color:"#E0DED7"}}>·</span><span>{ext.typeEvenement}</span></>}
-                        {ext.nombrePersonnes&&<><span style={{color:"#E0DED7"}}>·</span><span style={{fontVariantNumeric:"tabular-nums"}}>{ext.nombrePersonnes} personnes</span></>}
+                        {ext.typeEvenement&&<><span style={{color:"#E0DED7"}}>Â·</span><span>{ext.typeEvenement}</span></>}
+                        {ext.nombrePersonnes&&<><span style={{color:"#E0DED7"}}>Â·</span><span style={{fontVariantNumeric:"tabular-nums"}}>{ext.nombrePersonnes} personnes</span></>}
                       </div>
                     );})()}
                     {/* Sujet en grand */}
                     <h1 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:28,fontWeight:400,letterSpacing:"-0.02em",lineHeight:1.2,color:"#1A1A1E",margin:"0 0 14px",wordBreak:"break-word"}}>{sel.subject||"(sans objet)"}</h1>
-                    {/* Ligne expéditeur */}
+                    {/* Ligne expÃ©diteur */}
                     <div style={{display:"flex",alignItems:"center",gap:12}}>
                       <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(184,146,79,0.12)",border:"1px solid rgba(184,146,79,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,color:"#B8924F",flexShrink:0,letterSpacing:"-0.01em"}}>
                         {(sel.from||"?")[0].toUpperCase()}
@@ -4769,7 +4770,7 @@ FORMAT
                     </div>
                   </div>
 
-                  {/* ── Encart Lecture par Archange — v3 Apple Mail 2026 ── */}
+                  {/* ââ Encart Lecture par Archange â v3 Apple Mail 2026 ââ */}
                   {extracted?.isReservation && !showPlanForm && (()=>{
                     const alreadyIn = resas.find(r =>
                       emailResaLinks[sel?.id || ""] === r.id ||
@@ -4780,11 +4781,11 @@ FORMAT
                     const valueStyle = {fontSize:14,color:"#1A1A1E",fontWeight:500,letterSpacing:"-0.005em",fontFamily:"'Geist','system-ui',sans-serif",lineHeight:1.35};
                     return (
                       <div style={{marginBottom:18,background:"linear-gradient(180deg, #F6F9F3 0%, #FFFFFF 62%)",border:"1px solid rgba(107,138,91,0.22)",borderRadius:14,overflow:"hidden",boxShadow:"0 2px 6px rgba(107,138,91,0.06)"}}>
-                        {/* En-tête — Réservation détectée + confiance en bars */}
+                        {/* En-tÃªte â RÃ©servation dÃ©tectÃ©e + confiance en bars */}
                         <div style={{padding:"12px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid rgba(107,138,91,0.15)"}}>
                           <div style={{display:"flex",alignItems:"center",gap:8,fontSize:10.5,fontWeight:500,color:"#3F5B32",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>
                             <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2.5" width="12" height="10" rx="1.2" stroke="#3F5B32" strokeWidth="1.1"/><path d="M1 6h12M4.5 1v2.5M9.5 1v2.5" stroke="#3F5B32" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                            Réservation détectée
+                            RÃ©servation dÃ©tectÃ©e
                           </div>
                           {extracted.confiance&&(()=>{
                             const conf = extracted.confiance;
@@ -4793,10 +4794,10 @@ FORMAT
                             const nbBars = isHaute ? 4 : isFaible ? 2 : 3;
                             const barColor = isFaible ? "#A84B45" : "#6B8A5B";
                             const tip = isFaible
-                              ? "ARCHANGE a extrait ces informations avec incertitude. Vérifiez chaque champ avant de créer l'événement."
+                              ? "ARCHANGE a extrait ces informations avec incertitude. VÃ©rifiez chaque champ avant de crÃ©er l'Ã©vÃ©nement."
                               : isHaute
                               ? "ARCHANGE a extrait ces informations avec une bonne certitude."
-                              : "ARCHANGE a extrait ces informations partiellement. Vérifiez les champs importants.";
+                              : "ARCHANGE a extrait ces informations partiellement. VÃ©rifiez les champs importants.";
                             return (
                               <div title={tip} style={{display:"flex",alignItems:"center",gap:7,fontSize:11,color:"#6B6B72",cursor:"help",fontFamily:"'Geist','system-ui',sans-serif"}}>
                                 <span style={{display:"inline-flex",gap:2}}>
@@ -4809,36 +4810,36 @@ FORMAT
                             );
                           })()}
                         </div>
-                        {/* Grille infos — 3 colonnes aérées */}
+                        {/* Grille infos â 3 colonnes aÃ©rÃ©es */}
                         <div style={{padding:"18px 22px",display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:"14px 20px"}}>
                           {extracted.nom&&(
                             <div style={{display:"flex",flexDirection:"column",gap:3}}>
                               <span style={labelStyle}>Client</span>
-                              <span style={valueStyle}>{extracted.nom}{extracted.entreprise?` — ${extracted.entreprise}`:""}</span>
+                              <span style={valueStyle}>{extracted.nom}{extracted.entreprise?` â ${extracted.entreprise}`:""}</span>
                             </div>
                           )}
                           {extracted.typeEvenement&&(
                             <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                              <span style={labelStyle}>Événement</span>
+                              <span style={labelStyle}>ÃvÃ©nement</span>
                               <span style={valueStyle}>{extracted.typeEvenement}</span>
                             </div>
                           )}
                           {extracted.nombrePersonnes&&(
                             <div style={{display:"flex",flexDirection:"column",gap:3}}>
                               <span style={labelStyle}>Convives</span>
-                              <span style={valueStyle}>{extracted.nombrePersonnesMin&&extracted.nombrePersonnesMin!==extracted.nombrePersonnes?`${extracted.nombrePersonnesMin}–${extracted.nombrePersonnes}`:extracted.nombrePersonnes} personnes</span>
+                              <span style={valueStyle}>{extracted.nombrePersonnesMin&&extracted.nombrePersonnesMin!==extracted.nombrePersonnes?`${extracted.nombrePersonnesMin}â${extracted.nombrePersonnes}`:extracted.nombrePersonnes} personnes</span>
                             </div>
                           )}
                           {extracted.dateDebut&&(
                             <div style={{display:"flex",flexDirection:"column",gap:3}}>
                               <span style={labelStyle}>Date</span>
-                              <span style={valueStyle}>{extracted.dateDebut}{extracted.heureDebut?` · ${extracted.heureDebut}${extracted.heureFin?` → ${extracted.heureFin}`:""}`:""}</span>
+                              <span style={valueStyle}>{extracted.dateDebut}{extracted.heureDebut?` Â· ${extracted.heureDebut}${extracted.heureFin?` â ${extracted.heureFin}`:""}`:""}</span>
                             </div>
                           )}
                           {espace&&(
                             <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                              <span style={labelStyle}>Espace suggéré</span>
-                              <span style={{...valueStyle,color:"#B8924F"}}>{espace.nom} · disponible</span>
+                              <span style={labelStyle}>Espace suggÃ©rÃ©</span>
+                              <span style={{...valueStyle,color:"#B8924F"}}>{espace.nom} Â· disponible</span>
                             </div>
                           )}
                           {extracted.budget&&(
@@ -4848,7 +4849,7 @@ FORMAT
                             </div>
                           )}
                         </div>
-                        {/* Footer — action unique "Ajouter au planning" */}
+                        {/* Footer â action unique "Ajouter au planning" */}
                         <div style={{padding:"14px 18px",borderTop:"1px solid rgba(107,138,91,0.12)",background:"rgba(255,255,255,0.6)",display:"flex",alignItems:"center",gap:10}}>
                           {!alreadyIn&&(
                             <button onClick={openPlanForm} style={{padding:"9px 14px",borderRadius:10,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",transition:"all .14s ease"}}>
@@ -4858,7 +4859,7 @@ FORMAT
                           )}
                           {alreadyIn&&(
                             <button onClick={()=>{setSelResaGeneral(alreadyIn);setView("general");}} style={{padding:"9px 14px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,transition:"all .14s ease"}}>
-                              Voir l'événement →
+                              Voir l'Ã©vÃ©nement â
                             </button>
                           )}
                         </div>
@@ -4866,7 +4867,7 @@ FORMAT
                     );
                   })()}
 
-                  {/* Formulaire planning — v3 Apple Mail 2026 */}
+                  {/* Formulaire planning â v3 Apple Mail 2026 */}
                   {showPlanForm && (()=>{
                     const espaceNom = ESPACES.find(e=>e.id===planForm.espaceId)?.nom || "";
                     const grpLabel = {fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase" as const,letterSpacing:"0.08em",marginBottom:9,fontFamily:"'Geist','system-ui',sans-serif"};
@@ -4876,36 +4877,36 @@ FORMAT
                     const inputStyle = {width:"100%",padding:"9px 12px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13.5,color:"#1A1A1E",outline:"none",transition:"border-color .12s ease"};
                     return (
                     <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:14,overflow:"hidden",marginBottom:18,boxShadow:"0 1px 3px rgba(15,15,20,0.06)"}}>
-                      {/* Header : icône + titre Fraunces + sous-titre IA */}
+                      {/* Header : icÃ´ne + titre Fraunces + sous-titre IA */}
                       <div style={{padding:"16px 22px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #EBEAE5"}}>
                         <div style={{display:"flex",alignItems:"center",gap:12}}>
                           <div style={{width:36,height:36,borderRadius:10,background:"rgba(184,146,79,0.12)",color:"#B8924F",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                             <svg width="18" height="18" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M1.5 5.5h11M4.5 1v2.5M9.5 1v2.5M7 8v3M5.5 9.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                           </div>
                           <div>
-                            <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",lineHeight:1.2}}>Créer l'événement</div>
+                            <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",lineHeight:1.2}}>CrÃ©er l'Ã©vÃ©nement</div>
                             <div style={{fontSize:11.5,color:"#6B6B72",marginTop:2,display:"inline-flex",alignItems:"center",gap:5,fontFamily:"'Geist','system-ui',sans-serif"}}>
-                              <span style={{fontSize:11,color:"#B8924F"}}>✦</span>
-                              Pré-rempli par ARCHANGE — vérifiez et complétez
+                              <span style={{fontSize:11,color:"#B8924F"}}>â¦</span>
+                              PrÃ©-rempli par ARCHANGE â vÃ©rifiez et complÃ©tez
                             </div>
                           </div>
                         </div>
-                        <button onClick={()=>setShowPlanForm(false)} title="Annuler" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                        <button onClick={()=>setShowPlanForm(false)} title="Annuler" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>Ã</button>
                       </div>
 
-                      {/* Aperçu sage temps réel */}
+                      {/* AperÃ§u sage temps rÃ©el */}
                       {(planForm.prenom || planForm.nom || planForm.nombrePersonnes || planForm.dateDebut) && (
                         <div style={{margin:"16px 22px 0",padding:"12px 16px",background:"#F6F9F3",border:"1px solid rgba(107,138,91,0.22)",borderRadius:10,display:"flex",alignItems:"flex-start",gap:10}}>
-                          <span style={{color:"#3F5B32",fontSize:13,marginTop:1,flexShrink:0}}>✦</span>
+                          <span style={{color:"#3F5B32",fontSize:13,marginTop:1,flexShrink:0}}>â¦</span>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:10,fontWeight:500,color:"#3F5B32",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3,fontFamily:"'Geist','system-ui',sans-serif"}}>Aperçu de l'événement</div>
+                            <div style={{fontSize:10,fontWeight:500,color:"#3F5B32",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3,fontFamily:"'Geist','system-ui',sans-serif"}}>AperÃ§u de l'Ã©vÃ©nement</div>
                             <div style={{fontSize:13,color:"#6B6B72",lineHeight:1.55,fontFamily:"'Geist','system-ui',sans-serif"}}>
                               {(planForm.prenom || planForm.nom) && <span style={{color:"#1A1A1E",fontWeight:500}}>{[planForm.prenom,planForm.nom].filter(Boolean).join(" ")}</span>}
                               {planForm.entreprise && <span style={{color:"#A5A4A0"}}> ({planForm.entreprise})</span>}
-                              {planForm.nombrePersonnes && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>·</span><span style={{color:"#1A1A1E",fontWeight:500}}>{planForm.nombrePersonnes} personnes</span></>}
-                              {planForm.dateDebut && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>·</span><span style={{color:"#1A1A1E",fontWeight:500,fontVariantNumeric:"tabular-nums"}}>{planForm.dateDebut}</span></>}
-                              {planForm.heureDebut && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>·</span><span style={{fontVariantNumeric:"tabular-nums"}}>{planForm.heureDebut}{planForm.heureFin?` → ${planForm.heureFin}`:""}</span></>}
-                              {espaceNom && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>·</span><span>{espaceNom}</span></>}
+                              {planForm.nombrePersonnes && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>Â·</span><span style={{color:"#1A1A1E",fontWeight:500}}>{planForm.nombrePersonnes} personnes</span></>}
+                              {planForm.dateDebut && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>Â·</span><span style={{color:"#1A1A1E",fontWeight:500,fontVariantNumeric:"tabular-nums"}}>{planForm.dateDebut}</span></>}
+                              {planForm.heureDebut && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>Â·</span><span style={{fontVariantNumeric:"tabular-nums"}}>{planForm.heureDebut}{planForm.heureFin?` â ${planForm.heureFin}`:""}</span></>}
+                              {espaceNom && <><span style={{margin:"0 7px",color:"#A5A4A0"}}>Â·</span><span>{espaceNom}</span></>}
                             </div>
                           </div>
                         </div>
@@ -4919,17 +4920,17 @@ FORMAT
                           <div style={grpLabel}>Client</div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
                             <div>
-                              <label style={fieldLabel(!!planErrors.prenom)}>Prénom<span style={req}>*</span>{planFormAI.prenom&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
-                              <input value={planForm.prenom||""} onChange={e=>setPlanForm({...planForm,prenom:e.target.value})} placeholder="Prénom" style={{...inputStyle,borderColor:planErrors.prenom?"#A84B45":"#EBEAE5"}}/>
-                              {planErrors.prenom&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.prenom}</div>}
+                              <label style={fieldLabel(!!planErrors.prenom)}>PrÃ©nom<span style={req}>*</span>{planFormAI.prenom&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
+                              <input value={planForm.prenom||""} onChange={e=>setPlanForm({...planForm,prenom:e.target.value})} placeholder="PrÃ©nom" style={{...inputStyle,borderColor:planErrors.prenom?"#A84B45":"#EBEAE5"}}/>
+                              {planErrors.prenom&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>â  {planErrors.prenom}</div>}
                             </div>
                             <div>
-                              <label style={fieldLabel(!!planErrors.nom)}>Nom<span style={req}>*</span>{planFormAI.nom&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
+                              <label style={fieldLabel(!!planErrors.nom)}>Nom<span style={req}>*</span>{planFormAI.nom&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
                               <input value={planForm.nom||""} onChange={e=>setPlanForm({...planForm,nom:e.target.value})} placeholder="Nom" style={{...inputStyle,borderColor:planErrors.nom?"#A84B45":"#EBEAE5"}}/>
-                              {planErrors.nom&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.nom}</div>}
+                              {planErrors.nom&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>â  {planErrors.nom}</div>}
                             </div>
                             <div>
-                              <label style={fieldLabel(false)}>Société{planFormAI.entreprise&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
+                              <label style={fieldLabel(false)}>SociÃ©tÃ©{planFormAI.entreprise&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
                               <input value={planForm.entreprise||""} onChange={e=>setPlanForm({...planForm,entreprise:e.target.value})} placeholder="Optionnel" style={inputStyle}/>
                             </div>
                           </div>
@@ -4940,35 +4941,35 @@ FORMAT
                           <div style={grpLabel}>Quand</div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
                             <div>
-                              <label style={fieldLabel(!!planErrors.dateDebut)}>Date<span style={req}>*</span>{planFormAI.dateDebut&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
+                              <label style={fieldLabel(!!planErrors.dateDebut)}>Date<span style={req}>*</span>{planFormAI.dateDebut&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
                               <DatePicker value={planForm.dateDebut||""} onChange={v=>setPlanForm({...planForm,dateDebut:v})}/>
-                              {planErrors.dateDebut&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.dateDebut}</div>}
+                              {planErrors.dateDebut&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>â  {planErrors.dateDebut}</div>}
                             </div>
                             <div>
-                              <label style={fieldLabel(!!planErrors.heureDebut)}>Heure de début<span style={req}>*</span>{planFormAI.heureDebut&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
-                              <TimePicker value={planForm.heureDebut||""} onChange={v=>setPlanForm({...planForm,heureDebut:v})} placeholder="Heure de début"/>
-                              {planErrors.heureDebut&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.heureDebut}</div>}
+                              <label style={fieldLabel(!!planErrors.heureDebut)}>Heure de dÃ©but<span style={req}>*</span>{planFormAI.heureDebut&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
+                              <TimePicker value={planForm.heureDebut||""} onChange={v=>setPlanForm({...planForm,heureDebut:v})} placeholder="Heure de dÃ©but"/>
+                              {planErrors.heureDebut&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>â  {planErrors.heureDebut}</div>}
                             </div>
                             <div>
-                              <label style={fieldLabel(!!planErrors.heureFin)}>Heure de fin<span style={req}>*</span>{planFormAI.heureFin&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
+                              <label style={fieldLabel(!!planErrors.heureFin)}>Heure de fin<span style={req}>*</span>{planFormAI.heureFin&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
                               <TimePicker value={planForm.heureFin||""} onChange={v=>setPlanForm({...planForm,heureFin:v})} placeholder="Heure de fin"/>
-                              {planErrors.heureFin&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.heureFin}</div>}
+                              {planErrors.heureFin&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>â  {planErrors.heureFin}</div>}
                             </div>
                           </div>
                         </div>
 
-                        {/* GROUPE INVITÉS */}
+                        {/* GROUPE INVITÃS */}
                         <div style={{marginBottom:18}}>
-                          <div style={grpLabel}>Invités</div>
+                          <div style={grpLabel}>InvitÃ©s</div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
                             <div>
-                              <label style={fieldLabel(!!planErrors.nombrePersonnes)}>Nombre de personnes<span style={req}>*</span>{planFormAI.nombrePersonnes&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
+                              <label style={fieldLabel(!!planErrors.nombrePersonnes)}>Nombre de personnes<span style={req}>*</span>{planFormAI.nombrePersonnes&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
                               <input type="number" min="1" value={planForm.nombrePersonnes||""} onChange={e=>setPlanForm({...planForm,nombrePersonnes:e.target.value})} placeholder="Ex: 50" style={{...inputStyle,fontVariantNumeric:"tabular-nums",borderColor:planErrors.nombrePersonnes?"#A84B45":"#EBEAE5"}}/>
-                              {planErrors.nombrePersonnes&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {planErrors.nombrePersonnes}</div>}
+                              {planErrors.nombrePersonnes&&<div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>â  {planErrors.nombrePersonnes}</div>}
                             </div>
                             <div>
-                              <label style={fieldLabel(false)}>Type d'événement{planFormAI.typeEvenement&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
-                              <input value={planForm.typeEvenement||""} onChange={e=>setPlanForm({...planForm,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={inputStyle}/>
+                              <label style={fieldLabel(false)}>Type d'Ã©vÃ©nement{planFormAI.typeEvenement&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
+                              <input value={planForm.typeEvenement||""} onChange={e=>setPlanForm({...planForm,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, DÃ®nerâ¦" style={inputStyle}/>
                             </div>
                           </div>
                         </div>
@@ -4978,25 +4979,25 @@ FORMAT
                           <div style={grpLabel}>Lieu & budget</div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
                             <div>
-                              <label style={fieldLabel(false)}>Espace{planFormAI.espaceId&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
+                              <label style={fieldLabel(false)}>Espace{planFormAI.espaceId&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
                               <select value={planForm.espaceId||espacesDyn[0]?.id||""} onChange={e=>setPlanForm({...planForm,espaceId:e.target.value})} style={inputStyle}>
                                 {ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}
                               </select>
                             </div>
                             <div>
-                              <label style={fieldLabel(false)}>Budget client{planFormAI.budget&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
-                              <input value={planForm.budget||""} onChange={e=>setPlanForm({...planForm,budget:e.target.value})} placeholder="Ex: 5 000€, 45€/pers…" style={inputStyle}/>
+                              <label style={fieldLabel(false)}>Budget client{planFormAI.budget&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
+                              <input value={planForm.budget||""} onChange={e=>setPlanForm({...planForm,budget:e.target.value})} placeholder="Ex: 5 000â¬, 45â¬/persâ¦" style={inputStyle}/>
                             </div>
                           </div>
                         </div>
 
-                        {/* GROUPE STATUT — Point 1 */}
+                        {/* GROUPE STATUT â Point 1 */}
                         <div style={{marginBottom:18}}>
                           <div style={grpLabel}>Statut</div>
                           <div>
                             <label style={fieldLabel(false)}>
-                              État de la demande
-                              {extracted?.statutSuggere && planForm.statut===extracted.statutSuggere && <span style={aiBadge}>✦ ARCHANGE</span>}
+                              Ãtat de la demande
+                              {extracted?.statutSuggere && planForm.statut===extracted.statutSuggere && <span style={aiBadge}>â¦ ARCHANGE</span>}
                             </label>
                             <select value={planForm.statut||"nouveau"} onChange={e=>setPlanForm({...planForm,statut:e.target.value})} style={inputStyle}>
                               {statuts.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
@@ -5008,24 +5009,24 @@ FORMAT
                         <div>
                           <div style={grpLabel}>Notes</div>
                           <div>
-                            <label style={{...fieldLabel(false),marginBottom:0,display:planFormAI.notes?"inline-flex":"none"}}>{planFormAI.notes&&<span style={aiBadge}>✦ ARCHANGE</span>}</label>
-                            <textarea value={planForm.notes||""} onChange={e=>setPlanForm({...planForm,notes:e.target.value})} rows={3} placeholder="Informations complémentaires, demandes spécifiques…" style={{...inputStyle,resize:"vertical",minHeight:64,lineHeight:1.55}}/>
+                            <label style={{...fieldLabel(false),marginBottom:0,display:planFormAI.notes?"inline-flex":"none"}}>{planFormAI.notes&&<span style={aiBadge}>â¦ ARCHANGE</span>}</label>
+                            <textarea value={planForm.notes||""} onChange={e=>setPlanForm({...planForm,notes:e.target.value})} rows={3} placeholder="Informations complÃ©mentaires, demandes spÃ©cifiquesâ¦" style={{...inputStyle,resize:"vertical",minHeight:64,lineHeight:1.55}}/>
                           </div>
                         </div>
                       </div>
 
-                      {/* Footer : raccourcis à gauche, actions à droite */}
+                      {/* Footer : raccourcis Ã  gauche, actions Ã  droite */}
                       <div style={{padding:"14px 22px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7",display:"flex",alignItems:"center",gap:8}}>
                         <div style={{fontSize:11.5,color:"#A5A4A0",display:"inline-flex",alignItems:"center",gap:9,flexWrap:"wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>
-                          <span><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>⌘</kbd><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>↩</kbd> créer</span>
-                          <span style={{color:"#E0DED7"}}>·</span>
+                          <span><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>â</kbd><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>â©</kbd> crÃ©er</span>
+                          <span style={{color:"#E0DED7"}}>Â·</span>
                           <span><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>Esc</kbd> annuler</span>
                         </div>
                         <div style={{flex:1}}/>
                         <button onClick={()=>setShowPlanForm(false)} style={{padding:"9px 13px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,fontWeight:500,cursor:"pointer",transition:"all .14s ease"}}>Annuler</button>
                         <button onClick={submitPlanForm} style={{padding:"9px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",boxShadow:"0 1px 2px rgba(184,146,79,0.2)",transition:"all .14s ease"}}>
                           <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          Créer l'événement
+                          CrÃ©er l'Ã©vÃ©nement
                         </button>
                       </div>
                     </div>
@@ -5033,13 +5034,13 @@ FORMAT
                   })()}
 
 
-                  {/* ── Corps email — Reader v3 ── */}
-                  {/* 1a — Bandeau résumé IA ARCHANGE (si extraction dispo et isReservation) */}
+                  {/* ââ Corps email â Reader v3 ââ */}
+                  {/* 1a â Bandeau rÃ©sumÃ© IA ARCHANGE (si extraction dispo et isReservation) */}
                   {(()=>{const ext=repliesCache[sel.id]?.extracted; return ext?.isReservation&&ext?.resume&&(
                     <div style={{margin:"18px 32px 0",padding:"12px 16px",background:"rgba(107,138,91,0.06)",border:"1px solid rgba(107,138,91,0.18)",borderRadius:10,display:"flex",gap:10,alignItems:"flex-start"}}>
-                      <span style={{fontSize:13,flexShrink:0,marginTop:1,color:"#3F5B32"}}>✦</span>
+                      <span style={{fontSize:13,flexShrink:0,marginTop:1,color:"#3F5B32"}}>â¦</span>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:10,fontWeight:500,color:"#3F5B32",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3,fontFamily:"'Geist','system-ui',sans-serif"}}>Résumé ARCHANGE</div>
+                        <div style={{fontSize:10,fontWeight:500,color:"#3F5B32",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3,fontFamily:"'Geist','system-ui',sans-serif"}}>RÃ©sumÃ© ARCHANGE</div>
                         <div style={{fontSize:13,color:"#4A4A52",lineHeight:1.55,fontFamily:"'Geist','system-ui',sans-serif"}}>{ext.resume}</div>
                       </div>
                     </div>
@@ -5059,33 +5060,33 @@ FORMAT
                       </div>
                     )}
 
-                    {/* Pièces jointes */}
+                    {/* PiÃ¨ces jointes */}
                     {(sel.attachments||[]).length > 0 && (
                       <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #EBEAE5"}}>
-                        <div style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:"#6B6E7E",marginBottom:8,fontFamily:"'Geist','system-ui',sans-serif"}}>Pièces jointes · {sel.attachments.length}</div>
+                        <div style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:"#6B6E7E",marginBottom:8,fontFamily:"'Geist','system-ui',sans-serif"}}>PiÃ¨ces jointes Â· {sel.attachments.length}</div>
                         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                           {sel.attachments.map((att: any, i: number) => {
                             const ext = (att.filename||att.name||"").split(".").pop()?.toLowerCase() || "";
-                            const icons: Record<string,string> = {pdf:"📄",doc:"📝",docx:"📝",xls:"📊",xlsx:"📊",ppt:"📋",pptx:"📋",jpg:"🖼",jpeg:"🖼",png:"🖼",gif:"🖼",webp:"🖼",zip:"🗜",csv:"📊",txt:"📃"};
-                            const icon = icons[ext] || "📎";
+                            const icons: Record<string,string> = {pdf:"ð",doc:"ð",docx:"ð",xls:"ð",xlsx:"ð",ppt:"ð",pptx:"ð",jpg:"ð¼",jpeg:"ð¼",png:"ð¼",gif:"ð¼",webp:"ð¼",zip:"ð",csv:"ð",txt:"ð"};
+                            const icon = icons[ext] || "ð";
                             const size = att.size ? (att.size > 1048576 ? (att.size/1048576).toFixed(1)+" Mo" : Math.round(att.size/1024)+" Ko") : "";
                             return (
                               <div key={i} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:"#FAFAF7",borderRadius:2,border:"1px solid #EBEAE5",cursor:"pointer"}} onClick={async()=>{
                                 if (att.id && sel?.gmailId) {
-                                  // Téléchargement via /api/gmail/attachment
+                                  // TÃ©lÃ©chargement via /api/gmail/attachment
                                   try {
                                     const url = `/api/gmail/attachment?gmailId=${encodeURIComponent(sel.gmailId)}&attachmentId=${encodeURIComponent(att.id)}&filename=${encodeURIComponent(att.filename||att.name||"attachment")}`;
                                     const a = document.createElement("a");
                                     a.href = url; a.download = att.filename||att.name||"attachment";
                                     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                                  } catch { toast("Erreur téléchargement", "err"); }
+                                  } catch { toast("Erreur tÃ©lÃ©chargement", "err"); }
                                 } else if (att.url) {
                                   window.open(att.url, "_blank");
                                 }
                               }}>
                                 <span style={{fontSize:14}}>{icon}</span>
                                 <div>
-                                  <div style={{fontSize:11,fontWeight:500,color:"#1A1A1E",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{att.filename||att.name||"Pièce jointe"}</div>
+                                  <div style={{fontSize:11,fontWeight:500,color:"#1A1A1E",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{att.filename||att.name||"PiÃ¨ce jointe"}</div>
                                   {size&&<div style={{fontSize:9.5,color:"#6B6E7E"}}>{size}</div>}
                                 </div>
                               </div>
@@ -5096,26 +5097,26 @@ FORMAT
                     )}
                   </div>
 
-                  {/* ── Éditeur de réponse manuelle Reader v3 ── */}
+                  {/* ââ Ãditeur de rÃ©ponse manuelle Reader v3 ââ */}
                   {showReplyEditor&&(
                     <div style={{background:"#FFFFFF",borderRadius:14,border:"1px solid #EBEAE5",overflow:"hidden",marginBottom:18,boxShadow:"0 1px 3px rgba(15,15,20,0.04)"}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 18px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d={replyEditorMode==="forward"?"M2 10l4-4L2 2M12 2v4a3 3 0 01-3 3H3":"M12 10L8 6l4-4M2 2v4a3 3 0 003 3h6"} stroke="#1A1A1E" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                           <span style={{fontSize:12,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",letterSpacing:"-0.005em"}}>
-                            {replyEditorMode==="reply"?"Répondre":replyEditorMode==="replyAll"?"Répondre à tous":"Transférer"}
+                            {replyEditorMode==="reply"?"RÃ©pondre":replyEditorMode==="replyAll"?"RÃ©pondre Ã  tous":"TransfÃ©rer"}
                           </span>
                         </div>
-                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} title="Fermer" style={{width:28,height:28,borderRadius:6,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>×</button>
+                        <button onClick={()=>{if(replyEditorText.trim()&&!window.confirm("Fermer ?"))return;setShowReplyEditor(false);setReplyEditorText("");}} title="Fermer" style={{width:28,height:28,borderRadius:6,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease"}}>Ã</button>
                       </div>
                       <div style={{padding:"10px 18px",borderBottom:"1px solid #EBEAE5",display:"flex",alignItems:"center",gap:9,background:"#FFFFFF"}}>
-                        <span style={{fontSize:11,color:"#A5A4A0",fontWeight:500,flexShrink:0,fontFamily:"'Geist','system-ui',sans-serif"}}>À</span>
+                        <span style={{fontSize:11,color:"#A5A4A0",fontWeight:500,flexShrink:0,fontFamily:"'Geist','system-ui',sans-serif"}}>Ã</span>
                         <input value={replyEditorTo} onChange={e=>setReplyEditorTo(e.target.value)} style={{flex:1,border:"none",outline:"none",fontSize:13,color:"#1A1A1E",background:"transparent",fontFamily:"'Geist','system-ui',sans-serif"}} placeholder="destinataire@exemple.com"/>
                       </div>
-                      <textarea value={replyEditorText} onChange={e=>setReplyEditorText(e.target.value)} style={{width:"100%",minHeight:200,padding:"16px 18px",fontFamily:"'Geist','system-ui',sans-serif",fontSize:14,color:"#1A1A1E",lineHeight:1.65,border:"none",outline:"none",resize:"vertical",background:"transparent"}} placeholder="Votre réponse…" autoFocus/>
+                      <textarea value={replyEditorText} onChange={e=>setReplyEditorText(e.target.value)} style={{width:"100%",minHeight:200,padding:"16px 18px",fontFamily:"'Geist','system-ui',sans-serif",fontSize:14,color:"#1A1A1E",lineHeight:1.65,border:"none",outline:"none",resize:"vertical",background:"transparent"}} placeholder="Votre rÃ©ponseâ¦" autoFocus/>
                       <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7"}}>
                         <button onClick={sendReply} disabled={sending||!replyEditorTo.trim()||!replyEditorText.trim()} style={{padding:"8px 16px",borderRadius:8,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:sending?"wait":"pointer",display:"inline-flex",alignItems:"center",gap:6,opacity:sending||!replyEditorTo.trim()||!replyEditorText.trim()?0.5:1,letterSpacing:"-0.005em",fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease"}}>
-                          {sending?<><Spin s={11}/> Envoi…</>:<><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 7L13 1L9.5 13L7 8L1 7z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg> Envoyer</>}
+                          {sending?<><Spin s={11}/> Envoiâ¦</>:<><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 7L13 1L9.5 13L7 8L1 7z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg> Envoyer</>}
                         </button>
                         <button onClick={saveDraft} style={{padding:"8px 13px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontSize:12.5,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,transition:"all .14s ease"}}>Brouillon</button>
                         <div style={{flex:1}}/>
@@ -5124,22 +5125,22 @@ FORMAT
                     </div>
                   )}
 
-                  {/* ── Réponse ARCHANGE Reader v3 — palette dorée subtile ── */}
+                  {/* ââ RÃ©ponse ARCHANGE Reader v3 â palette dorÃ©e subtile ââ */}
                   <div style={{background:"linear-gradient(180deg, rgba(184,146,79,0.04) 0%, #FFFFFF 50%)",borderRadius:14,border:"1px solid rgba(184,146,79,0.22)",overflow:"hidden",boxShadow:"0 2px 6px rgba(184,146,79,0.06)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 18px",borderBottom:"1px solid rgba(184,146,79,0.15)"}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:14,color:"#B8924F",lineHeight:1}}>✦</span>
-                        <span style={{fontSize:10.5,fontWeight:500,color:"#B8924F",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Réponse ARCHANGE</span>
+                        <span style={{fontSize:14,color:"#B8924F",lineHeight:1}}>â¦</span>
+                        <span style={{fontSize:10.5,fontWeight:500,color:"#B8924F",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>RÃ©ponse ARCHANGE</span>
                         {genReply&&<Spin s={11}/>}
                       </div>
                       {srcActives>0&&(
                         <span style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:5}}>
-                          <span style={{fontSize:12}}>🧠</span>
+                          <span style={{fontSize:12}}>ð§ </span>
                           <span><strong style={{fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{srcActives}</strong> source{srcActives>1?"s":""}</span>
                         </span>
                       )}
                     </div>
-                    {/* ── Bandeau notification troncatures (visible UNIQUEMENT si dépassement réel) ── */}
+                    {/* ââ Bandeau notification troncatures (visible UNIQUEMENT si dÃ©passement rÃ©el) ââ */}
                     {sel && truncations[sel.id] && truncations[sel.id].length > 0 && (
                       <div style={{
                         padding:"11px 18px",
@@ -5149,16 +5150,16 @@ FORMAT
                         alignItems:"flex-start",
                         gap:10,
                       }}>
-                        <span style={{fontSize:14,lineHeight:1.4,flexShrink:0,marginTop:1,color:"#B8924F"}}>⚠</span>
+                        <span style={{fontSize:14,lineHeight:1.4,flexShrink:0,marginTop:1,color:"#B8924F"}}>â </span>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:11.5,fontWeight:500,color:"#8B6914",fontFamily:"'Geist','system-ui',sans-serif",letterSpacing:"0.02em",marginBottom:4}}>
-                            Contenu tronqué — ARCHANGE n'a vu qu'une partie de {truncations[sel.id].length === 1 ? "cet élément" : "ces éléments"}
+                            Contenu tronquÃ© â ARCHANGE n'a vu qu'une partie de {truncations[sel.id].length === 1 ? "cet Ã©lÃ©ment" : "ces Ã©lÃ©ments"}
                           </div>
                           <div style={{fontSize:11,color:"#6B6E7E",fontFamily:"'Geist','system-ui',sans-serif",lineHeight:1.6,fontVariantNumeric:"tabular-nums"}}>
                             {truncations[sel.id].map((t, i) => (
                               <div key={i}>
-                                • <strong style={{color:"#1A1A1E",fontWeight:500}}>{t.label}</strong> : {t.actuel.toLocaleString("fr-FR")} caractères présents,
-                                {" "}<strong style={{color:"#1A1A1E",fontWeight:500}}>{t.limite.toLocaleString("fr-FR")} envoyés</strong>
+                                â¢ <strong style={{color:"#1A1A1E",fontWeight:500}}>{t.label}</strong> : {t.actuel.toLocaleString("fr-FR")} caractÃ¨res prÃ©sents,
+                                {" "}<strong style={{color:"#1A1A1E",fontWeight:500}}>{t.limite.toLocaleString("fr-FR")} envoyÃ©s</strong>
                                 {" "}<span style={{color:"#A5A4A0"}}>({Math.round((t.limite/t.actuel)*100)}% transmis)</span>
                               </div>
                             ))}
@@ -5167,52 +5168,52 @@ FORMAT
                       </div>
                     )}
                     {genReply
-                      ? <div style={{padding:"24px",fontSize:13,color:"#6B6E7E",display:"flex",alignItems:"center",gap:10,fontFamily:"'Geist','system-ui',sans-serif",justifyContent:"center"}}><Spin/> Archange rédige…</div>
+                      ? <div style={{padding:"24px",fontSize:13,color:"#6B6E7E",display:"flex",alignItems:"center",gap:10,fontFamily:"'Geist','system-ui',sans-serif",justifyContent:"center"}}><Spin/> Archange rÃ©digeâ¦</div>
                       : !reply
                         ? <div style={{padding:"28px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:14}}>
-                            <div style={{fontSize:13,color:"#6B6E7E",textAlign:"center",fontFamily:"'Geist','system-ui',sans-serif",lineHeight:1.5,maxWidth:320}}>Cliquez pour qu'Archange rédige une réponse adaptée au contexte de cet email.</div>
+                            <div style={{fontSize:13,color:"#6B6E7E",textAlign:"center",fontFamily:"'Geist','system-ui',sans-serif",lineHeight:1.5,maxWidth:320}}>Cliquez pour qu'Archange rÃ©dige une rÃ©ponse adaptÃ©e au contexte de cet email.</div>
                             <button onClick={genererReponse} disabled={genReply} style={{padding:"9px 18px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:"pointer",letterSpacing:"-0.005em",display:"inline-flex",alignItems:"center",gap:7,fontFamily:"'Geist','system-ui',sans-serif",transition:"all .14s ease",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
-                              {genReply?<><Spin s={11}/> Génération…</>:<>✦ Générer une réponse</>}
+                              {genReply?<><Spin s={11}/> GÃ©nÃ©rationâ¦</>:<>â¦ GÃ©nÃ©rer une rÃ©ponse</>}
                             </button>
                           </div>
                         : editing
                           ? <textarea value={editReply} onChange={e=>setEditReply(e.target.value)} style={{width:"100%",padding:"18px 22px",fontFamily:"'Geist','system-ui',sans-serif",fontSize:14,color:"#1A1A1E",lineHeight:1.65,border:"none",outline:"none",resize:"vertical",background:"transparent",minHeight:200}}/>
                           : <div style={{padding:"20px 22px",fontFamily:"'Fraunces',Georgia,serif",fontSize:15,color:"#1A1A1E",lineHeight:1.75,whiteSpace:"pre-wrap"}}>
                               {reply}
-                              {repliesCache[sel?.id]?.dateGen&&<div style={{marginTop:14,fontSize:11,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>Générée le <span style={{fontVariantNumeric:"tabular-nums"}}>{repliesCache[sel.id].dateGen}</span></div>}
+                              {repliesCache[sel?.id]?.dateGen&&<div style={{marginTop:14,fontSize:11,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>GÃ©nÃ©rÃ©e le <span style={{fontVariantNumeric:"tabular-nums"}}>{repliesCache[sel.id].dateGen}</span></div>}
                             </div>
                     }
                     <div style={{display:"flex",gap:8,padding:"12px 18px",borderTop:"1px solid rgba(184,146,79,0.15)",background:"rgba(255,255,255,0.6)",flexWrap:"wrap"}}>
                       {reply && <><button onClick={async()=>{
                         const replyText = editing ? editReply : reply;
                         const subject = sel.subject?.startsWith("Re:") ? sel.subject : `Re: ${sel.subject||""}`;
-                        // Fix #6 — appel direct /api/gmail/draft
+                        // Fix #6 â appel direct /api/gmail/draft
                         try {
-                          const res = await fetch("/api/gmail/draft", {
+                          const res = await apiFetch("/api/gmail/draft", {
                             method:"POST",
                             headers:{"Content-Type":"application/json"},
                             body: JSON.stringify({ to: sel.fromEmail, subject, body: replyText })
                           });
-                          if (res.ok) toast("Brouillon créé dans Gmail ✓");
-                          else toast("Erreur création brouillon", "err");
+                          if (res.ok) toast("Brouillon crÃ©Ã© dans Gmail â");
+                          else toast("Erreur crÃ©ation brouillon", "err");
                         } catch { toast(humanError(new Error("network")), "err"); }
                         setDrafted(p=>new Set([...p,sel.id]));
                         const upd = { ...sentReplies, [sel.id]: { text: replyText, date: new Date().toLocaleDateString("fr-FR"), subject: sel.subject||"", toEmail: sel.fromEmail||"" }};
                         saveSentReplies(upd);
-                      }} disabled={genReply} style={{...gold}}>Créer le brouillon</button>
+                      }} disabled={genReply} style={{...gold}}>CrÃ©er le brouillon</button>
                       {sel?.fromEmail&&<button onClick={()=>{
                         const replyText = editing ? editReply : reply;
                         const subject = sel.subject?.startsWith("Re:") ? sel.subject : `Re: ${sel.subject||""}`;
                         const body = encodeURIComponent(replyText);
                         window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(sel.fromEmail)}&su=${encodeURIComponent(subject)}&body=${body}`, "_blank");
                         setDrafted(p=>new Set([...p,sel.id]));
-                        // Sauvegarder la réponse dans l'historique
+                        // Sauvegarder la rÃ©ponse dans l'historique
                         const upd = { ...sentReplies, [sel.id]: { text: replyText, date: new Date().toLocaleDateString("fr-FR"), subject: subject, toEmail: sel.fromEmail||"" }};
                         saveSentReplies(upd);
-                        toast("Gmail ouvert ✓");
-                      }} disabled={genReply} style={{...gold,background:"#1a73e8",color:"#fff",boxShadow:"0 2px 8px rgba(26,115,232,.3)"}}>✉ Ouvrir dans Gmail</button>}
+                        toast("Gmail ouvert â");
+                      }} disabled={genReply} style={{...gold,background:"#1a73e8",color:"#fff",boxShadow:"0 2px 8px rgba(26,115,232,.3)"}}>â Ouvrir dans Gmail</button>}
                       <button onClick={()=>{ if(editing){setReply(editReply);setEditing(false);if(sel)setRepliesCache(prev=>({...prev,[sel.id]:{...prev[sel.id],reply:editReply,editReply}}));}else{setEditing(true);setEditReply(reply);} }} disabled={genReply} style={{...out}}>{editing?"Valider":"Modifier"}</button>
-                      <button onClick={genererReponse} disabled={genReply} style={{...out,color:"#6B6E7E",display:"flex",alignItems:"center",gap:5}}>{genReply?<><Spin s={11}/> En cours…</>:"↻ Regénérer"}</button></>}
+                      <button onClick={genererReponse} disabled={genReply} style={{...out,color:"#6B6E7E",display:"flex",alignItems:"center",gap:5}}>{genReply?<><Spin s={11}/> En coursâ¦</>:"â» RegÃ©nÃ©rer"}</button></>}
                     </div>
                   </div>
                 </div>
@@ -5221,7 +5222,7 @@ FORMAT
           </>
         )}
 
-        {/* ══ PLANNING v3 — Apple Mail 2026 ══ */}
+        {/* ââ PLANNING v3 â Apple Mail 2026 ââ */}
         {view==="planning" && (()=>{
           const today = new Date();
           const todayStr = today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
@@ -5230,7 +5231,7 @@ FORMAT
 
           const resasForDate = (ds:string) => resas.filter(r => {
             if(r.dateDebut!==ds) return false;
-            // Filtre statut multi — Point 2
+            // Filtre statut multi â Point 2
             if(filtresStatutsPlanning.length > 0 && !filtresStatutsPlanning.includes(r.statut||"nouveau")) return false;
             if(planEspaceFilter!=="all" && r.espaceId!==planEspaceFilter) return false;
             return true;
@@ -5242,18 +5243,18 @@ FORMAT
 
           // Header contextuel selon la vue
           const headSubtitle =
-            calView==="mois" ? `${kpi.total} événement${kpi.total!==1?"s":""} · ${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}` :
-            calView==="semaine" ? `Semaine du ${weekDays[0].getDate()} ${MOIS[weekDays[0].getMonth()].slice(0,3)} — ${weekDays[6].getDate()} ${MOIS[weekDays[6].getMonth()].slice(0,3)}` :
-            `${dayResas.length} événement${dayResas.length!==1?"s":""} · ${["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][calDate.getDay()]}. ${calDate.getDate()} ${MOIS[calDate.getMonth()].toLowerCase()}`;
+            calView==="mois" ? `${kpi.total} Ã©vÃ©nement${kpi.total!==1?"s":""} Â· ${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}` :
+            calView==="semaine" ? `Semaine du ${weekDays[0].getDate()} ${MOIS[weekDays[0].getMonth()].slice(0,3)} â ${weekDays[6].getDate()} ${MOIS[weekDays[6].getMonth()].slice(0,3)}` :
+            `${dayResas.length} Ã©vÃ©nement${dayResas.length!==1?"s":""} Â· ${["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][calDate.getDay()]}. ${calDate.getDate()} ${MOIS[calDate.getMonth()].toLowerCase()}`;
 
           const periodLabel =
             calView==="mois" ? `${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}` :
-            calView==="semaine" ? `${weekDays[0].getDate()} ${MOIS[weekDays[0].getMonth()].slice(0,3)} — ${weekDays[6].getDate()} ${MOIS[weekDays[6].getMonth()].slice(0,3)} ${weekDays[6].getFullYear()}` :
+            calView==="semaine" ? `${weekDays[0].getDate()} ${MOIS[weekDays[0].getMonth()].slice(0,3)} â ${weekDays[6].getDate()} ${MOIS[weekDays[6].getMonth()].slice(0,3)} ${weekDays[6].getFullYear()}` :
             `${["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][calDate.getDay()]}. ${calDate.getDate()} ${MOIS[calDate.getMonth()]} ${calDate.getFullYear()}`;
 
-          // Composant carte jour (réutilise pattern vue Événements v3)
+          // Composant carte jour (rÃ©utilise pattern vue ÃvÃ©nements v3)
           const DayEventCard = ({r}:{r:any}) => {
-            const st = statuts.find(s=>s.id===(r.statut||"nouveau"))||statuts[0]||{bg:"#F5F4F0",color:"#6B6B72",label:"—"};
+            const st = statuts.find(s=>s.id===(r.statut||"nouveau"))||statuts[0]||{bg:"#F5F4F0",color:"#6B6B72",label:"â"};
             const espace = ESPACES.find(e=>e.id===r.espaceId);
             const fullName = displayNom(r);
             return (
@@ -5263,12 +5264,12 @@ FORMAT
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:5}}>
                     <div style={{fontSize:13.5,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'Geist','system-ui',sans-serif"}}>{fullName}</div>
-                    {r.entreprise&&<div style={{fontSize:12,color:"#6B6B72",whiteSpace:"nowrap",fontFamily:"'Geist','system-ui',sans-serif"}}>· {r.entreprise}</div>}
+                    {r.entreprise&&<div style={{fontSize:12,color:"#6B6B72",whiteSpace:"nowrap",fontFamily:"'Geist','system-ui',sans-serif"}}>Â· {r.entreprise}</div>}
                   </div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                    {(r.heureDebut||r.heureFin)&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:"#6B6B72",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontVariantNumeric:"tabular-nums",fontFamily:"'Geist','system-ui',sans-serif"}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3"/></svg>{r.heureDebut||"?"}{r.heureFin?" → "+r.heureFin:""}</span>}
+                    {(r.heureDebut||r.heureFin)&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:"#6B6B72",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontVariantNumeric:"tabular-nums",fontFamily:"'Geist','system-ui',sans-serif"}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.3" stroke="currentColor" strokeWidth="1.3"/></svg>{r.heureDebut||"?"}{r.heureFin?" â "+r.heureFin:""}</span>}
                     {r.nombrePersonnes&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:"#6B6B72",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontVariantNumeric:"tabular-nums",fontFamily:"'Geist','system-ui',sans-serif"}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2.5 12c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>{r.nombrePersonnes} pers.</span>}
-                    <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:espace?"#6B6B72":"#A5A4A0",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontFamily:"'Geist','system-ui',sans-serif",opacity:espace?1:0.6}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><path d="M7 12.5s3.8-3.4 3.8-7A3.8 3.8 0 107 1.7c0 3.5 3.8 7 3.8 7z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="7" cy="5.3" r="1.3" stroke="currentColor" strokeWidth="1.3"/></svg>{espace?.nom||"Espace à définir"}</span>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:espace?"#6B6B72":"#A5A4A0",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontFamily:"'Geist','system-ui',sans-serif",opacity:espace?1:0.6}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><path d="M7 12.5s3.8-3.4 3.8-7A3.8 3.8 0 107 1.7c0 3.5 3.8 7 3.8 7z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="7" cy="5.3" r="1.3" stroke="currentColor" strokeWidth="1.3"/></svg>{espace?.nom||"Espace Ã  dÃ©finir"}</span>
                     {r.budget&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:"#B8924F",background:"#F4EEDF",padding:"3px 9px",borderRadius:6,fontWeight:500,fontFamily:"'Geist','system-ui',sans-serif"}}>{r.budget}</span>}
                     {r.typeEvenement&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:"#6B6B72",background:"#F5F4F0",padding:"3px 9px",borderRadius:6,fontFamily:"'Geist','system-ui',sans-serif"}}>{r.typeEvenement}</span>}
                   </div>
@@ -5306,7 +5307,7 @@ FORMAT
                       <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Ce mois</div>
                     </div>
                     <div style={{fontFamily:"'Fraunces',serif",fontSize:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.03em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.total}</div>
-                    <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>événement{kpi.total!==1?"s":""}, dont <strong style={{color:"#1A1A1E",fontWeight:500}}>{kpi.confirmed} confirmé{kpi.confirmed!==1?"s":""}</strong></div>
+                    <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>Ã©vÃ©nement{kpi.total!==1?"s":""}, dont <strong style={{color:"#1A1A1E",fontWeight:500}}>{kpi.confirmed} confirmÃ©{kpi.confirmed!==1?"s":""}</strong></div>
                   </div>
                   <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -5316,7 +5317,7 @@ FORMAT
                       <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Occupation</div>
                     </div>
                     <div style={{fontFamily:"'Fraunces',serif",fontSize:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.03em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.occupation} %</div>
-                    <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>{kpi.uniqueDays} jour{kpi.uniqueDays!==1?"s":""}</strong> sur {kpi.daysInM} avec événement</div>
+                    <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>{kpi.uniqueDays} jour{kpi.uniqueDays!==1?"s":""}</strong> sur {kpi.daysInM} avec Ã©vÃ©nement</div>
                   </div>
                   <div onClick={()=>{if(kpi.upcoming){setCalDate(new Date(kpi.upcoming.dateDebut));setCalView("jour");}}} style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:kpi.upcoming?"pointer":"default",transition:"all .15s ease"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -5327,10 +5328,10 @@ FORMAT
                     </div>
                     {kpi.upcoming ? <>
                       <div style={{fontFamily:"'Fraunces',serif",fontSize:22,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{fmtDateFr(kpi.upcoming.dateDebut).replace(/\s\d{4}$/,"")}</div>
-                      <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>{displayNom(kpi.upcoming)}</strong>{kpi.upcoming.nombrePersonnes?` · ${kpi.upcoming.nombrePersonnes} pers.`:""}</div>
+                      <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>{displayNom(kpi.upcoming)}</strong>{kpi.upcoming.nombrePersonnes?` Â· ${kpi.upcoming.nombrePersonnes} pers.`:""}</div>
                     </> : <>
-                      <div style={{fontFamily:"'Fraunces',serif",fontSize:22,fontWeight:500,color:"#A5A4A0",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5}}>—</div>
-                      <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>Aucun événement à venir</div>
+                      <div style={{fontFamily:"'Fraunces',serif",fontSize:22,fontWeight:500,color:"#A5A4A0",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5}}>â</div>
+                      <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}>Aucun Ã©vÃ©nement Ã  venir</div>
                     </>}
                   </div>
                   <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,padding:"14px 16px",cursor:"pointer",transition:"all .15s ease"}}>
@@ -5338,10 +5339,10 @@ FORMAT
                       <div style={{width:26,height:26,borderRadius:7,background:"#F4EEDF",color:"#B8924F",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 3H5a2 2 0 000 4h4a2 2 0 010 4H3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M6.5 1.5v11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                       </div>
-                      <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>Prévisionnel</div>
+                      <div style={{fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"'Geist','system-ui',sans-serif"}}>PrÃ©visionnel</div>
                     </div>
-                    <div style={{fontFamily:"'Fraunces',serif",fontSize:kpi.totalBudget>999?22:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.totalBudget.toLocaleString("fr-FR")} €</div>
-                    <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>{MOIS[calDate.getMonth()]} {calDate.getFullYear()}</strong> · en cours + confirmés</div>
+                    <div style={{fontFamily:"'Fraunces',serif",fontSize:kpi.totalBudget>999?22:30,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.025em",lineHeight:1,marginBottom:5,fontVariantNumeric:"tabular-nums"}}>{kpi.totalBudget.toLocaleString("fr-FR")} â¬</div>
+                    <div style={{fontSize:11.5,color:"#6B6B72",lineHeight:1.4,fontFamily:"'Geist','system-ui',sans-serif"}}><strong style={{color:"#1A1A1E",fontWeight:500}}>{MOIS[calDate.getMonth()]} {calDate.getFullYear()}</strong> Â· en cours + confirmÃ©s</div>
                   </div>
                 </div>
 
@@ -5353,12 +5354,12 @@ FORMAT
                       if(calView==="mois") setCalDate(new Date(calDate.getFullYear(),calDate.getMonth()-1,1));
                       else if(calView==="semaine"){ const d=new Date(calWeekStart); d.setDate(d.getDate()-7); setCalWeekStart(d); }
                       else { const d=new Date(calDate); d.setDate(d.getDate()-1); setCalDate(d); }
-                    }} style={{width:30,height:30,borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+                    }} style={{width:30,height:30,borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>â¹</button>
                     <button onClick={()=>{
                       if(calView==="mois") setCalDate(new Date(calDate.getFullYear(),calDate.getMonth()+1,1));
                       else if(calView==="semaine"){ const d=new Date(calWeekStart); d.setDate(d.getDate()+7); setCalWeekStart(d); }
                       else { const d=new Date(calDate); d.setDate(d.getDate()+1); setCalDate(d); }
-                    }} style={{width:30,height:30,borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>›</button>
+                    }} style={{width:30,height:30,borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>âº</button>
                     <span style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",marginLeft:6,fontVariantNumeric:"tabular-nums"}}>{periodLabel}</span>
                   </div>
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -5382,7 +5383,7 @@ FORMAT
                           <div style={{height:1,background:"#EBEAE5",margin:"4px 2px"}}/>
                           <button onClick={()=>setFiltresStatutsPlanning([])} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",borderRadius:6,border:"none",background:"transparent",color:"#6B6B72",fontFamily:"inherit",fontSize:12,textAlign:"left",cursor:"pointer"}}>
                             <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{opacity:0.7}}><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                            Réinitialiser les filtres
+                            RÃ©initialiser les filtres
                           </button>
                         </>}
                       </div>
@@ -5399,7 +5400,7 @@ FORMAT
                   </div>
                 </div>
 
-                {/* ── VUE MOIS ── */}
+                {/* ââ VUE MOIS ââ */}
                 {calView==="mois" && (
                   <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px",background:"#FAFAF7"}}>
                     <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,overflow:"hidden"}}>
@@ -5409,7 +5410,7 @@ FORMAT
                         ))}
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
-                        {/* Cellules du mois précédent (out) */}
+                        {/* Cellules du mois prÃ©cÃ©dent (out) */}
                         {(()=>{
                           const fd = firstDay(calDate);
                           const prevMonth = new Date(calDate.getFullYear(), calDate.getMonth(), 0);
@@ -5465,7 +5466,7 @@ FORMAT
                   </div>
                 )}
 
-                {/* ── VUE SEMAINE ── */}
+                {/* ââ VUE SEMAINE ââ */}
                 {calView==="semaine" && (
                   <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px",background:"#FAFAF7"}}>
                     <div style={{background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:12,overflow:"hidden"}}>
@@ -5489,7 +5490,7 @@ FORMAT
                           return (
                             <div key={ds} onClick={()=>{setCalDate(new Date(d));setCalView("jour");}} style={{borderLeft:i>0?"1px solid #EBEAE5":"none",minHeight:320,padding:"8px 6px",background:isTd?"rgba(184,146,79,0.03)":"transparent",cursor:"pointer",display:"flex",flexDirection:"column",gap:5}}>
                               {dr.length===0?(
-                                <div style={{fontSize:11,color:"#C5C3BE",textAlign:"center",padding:"20px 4px",fontFamily:"'Geist','system-ui',sans-serif"}}>—</div>
+                                <div style={{fontSize:11,color:"#C5C3BE",textAlign:"center",padding:"20px 4px",fontFamily:"'Geist','system-ui',sans-serif"}}>â</div>
                               ):dr.map(r=>{
                                 const st=getStatut(r);
                                 const espace=ESPACES.find(e=>e.id===r.espaceId);
@@ -5504,7 +5505,7 @@ FORMAT
                                       {r.heureDebut&&<span style={{fontSize:10.5,color:"#6B6B72",fontWeight:500,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{r.heureDebut}</span>}
                                     </div>
                                     <div style={{fontWeight:500,color:st.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontSize:11.5,letterSpacing:"-0.005em"}}>{displayNom(r)}</div>
-                                    {(r.entreprise||espace)&&<div style={{fontSize:10,color:st.color,opacity:0.7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" · ")}</div>}
+                                    {(r.entreprise||espace)&&<div style={{fontSize:10,color:st.color,opacity:0.7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[r.entreprise,espace?.nom].filter(Boolean).join(" Â· ")}</div>}
                                   </div>
                                 );
                               })}
@@ -5516,17 +5517,17 @@ FORMAT
                   </div>
                 )}
 
-                {/* ── VUE JOUR ── */}
+                {/* ââ VUE JOUR ââ */}
                 {calView==="jour" && (
                   <div style={{flex:1,overflowY:"auto",padding:"18px 28px 28px",background:"#FAFAF7"}}>
                     {dayResas.length===0?(
                       <div style={{textAlign:"center",padding:"60px 0",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>
                         <svg width="40" height="40" viewBox="0 0 14 14" fill="none" style={{color:"#C5C3BE",marginBottom:12}}><rect x="1.5" y="2.5" width="11" height="10" rx="1.2" stroke="currentColor" strokeWidth="1"/><path d="M1.5 5.5h11M4.5 1v2.5M9.5 1v2.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
-                        <div style={{fontSize:14,color:"#6B6B72"}}>Aucun événement ce jour</div>
-                        <div style={{fontSize:12,marginTop:4}}>Ajoutez une demande via le bouton en haut à droite</div>
+                        <div style={{fontSize:14,color:"#6B6B72"}}>Aucun Ã©vÃ©nement ce jour</div>
+                        <div style={{fontSize:12,marginTop:4}}>Ajoutez une demande via le bouton en haut Ã  droite</div>
                         <button onClick={()=>{ setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || "", dateDebut: calDayStr}); setNewEventErrors({}); setShowNewEvent(true); }} style={{marginTop:16,display:"inline-flex",alignItems:"center",gap:7,padding:"9px 14px",borderRadius:8,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
                           <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                          Ajouter un événement
+                          Ajouter un Ã©vÃ©nement
                         </button>
                       </div>
                     ):(
@@ -5541,10 +5542,10 @@ FORMAT
           );
         })()}
 
-        {/* ══ STATS ══ */}
+        {/* ââ STATS ââ */}
         {view==="stats" && (() => {
-          // ═══ Calculs des KPI étendus ═══
-          // Filtre selon la période
+          // âââ Calculs des KPI Ã©tendus âââ
+          // Filtre selon la pÃ©riode
           const today = new Date();
           let dateLimit: Date | null = null;
           if (statsPeriode === "semaine") { dateLimit = new Date(today); dateLimit.setDate(today.getDate() - 7); }
@@ -5561,25 +5562,25 @@ FORMAT
           const attP = resasFiltrees.filter(r => r.statut === "en_attente" || r.statut === "nouveau" || r.statut === "en_cours").length;
           const tauxP = totalP > 0 ? Math.round(confP / totalP * 100) : 0;
 
-          // CA prévisionnel (somme budgets confirmés + en cours)
+          // CA prÃ©visionnel (somme budgets confirmÃ©s + en cours)
           const caPrev = resasFiltrees.reduce((sum, r) => {
             const b = String(r.budget || "");
-            const matchTotal = b.match(/(\d+[\s.,]?\d*)\s*€/);
-            const matchPers = b.match(/(\d+)\s*€?\s*(?:\/|par)\s*(?:pers|personne)/);
+            const matchTotal = b.match(/(\d+[\s.,]?\d*)\s*â¬/);
+            const matchPers = b.match(/(\d+)\s*â¬?\s*(?:\/|par)\s*(?:pers|personne)/);
             let val = 0;
             if (matchPers) val = parseInt(matchPers[1], 10) * (parseInt(String(r.nombrePersonnes||0), 10) || 0);
             else if (matchTotal) val = parseInt(matchTotal[1].replace(/[\s.,]/g, ""), 10);
             return sum + val;
           }, 0);
 
-          // Délai de réponse moyen (en heures)
+          // DÃ©lai de rÃ©ponse moyen (en heures)
           const delaisReponse: number[] = [];
           Object.entries(sentReplies).forEach(([eId, sr]: [string, any]) => {
             const m = emails.find(em => em.id === eId);
             if (m && m.rawDate && sr.date) {
               try {
                 const dRecu = new Date(m.rawDate).getTime();
-                // sr.date est format "DD/MM/YYYY" — on prend midi par défaut
+                // sr.date est format "DD/MM/YYYY" â on prend midi par dÃ©faut
                 const parts = sr.date.split("/");
                 if (parts.length === 3) {
                   const dEnvoi = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), 12, 0).getTime();
@@ -5593,7 +5594,7 @@ FORMAT
             ? (delaisReponse.reduce((a, b) => a + b, 0) / delaisReponse.length)
             : null;
 
-          // Taux de modification IA (réponses modifiées avant envoi)
+          // Taux de modification IA (rÃ©ponses modifiÃ©es avant envoi)
           let tauxModifIA = 0;
           let modifiedCount = 0;
           let totalCachedReplies = 0;
@@ -5613,7 +5614,7 @@ FORMAT
             ? apiUsageStats.totalCostUSD / apiUsageStats.totalCalls
             : 0;
 
-          // Espaces — utiliser ESPACES dynamiques
+          // Espaces â utiliser ESPACES dynamiques
           const parEspaceP = ESPACES.map(e => ({
             ...e,
             n: resasFiltrees.filter(r => r.espaceId === e.id).length,
@@ -5627,18 +5628,18 @@ FORMAT
             n: resasFiltrees.filter(r => r.typeEvenement === t).length,
           })).filter(x => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 5);
 
-          // Profils (estimés depuis l'extraction)
+          // Profils (estimÃ©s depuis l'extraction)
           const profilsCount = { entreprises: 0, particuliers: 0, institutionnels: 0, agences: 0 };
           resasFiltrees.forEach(r => {
             const entr = String(r.entreprise || "").trim();
             const nom = String(r.nom || "").trim();
             if (!entr || /mr|mme|m\.|mlle|madame|monsieur/i.test(nom)) profilsCount.particuliers++;
-            else if (/mairie|ministère|université|ambassade|préfecture/i.test(entr)) profilsCount.institutionnels++;
+            else if (/mairie|ministÃ¨re|universitÃ©|ambassade|prÃ©fecture/i.test(entr)) profilsCount.institutionnels++;
             else if (/agence|event|incentive|communication|marketing/i.test(entr)) profilsCount.agences++;
             else profilsCount.entreprises++;
           });
 
-          // Évolution sur 12 mois
+          // Ãvolution sur 12 mois
           const evol12: { mois: string; demandes: number; confirmes: number; annules: number }[] = [];
           for (let i = 11; i >= 0; i--) {
             const d = new Date(today);
@@ -5656,7 +5657,7 @@ FORMAT
           }
           const maxEvol = Math.max(...evol12.map(e => e.demandes), 1);
 
-          // Performance ARCHANGE — distribution par callType
+          // Performance ARCHANGE â distribution par callType
           const callTypeStats: Record<string, { count: number; tokensIn: number; tokensOut: number; cost: number }> = {};
           (apiUsageStats.history || []).forEach(h => {
             if (!callTypeStats[h.type]) callTypeStats[h.type] = { count: 0, tokensIn: 0, tokensOut: 0, cost: 0 };
@@ -5667,25 +5668,25 @@ FORMAT
           });
           const callTypesArr = Object.entries(callTypeStats).sort((a, b) => b[1].count - a[1].count);
 
-          // Sous-titre dynamique selon période
+          // Sous-titre dynamique selon pÃ©riode
           const periodeLabel = {
             semaine: "Cette semaine",
             mois: "Ce mois (" + today.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }) + ")",
             trimestre: "Ces 3 derniers mois",
-            annee: "Cette année",
-            tout: "Toute la période",
+            annee: "Cette annÃ©e",
+            tout: "Toute la pÃ©riode",
           }[statsPeriode] || "Ce mois";
 
           const exportCSV = () => {
             const rows = [
               ["KPI", "Valeur"],
-              ["CA prévisionnel", caPrev + " €"],
+              ["CA prÃ©visionnel", caPrev + " â¬"],
               ["Taux de conversion", tauxP + "%"],
-              ["Délai de réponse moyen (h)", delaiMoyen !== null ? delaiMoyen.toFixed(1) : "—"],
-              ["Événements confirmés", confP],
+              ["DÃ©lai de rÃ©ponse moyen (h)", delaiMoyen !== null ? delaiMoyen.toFixed(1) : "â"],
+              ["ÃvÃ©nements confirmÃ©s", confP],
               ["Taux modification IA", tauxModifIA + "%"],
               ["Tokens / mail moyen", tokensPerMail],
-              ["Coût / mail moyen ($)", coutPerMail.toFixed(4)],
+              ["CoÃ»t / mail moyen ($)", coutPerMail.toFixed(4)],
             ];
             const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
             const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -5693,21 +5694,21 @@ FORMAT
             const a = document.createElement("a");
             a.href = url; a.download = `archange-stats-${statsPeriode}.csv`; a.click();
             URL.revokeObjectURL(url);
-            toast("Export CSV généré ✓");
+            toast("Export CSV gÃ©nÃ©rÃ© â");
           };
 
           return (
           <div style={{flex:1,display:"flex",overflow:"hidden",background:"#F5F4F0"}}>
-            {/* ═══ SIDEBAR SECONDAIRE ═══ */}
+            {/* âââ SIDEBAR SECONDAIRE âââ */}
             <div style={{width:220,flexShrink:0,background:"#FAFAF7",borderRight:"1px solid #EBEAE5",padding:"22px 16px",display:"flex",flexDirection:"column",overflowY:"auto"}}>
-              {/* Bloc PÉRIODE */}
-              <div style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Période</div>
+              {/* Bloc PÃRIODE */}
+              <div style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>PÃ©riode</div>
               <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:24}}>
                 {[
                   {k:"semaine", l:"Cette semaine"},
                   {k:"mois", l:"Ce mois"},
                   {k:"trimestre", l:"Ce trimestre"},
-                  {k:"annee", l:"Cette année"},
+                  {k:"annee", l:"Cette annÃ©e"},
                   {k:"tout", l:"Tout"},
                 ].map(p => {
                   const isActive = statsPeriode === p.k;
@@ -5724,7 +5725,7 @@ FORMAT
                   {k:"ensemble", l:"Vue d'ensemble"},
                   {k:"perf_ia", l:"Performance ARCHANGE"},
                   {k:"espaces", l:"Espaces"},
-                  {k:"types", l:"Types d'événements"},
+                  {k:"types", l:"Types d'Ã©vÃ©nements"},
                   {k:"profils", l:"Profils clients"},
                 ].map(f => {
                   const isActive = statsFocus === f.k;
@@ -5735,17 +5736,17 @@ FORMAT
               </div>
             </div>
 
-            {/* ═══ ZONE PRINCIPALE ═══ */}
+            {/* âââ ZONE PRINCIPALE âââ */}
             <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
               {/* Header */}
               <div style={{padding:"22px 28px 16px",flexShrink:0,borderBottom:"1px solid #EBEAE5",background:"#F5F4F0"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18,flexWrap:"wrap",gap:12}}>
                   <div>
                     <div style={{fontSize:22,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.02em"}}>Statistiques</div>
-                    <div style={{fontSize:12,color:"#6B6E7E",marginTop:3}}>Performance commerciale · {periodeLabel}</div>
+                    <div style={{fontSize:12,color:"#6B6E7E",marginTop:3}}>Performance commerciale Â· {periodeLabel}</div>
                   </div>
                   <button onClick={exportCSV} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:6,transition:"all .14s ease"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#B8924F";e.currentTarget.style.color="#B8924F";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#EBEAE5";e.currentTarget.style.color="#1A1A1E";}}>
-                    <span style={{fontSize:13}}>📥</span> Exporter CSV
+                    <span style={{fontSize:13}}>ð¥</span> Exporter CSV
                   </button>
                 </div>
 
@@ -5753,51 +5754,51 @@ FORMAT
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:10}}>
                   <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                      <span style={{fontSize:13}}>💰</span>
-                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>CA prévisionnel</span>
+                      <span style={{fontSize:13}}>ð°</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>CA prÃ©visionnel</span>
                     </div>
-                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{caPrev.toLocaleString("fr-FR")} €</div>
-                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{totalP} demande{totalP>1?"s":""} sur la période</div>
+                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{caPrev.toLocaleString("fr-FR")} â¬</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{totalP} demande{totalP>1?"s":""} sur la pÃ©riode</div>
                   </div>
                   <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                      <span style={{fontSize:13}}>📈</span>
+                      <span style={{fontSize:13}}>ð</span>
                       <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Taux conversion</span>
                     </div>
                     <div style={{fontSize:24,fontWeight:300,color:tauxP>=40?"#639922":tauxP>=20?"#B8924F":"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{tauxP}%</div>
-                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{confP} confirmées sur {totalP}</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{confP} confirmÃ©es sur {totalP}</div>
                   </div>
                   <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                      <span style={{fontSize:13}}>⏱</span>
-                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Délai réponse</span>
+                      <span style={{fontSize:13}}>â±</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>DÃ©lai rÃ©ponse</span>
                     </div>
-                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{delaiMoyen !== null ? delaiMoyen.toFixed(1) + " h" : "—"}</div>
+                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{delaiMoyen !== null ? delaiMoyen.toFixed(1) + " h" : "â"}</div>
                     <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>moyenne sur {delaisReponse.length} envois</div>
                   </div>
                   <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                      <span style={{fontSize:13}}>✅</span>
-                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Confirmés</span>
+                      <span style={{fontSize:13}}>â</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>ConfirmÃ©s</span>
                     </div>
                     <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{confP}</div>
                     <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{attP} en attente</div>
                   </div>
                   <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                      <span style={{fontSize:13}}>✏️</span>
+                      <span style={{fontSize:13}}>âï¸</span>
                       <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Tx modif IA</span>
                     </div>
                     <div style={{fontSize:24,fontWeight:300,color:tauxModifIA<25?"#639922":tauxModifIA<50?"#B8924F":"#A03939",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{tauxModifIA}%</div>
-                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{modifiedCount}/{totalCachedReplies} réponses modifiées</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{modifiedCount}/{totalCachedReplies} rÃ©ponses modifiÃ©es</div>
                   </div>
                   <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                      <span style={{fontSize:13}}>✨</span>
+                      <span style={{fontSize:13}}>â¨</span>
                       <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Tokens / mail</span>
                     </div>
                     <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{tokensPerMail >= 1000 ? (tokensPerMail/1000).toFixed(1) + " k" : tokensPerMail}</div>
-                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>≈ ${coutPerMail.toFixed(4)} / mail</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>â ${coutPerMail.toFixed(4)} / mail</div>
                   </div>
                 </div>
               </div>
@@ -5805,14 +5806,14 @@ FORMAT
               {/* Zone scrollable */}
               <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px",display:"flex",flexDirection:"column",gap:12,minHeight:0}}>
 
-                {/* Graphique évolution 12 mois */}
+                {/* Graphique Ã©volution 12 mois */}
                 <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
-                    <span style={{fontSize:13,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif"}}>Évolution sur 12 mois</span>
+                    <span style={{fontSize:13,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif"}}>Ãvolution sur 12 mois</span>
                     <div style={{display:"flex",gap:14,fontSize:11,color:"#6B6E7E",alignItems:"center"}}>
                       <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:10,height:2,background:"#B8924F",display:"inline-block"}}/>Demandes</span>
-                      <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:10,height:2,background:"#639922",display:"inline-block"}}/>Confirmées</span>
-                      <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:10,height:2,background:"#E89999",display:"inline-block"}}/>Annulées</span>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:10,height:2,background:"#639922",display:"inline-block"}}/>ConfirmÃ©es</span>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:10,height:2,background:"#E89999",display:"inline-block"}}/>AnnulÃ©es</span>
                     </div>
                   </div>
                   <svg viewBox="0 0 600 140" style={{width:"100%",height:130}}>
@@ -5851,8 +5852,8 @@ FORMAT
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                     {/* Top espaces */}
                     <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
-                      <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:12,fontFamily:"'Geist','system-ui',sans-serif"}}>Top espaces réservés</div>
-                      {parEspaceP.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucune donnée</div> : (
+                      <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:12,fontFamily:"'Geist','system-ui',sans-serif"}}>Top espaces rÃ©servÃ©s</div>
+                      {parEspaceP.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucune donnÃ©e</div> : (
                         <div style={{display:"flex",flexDirection:"column",gap:8}}>
                           {parEspaceP.slice(0, 5).map(e => (
                             <div key={e.id} style={{display:"flex",alignItems:"center",gap:10}}>
@@ -5868,8 +5869,8 @@ FORMAT
                     </div>
                     {/* Top types */}
                     <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
-                      <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:12,fontFamily:"'Geist','system-ui',sans-serif"}}>Top types d'événements</div>
-                      {parTypeP.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucune donnée</div> : (
+                      <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:12,fontFamily:"'Geist','system-ui',sans-serif"}}>Top types d'Ã©vÃ©nements</div>
+                      {parTypeP.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucune donnÃ©e</div> : (
                         <div style={{display:"flex",flexDirection:"column",gap:8}}>
                           {parTypeP.map(t => (
                             <div key={t.t} style={{display:"flex",alignItems:"center",gap:10}}>
@@ -5888,7 +5889,7 @@ FORMAT
 
                 {statsFocus === "espaces" && (
                   <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
-                    <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Détail par espace</div>
+                    <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>DÃ©tail par espace</div>
                     {parEspaceP.map(e => (
                       <div key={e.id} style={{marginBottom:14,paddingBottom:14,borderBottom:"1px solid #EBEAE5"}}>
                         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
@@ -5898,7 +5899,7 @@ FORMAT
                         <div style={{height:8,background:"#EBEAE5",borderRadius:4,overflow:"hidden"}}>
                           <div style={{height:"100%",width:`${(e.n/maxNP)*100}%`,background:e.color || "#B8924F",borderRadius:4}}/>
                         </div>
-                        <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>{e.n>0?Math.round(e.c/e.n*100)+"% confirmés":"Aucune demande"}</div>
+                        <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>{e.n>0?Math.round(e.c/e.n*100)+"% confirmÃ©s":"Aucune demande"}</div>
                       </div>
                     ))}
                   </div>
@@ -5906,8 +5907,8 @@ FORMAT
 
                 {statsFocus === "types" && (
                   <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
-                    <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Répartition par type d'événement</div>
-                    {parTypeP.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucune donnée disponible</div> : (
+                    <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>RÃ©partition par type d'Ã©vÃ©nement</div>
+                    {parTypeP.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucune donnÃ©e disponible</div> : (
                       <div style={{display:"flex",flexDirection:"column",gap:10}}>
                         {parTypeP.map(t => (
                           <div key={t.t} style={{display:"flex",alignItems:"center",gap:12}}>
@@ -5926,10 +5927,10 @@ FORMAT
                 {statsFocus === "profils" && (
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                     {([
-                      ["Entreprises", profilsCount.entreprises, "🏢"],
-                      ["Particuliers", profilsCount.particuliers, "👤"],
-                      ["Institutionnels", profilsCount.institutionnels, "🏛"],
-                      ["Agences", profilsCount.agences, "📣"],
+                      ["Entreprises", profilsCount.entreprises, "ð¢"],
+                      ["Particuliers", profilsCount.particuliers, "ð¤"],
+                      ["Institutionnels", profilsCount.institutionnels, "ð"],
+                      ["Agences", profilsCount.agences, "ð£"],
                     ] as [string, number, string][]).map(([l, n, ic]) => {
                       const totalProfils = profilsCount.entreprises + profilsCount.particuliers + profilsCount.institutionnels + profilsCount.agences;
                       const pct = totalProfils > 0 ? Math.round(n / totalProfils * 100) : 0;
@@ -5951,14 +5952,14 @@ FORMAT
                   <div style={{display:"flex",flexDirection:"column",gap:12}}>
                     {/* Vue globale */}
                     <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
-                      <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Synthèse API ARCHANGE — session en cours</div>
+                      <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>SynthÃ¨se API ARCHANGE â session en cours</div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:10}}>
                         <div style={{padding:"10px 12px",background:"#FAFAF7",borderRadius:8}}>
                           <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>Appels totaux</div>
                           <div style={{fontSize:18,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{apiUsageStats.totalCalls}</div>
                         </div>
                         <div style={{padding:"10px 12px",background:"#FAFAF7",borderRadius:8}}>
-                          <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>Tokens entrée</div>
+                          <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>Tokens entrÃ©e</div>
                           <div style={{fontSize:18,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{apiUsageStats.totalInputTokens.toLocaleString("fr-FR")}</div>
                         </div>
                         <div style={{padding:"10px 12px",background:"#FAFAF7",borderRadius:8}}>
@@ -5966,16 +5967,16 @@ FORMAT
                           <div style={{fontSize:18,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{apiUsageStats.totalOutputTokens.toLocaleString("fr-FR")}</div>
                         </div>
                         <div style={{padding:"10px 12px",background:"#FAFAF7",borderRadius:8}}>
-                          <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>Coût total</div>
+                          <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>CoÃ»t total</div>
                           <div style={{fontSize:18,fontWeight:500,color:"#B8924F",fontVariantNumeric:"tabular-nums"}}>${apiUsageStats.totalCostUSD.toFixed(4)}</div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Détail par callType */}
+                    {/* DÃ©tail par callType */}
                     <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
                       <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Distribution par type d'appel</div>
-                      {callTypesArr.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucun appel encore enregistré dans cette session</div> : (
+                      {callTypesArr.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucun appel encore enregistrÃ© dans cette session</div> : (
                         <div style={{display:"flex",flexDirection:"column",gap:8}}>
                           {callTypesArr.map(([type, st]) => (
                             <div key={type} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",borderBottom:"1px solid #EBEAE5"}}>
@@ -5998,9 +5999,9 @@ FORMAT
           );
         })()}
 
-                {/* ══ SOURCES IA ══ */}
+                {/* ââ SOURCES IA ââ */}
         {view==="sources" && (() => {
-          // ── Calcul des KPI ───────────────────────────────────────────────
+          // ââ Calcul des KPI âââââââââââââââââââââââââââââââââââââââââââââââ
           const totalZones = 18;
           const zonesRemplies = (nomEtab?1:0) + (menusCtx?1:0) + (conditionsCtx?1:0) + (espacesCtx?1:0) + (customCtx?1:0)
             + (Object.values(reglesCommerciales.parNombrePersonnes).filter(Boolean).length>0?1:0)
@@ -6031,14 +6032,14 @@ FORMAT
             Object.values(reglesCommerciales.parMoment).filter(Boolean).length>0,
             Object.values(reglesCommerciales.parEspace).filter(Boolean).length>0,
           ].filter(Boolean).length;
-          // Qualité prédictive : pondération simple
+          // QualitÃ© prÃ©dictive : pondÃ©ration simple
           const qualitePred = Math.min(100, Math.round(
             (completude * 0.4) +
             (Math.min(reglesActives, 12) / 12 * 100 * 0.3) +
             (casParticuliers.length>0?20:0) +
             ((reglesAbsolues||"").trim().length>0?10:0)
           ));
-          // Compteurs par catégorie pour la sidebar
+          // Compteurs par catÃ©gorie pour la sidebar
           const counts = {
             infos: (nomEtab?1:0) + (menusCtx?1:0) + (conditionsCtx?1:0) + (espacesCtx?1:0) + (customCtx?1:0),
             regles_com: reglesActives,
@@ -6048,23 +6049,23 @@ FORMAT
             absolues: (reglesAbsolues||"").split("\n").filter((l: string)=>l.trim()).length,
           };
           const totalCount = counts.infos + counts.regles_com + counts.ton + counts.appr + counts.cas_part + counts.absolues;
-          // Définition catégories sidebar
+          // DÃ©finition catÃ©gories sidebar
           const categories: {key: string; icon: string; label: string; count: number; isAbsolue?: boolean}[] = [
-            {key:"all", icon:"🏠", label:"Tout", count: totalCount},
-            {key:"infos", icon:"🏢", label:"Identité", count: counts.infos},
-            {key:"regles_com", icon:"⚡", label:"Règles com.", count: counts.regles_com},
-            {key:"ton", icon:"🎨", label:"Ton & Style", count: counts.ton},
-            {key:"appr", icon:"📚", label:"Apprentissages", count: counts.appr},
-            {key:"cas_part", icon:"🌟", label:"Cas part.", count: counts.cas_part},
-            {key:"absolues", icon:"🚫", label:"Absolues", count: counts.absolues, isAbsolue: true},
+            {key:"all", icon:"ð ", label:"Tout", count: totalCount},
+            {key:"infos", icon:"ð¢", label:"IdentitÃ©", count: counts.infos},
+            {key:"regles_com", icon:"â¡", label:"RÃ¨gles com.", count: counts.regles_com},
+            {key:"ton", icon:"ð¨", label:"Ton & Style", count: counts.ton},
+            {key:"appr", icon:"ð", label:"Apprentissages", count: counts.appr},
+            {key:"cas_part", icon:"ð", label:"Cas part.", count: counts.cas_part},
+            {key:"absolues", icon:"ð«", label:"Absolues", count: counts.absolues, isAbsolue: true},
           ];
 
           return (
           <div style={{flex:1,display:"flex",overflow:"hidden",background:"#F5F4F0"}}>
-            {/* ═══ SIDEBAR SECONDAIRE (200px) ═══════════════════════════════ */}
+            {/* âââ SIDEBAR SECONDAIRE (200px) âââââââââââââââââââââââââââââââ */}
             <div style={{width:220,flexShrink:0,background:"#FAFAF7",borderRight:"1px solid #EBEAE5",padding:"22px 16px",display:"flex",flexDirection:"column",overflowY:"auto"}}>
-              {/* Bloc Catégories */}
-              <div style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Catégories</div>
+              {/* Bloc CatÃ©gories */}
+              <div style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>CatÃ©gories</div>
               <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:24}}>
                 {categories.map(cat => {
                   const isActive = sourcesFilter === cat.key;
@@ -6116,141 +6117,141 @@ FORMAT
 
               <div style={{flex:1}}/>
 
-              {/* Bloc Statut général */}
+              {/* Bloc Statut gÃ©nÃ©ral */}
               <div style={{padding:14,background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
-                <div style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:9,fontFamily:"'Geist','system-ui',sans-serif"}}>Statut général</div>
+                <div style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:9,fontFamily:"'Geist','system-ui',sans-serif"}}>Statut gÃ©nÃ©ral</div>
                 <div style={{fontSize:11.5,color:"#1A1A1E",marginBottom:8,lineHeight:1.4}}>
-                  ARCHANGE est nourri à <strong style={{color:"#B8924F",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{completude}%</strong>
+                  ARCHANGE est nourri Ã  <strong style={{color:"#B8924F",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{completude}%</strong>
                 </div>
                 <div style={{height:5,background:"#EBEAE5",borderRadius:3,overflow:"hidden"}}>
                   <div style={{height:"100%",width:`${completude}%`,background:"#B8924F",transition:"width .3s ease"}}/>
                 </div>
                 <div style={{fontSize:10,color:"#6B6E7E",marginTop:8,lineHeight:1.4}}>
-                  {totalZones - zonesRemplies > 0 ? `${totalZones - zonesRemplies} zone${(totalZones-zonesRemplies)>1?"s":""} à compléter` : "Toutes les zones sont remplies !"}
+                  {totalZones - zonesRemplies > 0 ? `${totalZones - zonesRemplies} zone${(totalZones-zonesRemplies)>1?"s":""} Ã  complÃ©ter` : "Toutes les zones sont remplies !"}
                 </div>
               </div>
             </div>
 
-            {/* ═══ ZONE PRINCIPALE ══════════════════════════════════════════ */}
+            {/* âââ ZONE PRINCIPALE ââââââââââââââââââââââââââââââââââââââââââ */}
             <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
               {/* Header */}
               <div style={{padding:"22px 28px 16px",flexShrink:0,borderBottom:"1px solid #EBEAE5",background:"#F5F4F0"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18,flexWrap:"wrap",gap:12}}>
                   <div>
                     <div style={{fontSize:22,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.02em"}}>Sources ARCHANGE</div>
-                    <div style={{fontSize:12,color:"#6B6E7E",marginTop:3}}>Tout ce qu'ARCHANGE sait sur votre établissement</div>
+                    <div style={{fontSize:12,color:"#6B6E7E",marginTop:3}}>Tout ce qu'ARCHANGE sait sur votre Ã©tablissement</div>
                   </div>
                   <button onClick={()=>setShowTestArchange(true)} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
-                    <span style={{fontSize:13}}>⚡</span> Tester ARCHANGE
+                    <span style={{fontSize:13}}>â¡</span> Tester ARCHANGE
                   </button>
                 </div>
 
-                {/* C4 — Bandeau onboarding si aucune source n'est configurée */}
+                {/* C4 â Bandeau onboarding si aucune source n'est configurÃ©e */}
                 {!menusCtx && !conditionsCtx && !tonCtx && !espacesCtx && (
                   <div style={{marginBottom:14,padding:"12px 16px",background:"rgba(184,146,79,0.08)",border:"1px solid rgba(184,146,79,0.3)",borderLeft:"3px solid #B8924F",borderRadius:"0 6px 6px 0",display:"flex",alignItems:"flex-start",gap:12}}>
-                    <span style={{fontSize:18,flexShrink:0}}>✨</span>
+                    <span style={{fontSize:18,flexShrink:0}}>â¨</span>
                     <div>
-                      <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",marginBottom:3}}>Personnalisez ARCHANGE pour votre établissement</div>
+                      <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",marginBottom:3}}>Personnalisez ARCHANGE pour votre Ã©tablissement</div>
                       <div style={{fontSize:12,color:"#6B6E7E",lineHeight:1.5}}>
-                        Aucune source n'est encore configurée. En renseignant vos menus, conditions et règles, ARCHANGE rédigera des réponses parfaitement adaptées à votre brasserie.
+                        Aucune source n'est encore configurÃ©e. En renseignant vos menus, conditions et rÃ¨gles, ARCHANGE rÃ©digera des rÃ©ponses parfaitement adaptÃ©es Ã  votre brasserie.
                       </div>
-                      <div style={{fontSize:11,color:"#B8924F",marginTop:6,fontWeight:500}}>👇 Commencez par "Identité" dans la sidebar</div>
+                      <div style={{fontSize:11,color:"#B8924F",marginTop:6,fontWeight:500}}>ð Commencez par "IdentitÃ©" dans la sidebar</div>
                     </div>
                   </div>
                 )}
 
-                {/* 4 KPI cards — refonte design moderne */}
+                {/* 4 KPI cards â refonte design moderne */}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:10}}>
                   <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                      <span style={{fontSize:13}}>📊</span>
-                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Complétude</span>
+                      <span style={{fontSize:13}}>ð</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>ComplÃ©tude</span>
                     </div>
                     <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{completude}%</div>
                     <div style={{fontSize:10,color:"#6B6E7E",marginTop:5,fontVariantNumeric:"tabular-nums"}}>{zonesRemplies} / {totalZones} zones remplies</div>
                   </div>
                   <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                      <span style={{fontSize:13}}>⚡</span>
-                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Règles actives</span>
+                      <span style={{fontSize:13}}>â¡</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>RÃ¨gles actives</span>
                     </div>
                     <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{reglesActives}</div>
                     <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{dimensionsCouvertes} / 6 dimensions couvertes</div>
                   </div>
                   <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                      <span style={{fontSize:13}}>🌟</span>
+                      <span style={{fontSize:13}}>ð</span>
                       <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Cas particuliers</span>
                     </div>
                     <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{casParticuliers.length}</div>
                     <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>
                       {casParticuliers.length > 0
                         ? `${casParticuliers.filter(c=>c.matchingMode==="auto").length} en mode auto`
-                        : "aucun défini"}
+                        : "aucun dÃ©fini"}
                     </div>
                   </div>
                   <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                      <span style={{fontSize:13}}>✨</span>
-                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Qualité IA</span>
+                      <span style={{fontSize:13}}>â¨</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>QualitÃ© IA</span>
                     </div>
                     <div style={{fontSize:24,fontWeight:300,color:"#B8924F",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{qualitePred}%</div>
-                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>prédictif sur extractions</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>prÃ©dictif sur extractions</div>
                   </div>
                 </div>
               </div>
 
-            {/* ── Zone scrollable ── */}
+            {/* ââ Zone scrollable ââ */}
             <div style={{flex:1,overflowY:"scroll",padding:"16px 28px 28px",display:"flex",flexDirection:"column",gap:12,minHeight:0}}>
 
-            {/* ── Section Établissement ── */}
+            {/* ââ Section Ãtablissement ââ */}
             <div style={{display: (sourcesFilter==="all"||sourcesFilter==="infos")?"block":"none",background:"#FFFFFF",borderRadius:12,border:"2px solid #B8924F"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FDF8EF",borderBottom:srcSections["etablissement"]?"1px solid #EBEAE5":"none",cursor:"pointer",borderRadius:srcSections["etablissement"]?"12px 12px 0 0":"12px"}} onClick={()=>setSrcSections(s=>({...s,etablissement:!s["etablissement"]}))}>
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:16}}>🏠</span>
-                    <span style={{fontSize:13,fontWeight:700,color:"#1A1A1E"}}>Identité de l'établissement</span>
+                    <span style={{fontSize:16}}>ð </span>
+                    <span style={{fontSize:13,fontWeight:700,color:"#1A1A1E"}}>IdentitÃ© de l'Ã©tablissement</span>
                     <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#FEF3C7",color:"#92400E",fontWeight:600}}>Multi-compte</span>
                   </div>
-                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Nom, adresse, email — personnalise tout ARCHANGE et la sidebar</div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Nom, adresse, email â personnalise tout ARCHANGE et la sidebar</div>
                 </div>
-                <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["etablissement"]?"▲":"▼"}</span>
+                <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["etablissement"]?"â²":"â¼"}</span>
               </div>
               {srcSections["etablissement"]&&(
                 <div style={{padding:20,display:"flex",flexDirection:"column",gap:14}}>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>🏷 Nom de l'établissement</label>
-                    <input value={nomEtab} onChange={e=>setNomEtab(e.target.value)} onBlur={()=>saveNomEtab(nomEtab)} placeholder="Ex : Brasserie RÊVA, Le Comptoir du Port…" style={{...inp,fontSize:14,fontWeight:600}}/>
-                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>Utilisé dans tous les prompts ARCHANGE et la signature email</div>
+                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>ð· Nom de l'Ã©tablissement</label>
+                    <input value={nomEtab} onChange={e=>setNomEtab(e.target.value)} onBlur={()=>saveNomEtab(nomEtab)} placeholder="Ex : Brasserie RÃVA, Le Comptoir du Portâ¦" style={{...inp,fontSize:14,fontWeight:600}}/>
+                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>UtilisÃ© dans tous les prompts ARCHANGE et la signature email</div>
                   </div>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📍 Adresse</label>
+                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>ð Adresse</label>
                     <input value={adresseEtab} onChange={e=>setAdresseEtab(e.target.value)} onBlur={()=>saveAdresseEtab(adresseEtab)} placeholder="Ex : 133 avenue de France, 75013 Paris" style={{...inp}}/>
                   </div>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📧 Email de contact</label>
+                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>ð§ Email de contact</label>
                     <input value={emailEtab} onChange={e=>setEmailEtab(e.target.value)} onBlur={()=>saveEmailEtab(emailEtab)} placeholder="Ex : contact@brasserie-reva.fr" style={{...inp}}/>
                   </div>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📞 Téléphone</label>
+                    <label style={{fontSize:11,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>ð TÃ©lÃ©phone</label>
                     <input value={telEtab} onChange={e=>setTelEtab(e.target.value)} onBlur={()=>saveTelEtab(telEtab)} placeholder="Ex : +33 1 23 45 67 89" style={{...inp}}/>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* ── Section Espaces dynamiques ── */}
+            {/* ââ Section Espaces dynamiques ââ */}
             <div style={{display:(sourcesFilter==="all"||sourcesFilter==="infos")?"block":"none",background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections["espacesDyn"]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,espacesDyn:!s["espacesDyn"]}))}>
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:16}}>🏛️</span>
-                    <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Espaces de l'établissement</span>
+                    <span style={{fontSize:16}}>ðï¸</span>
+                    <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Espaces de l'Ã©tablissement</span>
                     <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#D1FAE5",color:"#3F5B32",fontWeight:600}}>{espacesDyn.length} espace{espacesDyn.length>1?"s":""}</span>
                   </div>
-                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Salles, capacités, descriptions — remplacent les espaces codés en dur</div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Salles, capacitÃ©s, descriptions â remplacent les espaces codÃ©s en dur</div>
                 </div>
-                <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["espacesDyn"]?"▲":"▼"}</span>
+                <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["espacesDyn"]?"â²":"â¼"}</span>
               </div>
               {srcSections["espacesDyn"]&&(
                 <div style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
@@ -6261,16 +6262,16 @@ FORMAT
                         <input type="color" value={esp.color} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],color:e.target.value}; saveEspacesDyn(u);}} style={{width:32,height:32,borderRadius:6,border:"none",cursor:"pointer",flexShrink:0}}/>
                         <input value={esp.nom} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],nom:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Nom de l'espace" style={{...inp,fontWeight:700,flex:1,fontSize:13}}/>
                         {espacesDyn.length > 1 && (
-                          <button onClick={()=>saveEspacesDyn(espacesDyn.filter((_,i)=>i!==idx))} title="Supprimer" style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:16,padding:"4px",flexShrink:0}}>✕</button>
+                          <button onClick={()=>saveEspacesDyn(espacesDyn.filter((_,i)=>i!==idx))} title="Supprimer" style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:16,padding:"4px",flexShrink:0}}>â</button>
                         )}
                       </div>
 
-                      {/* Ligne 2 : capacités assis / debout */}
+                      {/* Ligne 2 : capacitÃ©s assis / debout */}
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                         {/* Assis */}
                         <div style={{background:"#FFFFFF",borderRadius:8,padding:"10px 12px",border:"1px solid #EBEAE5"}}>
                           <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
-                            🪑 Assis
+                            ðª Assis
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6}}>
                             <div style={{flex:1}}>
@@ -6280,11 +6281,11 @@ FORMAT
                                 value={esp.assisMin}
                                 onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],assisMin:e.target.value}; setEspacesDyn(u);}}
                                 onBlur={()=>saveEspacesDyn(espacesDyn)}
-                                placeholder="—"
+                                placeholder="â"
                                 style={{...inp,textAlign:"center",padding:"6px 8px"}}
                               />
                             </div>
-                            <span style={{color:"#C5C3BE",fontSize:13,marginTop:16}}>→</span>
+                            <span style={{color:"#C5C3BE",fontSize:13,marginTop:16}}>â</span>
                             <div style={{flex:1}}>
                               <div style={{fontSize:10,color:"#6B6E7E",marginBottom:3}}>Max</div>
                               <input
@@ -6292,7 +6293,7 @@ FORMAT
                                 value={esp.assisMax}
                                 onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],assisMax:e.target.value}; setEspacesDyn(u);}}
                                 onBlur={()=>saveEspacesDyn(espacesDyn)}
-                                placeholder="—"
+                                placeholder="â"
                                 style={{...inp,textAlign:"center",padding:"6px 8px"}}
                               />
                             </div>
@@ -6303,7 +6304,7 @@ FORMAT
                         {/* Debout */}
                         <div style={{background:"#FFFFFF",borderRadius:8,padding:"10px 12px",border:"1px solid #EBEAE5"}}>
                           <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
-                            🥂 Debout / Cocktail
+                            ð¥ Debout / Cocktail
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6}}>
                             <div style={{flex:1}}>
@@ -6313,11 +6314,11 @@ FORMAT
                                 value={esp.deboutMin}
                                 onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],deboutMin:e.target.value}; setEspacesDyn(u);}}
                                 onBlur={()=>saveEspacesDyn(espacesDyn)}
-                                placeholder="—"
+                                placeholder="â"
                                 style={{...inp,textAlign:"center",padding:"6px 8px"}}
                               />
                             </div>
-                            <span style={{color:"#C5C3BE",fontSize:13,marginTop:16}}>→</span>
+                            <span style={{color:"#C5C3BE",fontSize:13,marginTop:16}}>â</span>
                             <div style={{flex:1}}>
                               <div style={{fontSize:10,color:"#6B6E7E",marginBottom:3}}>Max</div>
                               <input
@@ -6325,7 +6326,7 @@ FORMAT
                                 value={esp.deboutMax}
                                 onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],deboutMax:e.target.value}; setEspacesDyn(u);}}
                                 onBlur={()=>saveEspacesDyn(espacesDyn)}
-                                placeholder="—"
+                                placeholder="â"
                                 style={{...inp,textAlign:"center",padding:"6px 8px"}}
                               />
                             </div>
@@ -6335,39 +6336,39 @@ FORMAT
                       </div>
 
                       {/* Ligne 3 : description */}
-                      <input value={esp.description} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],description:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Description courte (vue, surface, ambiance, équipements…)" style={{...inp,width:"100%"}}/>
+                      <input value={esp.description} onChange={e=>{const u=[...espacesDyn]; u[idx]={...u[idx],description:e.target.value}; setEspacesDyn(u);}} onBlur={()=>saveEspacesDyn(espacesDyn)} placeholder="Description courte (vue, surface, ambiance, Ã©quipementsâ¦)" style={{...inp,width:"100%"}}/>
                     </div>
                   ))}
                   <button onClick={()=>saveEspacesDyn([...espacesDyn,{id:"esp_"+Date.now(),nom:"Nouvel espace",color:"#8B5CF6",assisMin:"",assisMax:"",deboutMin:"",deboutMax:"",description:""}])} style={{padding:"10px",borderRadius:8,border:"2px dashed #EBEAE5",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                     + Ajouter un espace
                   </button>
 
-                  {/* Notes complémentaires — remplace l'ancien textarea "Espaces & Capacités" */}
+                  {/* Notes complÃ©mentaires â remplace l'ancien textarea "Espaces & CapacitÃ©s" */}
                   <div style={{marginTop:4}}>
-                    <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>📝 Notes complémentaires sur les espaces</div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>ð Notes complÃ©mentaires sur les espaces</div>
                     <textarea
                       value={espacesCtx}
                       onChange={e=>setEspacesCtx(e.target.value)}
                       onBlur={()=>saveEspacesCtx(espacesCtx)}
-                      placeholder={"Équipements disponibles, accès PMR, parking, matériel sonorisation, contraintes techniques, règles d'accès, horaires d'ouverture des espaces…"}
+                      placeholder={"Ãquipements disponibles, accÃ¨s PMR, parking, matÃ©riel sonorisation, contraintes techniques, rÃ¨gles d'accÃ¨s, horaires d'ouverture des espacesâ¦"}
                       rows={5}
                       style={{...inp,lineHeight:1.75,resize:"vertical",width:"100%",fontFamily:"inherit",fontSize:12}}
                     />
-                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>Ces informations complètent les espaces ci-dessus — équipements, accès, contraintes non structurées.</div>
+                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>Ces informations complÃ¨tent les espaces ci-dessus â Ã©quipements, accÃ¨s, contraintes non structurÃ©es.</div>
                   </div>
 
                   <div style={{fontSize:11,color:"#6B6E7E",padding:"8px 12px",background:"#F5F4F0",borderRadius:8}}>
-                    💡 Les espaces ci-dessus remplacent les salles codées en dur. ARCHANGE les utilisera pour les attributions et les réponses.
+                    ð¡ Les espaces ci-dessus remplacent les salles codÃ©es en dur. ARCHANGE les utilisera pour les attributions et les rÃ©ponses.
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Composant réutilisable pour chaque section texte */}
+            {/* Composant rÃ©utilisable pour chaque section texte */}
             {([
-              ["menus",      "🍽️", "Menus & Tarifs",        "Collez ici vos menus, formules, tarifs par personne, options boissons…",            menusCtx,      saveMenusCtx],
-              ["conditions", "📜", "Conditions & Politique", "Politique d'annulation, acomptes, délais de confirmation, horaires d'accès…",       conditionsCtx, saveConditionsCtx],
-              ["ton",        "✏️", "Règles & Ton IA (legacy)",        "Ancienne zone libre — remplacée par Ton & Style v2 (🎨). Conservée pour compatibilité ; si vous utilisez la nouvelle section Ton, videz celle-ci.", tonCtx, saveTonCtx],
+              ["menus",      "ð½ï¸", "Menus & Tarifs",        "Collez ici vos menus, formules, tarifs par personne, options boissonsâ¦",            menusCtx,      saveMenusCtx],
+              ["conditions", "ð", "Conditions & Politique", "Politique d'annulation, acomptes, dÃ©lais de confirmation, horaires d'accÃ¨sâ¦",       conditionsCtx, saveConditionsCtx],
+              ["ton",        "âï¸", "RÃ¨gles & Ton IA (legacy)",        "Ancienne zone libre â remplacÃ©e par Ton & Style v2 (ð¨). ConservÃ©e pour compatibilitÃ© ; si vous utilisez la nouvelle section Ton, videz celle-ci.", tonCtx, saveTonCtx],
             ]).map(([key, icon, title, ph, val, save]) => (
               <div key={key} style={{display:(sourcesFilter==="all"||sourcesFilter==="infos")?"block":"none",background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections[key]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,[key]:!s[key]}))}>
@@ -6377,9 +6378,9 @@ FORMAT
                       <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>{title}</span>
                       {val&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#D1FAE5",color:"#3F5B32",fontWeight:600}}>Actif</span>}
                     </div>
-                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>{ph.slice(0,60)}…</div>
+                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>{ph.slice(0,60)}â¦</div>
                   </div>
-                  <span style={{fontSize:12,color:"#6B6E7E",flexShrink:0,marginLeft:12}}>{srcSections[key]?"▲":"▼"}</span>
+                  <span style={{fontSize:12,color:"#6B6E7E",flexShrink:0,marginLeft:12}}>{srcSections[key]?"â²":"â¼"}</span>
                 </div>
                 {srcSections[key]&&(
                   <div style={{padding:20,display:"flex",flexDirection:"column",gap:10}}>
@@ -6391,39 +6392,39 @@ FORMAT
                       style={{...inp,lineHeight:1.75,resize:"vertical",width:"100%",fontFamily:"inherit"}}
                     />
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span style={{fontSize:11,color:"#6B6E7E"}}>{val.length} caractères</span>
-                      {val&&<button onClick={()=>save("")} style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}}>Vider ×</button>}
+                      <span style={{fontSize:11,color:"#6B6E7E"}}>{val.length} caractÃ¨res</span>
+                      {val&&<button onClick={()=>save("")} style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}}>Vider Ã</button>}
                     </div>
                   </div>
                 )}
               </div>
             ))}
 
-            {/* Liens web — section existante conservée */}
+            {/* Liens web â section existante conservÃ©e */}
             <div style={{display:(sourcesFilter==="all"||sourcesFilter==="infos")?"block":"none",background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
               <button onClick={()=>setSrcSections(s=>({...s,liens:!s.liens}))} style={{width:"100%",padding:"14px 20px",background:"#FAFAF7",border:"none",borderBottom:srcSections.liens?"1px solid #EBEAE5":"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left"}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>🔗 Liens web analysés</div>
-                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:2}}>Site internet, Instagram, Facebook — ARCHANGE analyse le contenu.</div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>ð Liens web analysÃ©s</div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:2}}>Site internet, Instagram, Facebook â ARCHANGE analyse le contenu.</div>
                 </div>
-                <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections.liens?"▲":"▼"}</span>
+                <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections.liens?"â²":"â¼"}</span>
               </button>
               {srcSections.liens&&(
                 <div style={{padding:20,display:"flex",flexDirection:"column",gap:16}}>
-                  {[["website","🌐","Site internet","https://..."],["instagram","📸","Instagram","https://instagram.com/..."],["facebook","👍","Facebook","https://facebook.com/..."],["other","🔗","Autre lien","https://..."]].map(([key,icon,label,ph])=>(
+                  {[["website","ð","Site internet","https://..."],["instagram","ð¸","Instagram","https://instagram.com/..."],["facebook","ð","Facebook","https://facebook.com/..."],["other","ð","Autre lien","https://..."]].map(([key,icon,label,ph])=>(
                     <div key={key}>
                       <label style={{fontSize:11,color:"#7A736A",display:"block",marginBottom:6,fontWeight:600,letterSpacing:"0.04em",textTransform:"uppercase"}}>{icon} {label}</label>
                       <div style={{display:"flex",gap:8}}>
                         <input value={links[key]||""} onChange={e=>setLinks({...links,[key]:e.target.value})} onBlur={()=>saveLinks(links)} placeholder={ph} style={{...inp,flex:1}}/>
                         <button onClick={()=>fetchLink(links[key],key)} disabled={!links[key]||fetchingLink===key} style={{padding:"9px 16px",borderRadius:8,border:"none",background:linksFetched[key]?"#E8F5EE":!links[key]||fetchingLink===key?"#E8E4DE":"#B8924F",color:linksFetched[key]?"#2D6A4F":!links[key]||fetchingLink===key?"#A09890":"#1A1A1E",fontSize:12,fontWeight:600,cursor:links[key]&&fetchingLink!==key?"pointer":"default",display:"flex",alignItems:"center",gap:6,flexShrink:0,whiteSpace:"nowrap"}}>
-                          {fetchingLink===key?<><Spin s={12}/> Analyse…</>:linksFetched[key]?"✓ Analysé":"Analyser"}
+                          {fetchingLink===key?<><Spin s={12}/> Analyseâ¦</>:linksFetched[key]?"â AnalysÃ©":"Analyser"}
                         </button>
                       </div>
                       {linksFetched[key]&&(
                         <div style={{marginTop:8,padding:"12px 14px",background:"#EDF5F0",border:"1px solid #C3DDD0",borderRadius:8}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                            <div style={{fontSize:10,color:"#2D6A4F",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase"}}>Résumé · {linksFetched[key].fetchedAt}</div>
-                            <button onClick={()=>{ const u={...linksFetched}; delete u[key]; setLinksFetched(u); saveToSupabase({links_fetched:JSON.stringify(u)}); }} style={{background:"none",border:"none",color:"#A0522D",fontSize:11,cursor:"pointer",padding:0}}>Supprimer ×</button>
+                            <div style={{fontSize:10,color:"#2D6A4F",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase"}}>RÃ©sumÃ© Â· {linksFetched[key].fetchedAt}</div>
+                            <button onClick={()=>{ const u={...linksFetched}; delete u[key]; setLinksFetched(u); saveToSupabase({links_fetched:JSON.stringify(u)}); }} style={{background:"none",border:"none",color:"#A0522D",fontSize:11,cursor:"pointer",padding:0}}>Supprimer Ã</button>
                           </div>
                           <div style={{fontSize:12,color:"#2D4A3A",lineHeight:1.7}}>{linksFetched[key].summary||""}</div>
                         </div>
@@ -6434,12 +6435,12 @@ FORMAT
               )}
             </div>
 
-            {/* 3 — Tags personnalisés */}
+            {/* 3 â Tags personnalisÃ©s */}
             <div style={{display:(sourcesFilter==="all"||sourcesFilter==="infos")?"block":"none",background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
               <div style={{padding:"14px 20px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>🏷️ Tags personnalisés</div>
-                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:2}}>Créez des tags pour classifier vos emails et filtrer rapidement.</div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>ð·ï¸ Tags personnalisÃ©s</div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:2}}>CrÃ©ez des tags pour classifier vos emails et filtrer rapidement.</div>
                 </div>
                 <span style={{fontSize:11,color:"#B8924F",padding:"2px 8px",borderRadius:100,background:"rgba(184,146,79,0.1)"}}>{customTags.length} tag{customTags.length!==1?"s":""}</span>
               </div>
@@ -6453,7 +6454,7 @@ FORMAT
                         <span style={{flex:1,fontSize:13,color:"#1A1A1E",fontWeight:500}}>{t.label}</span>
                         <span style={{fontSize:11,color:"#9CA3AF"}}>{Object.values(emailTags).filter(ids=>(ids as string[]).includes(t.id)).length} email{Object.values(emailTags).filter(ids=>(ids as string[]).includes(t.id)).length!==1?"s":""}</span>
                         <button onClick={()=>{
-                          if (!window.confirm(`Supprimer le tag "${t.label}" ? Il sera retiré de tous les emails.`)) return;
+                          if (!window.confirm(`Supprimer le tag "${t.label}" ? Il sera retirÃ© de tous les emails.`)) return;
                           const newTags = customTags.filter(x=>x.id!==t.id);
                           saveCustomTags(newTags);
                           // Retirer le tag de tous les emails
@@ -6463,18 +6464,18 @@ FORMAT
                             if (filtered.length>0) newEmailTags[eid]=filtered;
                           });
                           saveEmailTags(newEmailTags);
-                          // Point 6 — Si ce tag était filtré, reset le filtre
+                          // Point 6 â Si ce tag Ã©tait filtrÃ©, reset le filtre
                           if (tagFilter===t.id) setTagFilter(null);
-                          toast("Tag supprimé");
-                        }} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"2px 4px",borderRadius:4,lineHeight:1}}>✕</button>
+                          toast("Tag supprimÃ©");
+                        }} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"2px 4px",borderRadius:4,lineHeight:1}}>â</button>
                       </div>
                     ))}
                   </div>
                 )}
-                {/* Créer un nouveau tag */}
+                {/* CrÃ©er un nouveau tag */}
                 <div style={{display:"flex",flexDirection:"column",gap:10,padding:"12px",background:"#F9F8F6",borderRadius:6,border:"1px dashed #EBEAE5"}}>
-                  <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.06em",textTransform:"uppercase"}}>Créer un tag</div>
-                  <input value={newTagLabel} onChange={e=>setNewTagLabel(e.target.value)} placeholder="Nom du tag…" style={{padding:"8px 10px",borderRadius:6,border:"1px solid #EBEAE5",fontSize:13,background:"#FFF",color:"#1A1A1E",outline:"none"}}/>
+                  <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.06em",textTransform:"uppercase"}}>CrÃ©er un tag</div>
+                  <input value={newTagLabel} onChange={e=>setNewTagLabel(e.target.value)} placeholder="Nom du tagâ¦" style={{padding:"8px 10px",borderRadius:6,border:"1px solid #EBEAE5",fontSize:13,background:"#FFF",color:"#1A1A1E",outline:"none"}}/>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {TAG_PALETTE.map(c=>(
                       <button key={c} onClick={()=>setNewTagColor(c)} style={{width:22,height:22,borderRadius:"50%",background:c,border:newTagColor===c?"3px solid #1A1A1E":"2px solid transparent",cursor:"pointer",flexShrink:0}}/>
@@ -6485,17 +6486,17 @@ FORMAT
                     const tag: CustomTag = {id:`tag_${Date.now()}`,label:newTagLabel.trim(),color:newTagColor};
                     saveCustomTags([...customTags,tag]);
                     setNewTagLabel("");
-                    toast("Tag créé !");
+                    toast("Tag crÃ©Ã© !");
                   }} disabled={!newTagLabel.trim()} style={{padding:"8px 16px",borderRadius:6,border:"none",background:newTagLabel.trim()?"#1A1A1E":"#EBEAE5",color:newTagLabel.trim()?"#F5F4F0":"#9CA3AF",fontSize:12,fontWeight:600,cursor:newTagLabel.trim()?"pointer":"default",textAlign:"center"}}>
-                    + Créer ce tag
+                    + CrÃ©er ce tag
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* ═══════════════════════════════════════════════════════════════ */}
-            {/* ⚡ SECTION B — RÈGLES COMMERCIALES (5 dimensions conditionnelles) */}
-            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
+            {/* â¡ SECTION B â RÃGLES COMMERCIALES (5 dimensions conditionnelles) */}
+            {/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
             {(sourcesFilter==="all"||sourcesFilter==="regles_com") && (() => {
               // Helper : rendu d'une sous-section avec onglets internes
               const renderDimension = (dimKey: string, dimIcon: string, dimTitle: string, dimDesc: string, tabs: {id: string; label: string; placeholder: string}[], dimData: Record<string,string>, updateFn: (newData: Record<string,string>) => void) => {
@@ -6513,7 +6514,7 @@ FORMAT
                         </div>
                         <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>{dimDesc}</div>
                       </div>
-                      <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections[dimSectionKey]?"▲":"▼"}</span>
+                      <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections[dimSectionKey]?"â²":"â¼"}</span>
                     </div>
                     {srcSections[dimSectionKey] && (
                       <div style={{padding:"16px 20px"}}>
@@ -6524,7 +6525,7 @@ FORMAT
                             return (
                               <button key={t.id} onClick={()=>setOpenReglesComTab(`${dimKey}:${t.id}`)} style={{padding:"6px 12px",borderRadius:8,border:isActive?"1px solid #B8924F":"1px solid #EBEAE5",background:isActive?"#B8924F":"#FFFFFF",color:isActive?"#FFFFFF":(hasContent?"#1A1A1E":"#6B6E7E"),fontSize:12,fontWeight:isActive?600:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:5,transition:"all .14s ease"}}>
                                 {t.label}
-                                {hasContent && !isActive && <span style={{fontSize:9,color:"#B8924F"}}>●</span>}
+                                {hasContent && !isActive && <span style={{fontSize:9,color:"#B8924F"}}>â</span>}
                               </button>
                             );
                           })}
@@ -6543,8 +6544,8 @@ FORMAT
                                 style={{...inp,lineHeight:1.7,resize:"vertical",width:"100%",fontFamily:"inherit"}}
                               />
                               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-                                <span style={{fontSize:11,color:"#6B6E7E"}}>{val.length} caractères — activé automatiquement sur les mails correspondants</span>
-                                {val && <button onClick={()=>updateFn({...dimData, [tab.id]: ""})} style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}}>Vider ×</button>}
+                                <span style={{fontSize:11,color:"#6B6E7E"}}>{val.length} caractÃ¨res â activÃ© automatiquement sur les mails correspondants</span>
+                                {val && <button onClick={()=>updateFn({...dimData, [tab.id]: ""})} style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}}>Vider Ã</button>}
                               </div>
                             </div>
                           );
@@ -6559,7 +6560,7 @@ FORMAT
               const tabsEspaces = espacesDyn.map(e => ({
                 id: e.id,
                 label: e.nom || e.id,
-                placeholder: `Règles spécifiques à l'espace "${e.nom || e.id}" — ex: "Toujours mentionner la façade LED pour les lancements de produit. Accès voiturier disponible sur demande."`
+                placeholder: `RÃ¨gles spÃ©cifiques Ã  l'espace "${e.nom || e.id}" â ex: "Toujours mentionner la faÃ§ade LED pour les lancements de produit. AccÃ¨s voiturier disponible sur demande."`
               }));
 
               return (
@@ -6567,115 +6568,115 @@ FORMAT
                   {/* Header section B */}
                   <div style={{padding:"10px 14px",background:"rgba(184,146,79,0.06)",borderLeft:"3px solid #B8924F",borderRadius:"0 8px 8px 0"}}>
                     <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{fontSize:16}}>⚡</span> Règles commerciales
+                      <span style={{fontSize:16}}>â¡</span> RÃ¨gles commerciales
                     </div>
                     <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,lineHeight:1.5}}>
-                      Règles activées automatiquement selon le contexte du mail (nb de personnes, budget, profil client, moment, espace). ARCHANGE n'injecte que les règles pertinentes — pas de surcharge.
+                      RÃ¨gles activÃ©es automatiquement selon le contexte du mail (nb de personnes, budget, profil client, moment, espace). ARCHANGE n'injecte que les rÃ¨gles pertinentes â pas de surcharge.
                     </div>
                   </div>
 
-                  {renderDimension("nbPers", "🔢", "Par nombre de personnes",
+                  {renderDimension("nbPers", "ð¢", "Par nombre de personnes",
                     "Active selon nombrePersonnes extrait du mail",
                     [
-                      {id:"petits", label:"Petits (<30)", placeholder:"Ex: Pour les petits groupes, proposer la salle privative au RDC. Mentionner option dégustation vins."},
-                      {id:"moyens", label:"Moyens (30-80)", placeholder:"Ex: Pour les groupes moyens, le Patio est idéal. Proposer option voiturier si >50 pers."},
-                      {id:"grands", label:"Grands (80-150)", placeholder:"Ex: Pour les grands groupes, Atrium en priorité. Toujours proposer visite préalable."},
-                      {id:"xl", label:"Très grands (>150)", placeholder:"Ex: Pour les très grands groupes, privatisation totale possible. Devis sur-mesure, service dédié."},
+                      {id:"petits", label:"Petits (<30)", placeholder:"Ex: Pour les petits groupes, proposer la salle privative au RDC. Mentionner option dÃ©gustation vins."},
+                      {id:"moyens", label:"Moyens (30-80)", placeholder:"Ex: Pour les groupes moyens, le Patio est idÃ©al. Proposer option voiturier si >50 pers."},
+                      {id:"grands", label:"Grands (80-150)", placeholder:"Ex: Pour les grands groupes, Atrium en prioritÃ©. Toujours proposer visite prÃ©alable."},
+                      {id:"xl", label:"TrÃ¨s grands (>150)", placeholder:"Ex: Pour les trÃ¨s grands groupes, privatisation totale possible. Devis sur-mesure, service dÃ©diÃ©."},
                     ],
                     reglesCommerciales.parNombrePersonnes,
                     (nv) => saveReglesCommerciales({...reglesCommerciales, parNombrePersonnes: nv as any})
                   )}
 
-                  {renderDimension("budPers", "💰", "Par budget €/personne",
-                    "Active si le budget est exprimé en €/pers dans le mail",
+                  {renderDimension("budPers", "ð°", "Par budget â¬/personne",
+                    "Active si le budget est exprimÃ© en â¬/pers dans le mail",
                     [
-                      {id:"economique", label:"Économique (<60€/pers)", placeholder:"Ex: Pour budgets serrés, proposer formule apéritif dînatoire 3 pièces + boissons. Mentionner Patio comme espace le plus abordable."},
-                      {id:"standard", label:"Standard (60-120€/pers)", placeholder:"Ex: Formule cocktail 6 pièces + entrée/plat/dessert. Proposer accord mets-vins optionnel."},
-                      {id:"premium", label:"Premium (>120€/pers)", placeholder:"Ex: Menu signature chef + sommelier dédié + accords mets-vins inclus. Service voiturier offert."},
+                      {id:"economique", label:"Ãconomique (<60â¬/pers)", placeholder:"Ex: Pour budgets serrÃ©s, proposer formule apÃ©ritif dÃ®natoire 3 piÃ¨ces + boissons. Mentionner Patio comme espace le plus abordable."},
+                      {id:"standard", label:"Standard (60-120â¬/pers)", placeholder:"Ex: Formule cocktail 6 piÃ¨ces + entrÃ©e/plat/dessert. Proposer accord mets-vins optionnel."},
+                      {id:"premium", label:"Premium (>120â¬/pers)", placeholder:"Ex: Menu signature chef + sommelier dÃ©diÃ© + accords mets-vins inclus. Service voiturier offert."},
                     ],
                     reglesCommerciales.parBudgetParPers,
                     (nv) => saveReglesCommerciales({...reglesCommerciales, parBudgetParPers: nv as any})
                   )}
 
-                  {renderDimension("budTot", "💰", "Par budget total",
-                    "Active selon budget total du mail (ou calcul nb pers × €/pers)",
+                  {renderDimension("budTot", "ð°", "Par budget total",
+                    "Active selon budget total du mail (ou calcul nb pers Ã â¬/pers)",
                     [
-                      {id:"petit", label:"Petit (<250€)", placeholder:"Ex: Petits événements — privilégier la convivialité, pas de devis formel, email chaleureux."},
-                      {id:"moyen", label:"Moyen (250-1000€)", placeholder:"Ex: Proposer visite rapide, devis structuré simple, mentionner options upsell modestes."},
-                      {id:"important", label:"Important (1000-2500€)", placeholder:"Ex: Toujours proposer visite préalable, devis détaillé, mentionner options premium, rappel téléphonique dans les 48h."},
-                      {id:"tresImportant", label:"Très important (>2500€)", placeholder:"Ex: Rendez-vous physique systématique, devis VIP personnalisé, chef disponible pour échange, conditions négociables."},
+                      {id:"petit", label:"Petit (<250â¬)", placeholder:"Ex: Petits Ã©vÃ©nements â privilÃ©gier la convivialitÃ©, pas de devis formel, email chaleureux."},
+                      {id:"moyen", label:"Moyen (250-1000â¬)", placeholder:"Ex: Proposer visite rapide, devis structurÃ© simple, mentionner options upsell modestes."},
+                      {id:"important", label:"Important (1000-2500â¬)", placeholder:"Ex: Toujours proposer visite prÃ©alable, devis dÃ©taillÃ©, mentionner options premium, rappel tÃ©lÃ©phonique dans les 48h."},
+                      {id:"tresImportant", label:"TrÃ¨s important (>2500â¬)", placeholder:"Ex: Rendez-vous physique systÃ©matique, devis VIP personnalisÃ©, chef disponible pour Ã©change, conditions nÃ©gociables."},
                     ],
                     reglesCommerciales.parBudgetTotal,
                     (nv) => saveReglesCommerciales({...reglesCommerciales, parBudgetTotal: nv as any})
                   )}
 
-                  {renderDimension("profil", "🏢", "Par profil client",
-                    "Détecté automatiquement selon entreprise et sourceEmail",
+                  {renderDimension("profil", "ð¢", "Par profil client",
+                    "DÃ©tectÃ© automatiquement selon entreprise et sourceEmail",
                     [
-                      {id:"entreprises", label:"Entreprises", placeholder:"Ex: Ton professionnel, mentionner facture et numéro de TVA, parler d'équipe et de team building. Proposer options ROI (espace de travail, connexion wifi, écrans)."},
-                      {id:"particuliers", label:"Particuliers", placeholder:"Ex: Ton chaleureux, focus émotion/expérience, évoquer l'ambiance, photos des espaces. Proposer visite comme moment convivial."},
-                      {id:"institutionnels", label:"Institutionnels", placeholder:"Ex: Ton formel, références similaires (autres institutions), mentionner normes accessibilité/sécurité. Conditions de règlement adaptées (mandats, délais)."},
-                      {id:"agences", label:"Agences événementielles", placeholder:"Ex: Ton direct et efficace, tarifs nets, commissions précisées. Mentionner fiche technique complète, photos HD, contrat partenaire."},
+                      {id:"entreprises", label:"Entreprises", placeholder:"Ex: Ton professionnel, mentionner facture et numÃ©ro de TVA, parler d'Ã©quipe et de team building. Proposer options ROI (espace de travail, connexion wifi, Ã©crans)."},
+                      {id:"particuliers", label:"Particuliers", placeholder:"Ex: Ton chaleureux, focus Ã©motion/expÃ©rience, Ã©voquer l'ambiance, photos des espaces. Proposer visite comme moment convivial."},
+                      {id:"institutionnels", label:"Institutionnels", placeholder:"Ex: Ton formel, rÃ©fÃ©rences similaires (autres institutions), mentionner normes accessibilitÃ©/sÃ©curitÃ©. Conditions de rÃ¨glement adaptÃ©es (mandats, dÃ©lais)."},
+                      {id:"agences", label:"Agences Ã©vÃ©nementielles", placeholder:"Ex: Ton direct et efficace, tarifs nets, commissions prÃ©cisÃ©es. Mentionner fiche technique complÃ¨te, photos HD, contrat partenaire."},
                     ],
                     reglesCommerciales.parProfilClient,
                     (nv) => saveReglesCommerciales({...reglesCommerciales, parProfilClient: nv as any})
                   )}
 
-                  {renderDimension("moment", "🕐", "Par moment",
+                  {renderDimension("moment", "ð", "Par moment",
                     "Active selon heureDebut extrait du mail",
                     [
-                      {id:"dejeuner", label:"Déjeuner (11h-15h)", placeholder:"Ex: Pour déjeuners, proposer formules rapides, mentionner départ à 14h30 max. Menu allégé pour retour au bureau facilité."},
-                      {id:"soir", label:"Soir (17h-22h)", placeholder:"Ex: Pour les soirs, mettre en avant l'ambiance, éclairage chaleureux, service plus long, options digestifs."},
-                      {id:"cocktailTardif", label:"Cocktail tardif (22h+)", placeholder:"Ex: Pour événements tardifs, mentionner insonorisation, voisinage, option DJ/musique live. Service jusqu'à 2h max."},
+                      {id:"dejeuner", label:"DÃ©jeuner (11h-15h)", placeholder:"Ex: Pour dÃ©jeuners, proposer formules rapides, mentionner dÃ©part Ã  14h30 max. Menu allÃ©gÃ© pour retour au bureau facilitÃ©."},
+                      {id:"soir", label:"Soir (17h-22h)", placeholder:"Ex: Pour les soirs, mettre en avant l'ambiance, Ã©clairage chaleureux, service plus long, options digestifs."},
+                      {id:"cocktailTardif", label:"Cocktail tardif (22h+)", placeholder:"Ex: Pour Ã©vÃ©nements tardifs, mentionner insonorisation, voisinage, option DJ/musique live. Service jusqu'Ã  2h max."},
                     ],
                     reglesCommerciales.parMoment,
                     (nv) => saveReglesCommerciales({...reglesCommerciales, parMoment: nv as any})
                   )}
 
-                  {tabsEspaces.length > 0 ? renderDimension("espace", "🏛", "Par espace",
-                    "Synchronisé automatiquement avec les espaces définis plus haut",
+                  {tabsEspaces.length > 0 ? renderDimension("espace", "ð", "Par espace",
+                    "SynchronisÃ© automatiquement avec les espaces dÃ©finis plus haut",
                     tabsEspaces,
                     reglesCommerciales.parEspace,
                     (nv) => saveReglesCommerciales({...reglesCommerciales, parEspace: nv})
                   ) : (
                     <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5",padding:"16px 20px"}}>
                       <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                        <span style={{fontSize:16}}>🏛</span> Par espace
+                        <span style={{fontSize:16}}>ð</span> Par espace
                       </div>
-                      <div style={{fontSize:11,color:"#6B6E7E"}}>Aucun espace défini. Ajoutez des espaces dans la section "🏛️ Espaces de l'établissement" pour pouvoir y attacher des règles spécifiques.</div>
+                      <div style={{fontSize:11,color:"#6B6E7E"}}>Aucun espace dÃ©fini. Ajoutez des espaces dans la section "ðï¸ Espaces de l'Ã©tablissement" pour pouvoir y attacher des rÃ¨gles spÃ©cifiques.</div>
                     </div>
                   )}
                 </div>
               );
             })()}
 
-            {/* ═══════════════════════════════════════════════════════════════ */}
-            {/* 🎨 SECTION C — TON & STYLE */}
-            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
+            {/* ð¨ SECTION C â TON & STYLE */}
+            {/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
             {(sourcesFilter==="all"||sourcesFilter==="ton") && (
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 {/* Header section C */}
                 <div style={{padding:"10px 14px",background:"rgba(184,146,79,0.06)",borderLeft:"3px solid #B8924F",borderRadius:"0 8px 8px 0"}}>
                   <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:16}}>🎨</span> Ton & style de communication
+                    <span style={{fontSize:16}}>ð¨</span> Ton & style de communication
                   </div>
                   <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,lineHeight:1.5}}>
-                    Formules à utiliser, formules à bannir, niveau de formalité par profil — tous les mails héritent automatiquement de ces règles.
+                    Formules Ã  utiliser, formules Ã  bannir, niveau de formalitÃ© par profil â tous les mails hÃ©ritent automatiquement de ces rÃ¨gles.
                   </div>
                 </div>
 
-                {/* C.1 — Formules valides */}
+                {/* C.1 â Formules valides */}
                 <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections["ton_valides"]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,ton_valides:!s["ton_valides"]}))}>
                     <div>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:16}}>✅</span>
-                        <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Formules à utiliser</span>
+                        <span style={{fontSize:16}}>â</span>
+                        <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Formules Ã  utiliser</span>
                         {tonStyle.formulesValides.length > 0 && <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#D1FAE5",color:"#3F5B32",fontWeight:600}}>{tonStyle.formulesValides.length}</span>}
                       </div>
-                      <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Expressions que ARCHANGE doit privilégier</div>
+                      <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Expressions que ARCHANGE doit privilÃ©gier</div>
                     </div>
-                    <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["ton_valides"]?"▲":"▼"}</span>
+                    <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["ton_valides"]?"â²":"â¼"}</span>
                   </div>
                   {srcSections["ton_valides"] && (
                     <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
@@ -6683,7 +6684,7 @@ FORMAT
                         <div key={f.id} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"10px 12px",background:"#F9F8F6",borderRadius:8,border:"1px solid #EBEAE5"}}>
                           <input value={f.contexte} onChange={e=>{const u=[...tonStyle.formulesValides]; u[idx]={...u[idx],contexte:e.target.value}; saveTonStyle({...tonStyle,formulesValides:u});}} placeholder="Contexte (ex: Ouverture)" style={{...inp,flex:"0 0 140px",fontSize:12}}/>
                           <input value={f.formule} onChange={e=>{const u=[...tonStyle.formulesValides]; u[idx]={...u[idx],formule:e.target.value}; saveTonStyle({...tonStyle,formulesValides:u});}} placeholder="Formule exacte" style={{...inp,flex:1,fontSize:12}}/>
-                          <button onClick={()=>saveTonStyle({...tonStyle,formulesValides:tonStyle.formulesValides.filter(x=>x.id!==f.id)})} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"4px 6px"}}>✕</button>
+                          <button onClick={()=>saveTonStyle({...tonStyle,formulesValides:tonStyle.formulesValides.filter(x=>x.id!==f.id)})} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"4px 6px"}}>â</button>
                         </div>
                       ))}
                       <button onClick={()=>saveTonStyle({...tonStyle,formulesValides:[...tonStyle.formulesValides,{id:`f_${Date.now()}`,contexte:"",formule:""}]})} style={{padding:"8px 14px",borderRadius:8,border:"1px dashed #B8924F",background:"#FFFFFF",color:"#B8924F",fontSize:12,fontWeight:500,cursor:"pointer",alignSelf:"flex-start"}}>+ Ajouter une formule</button>
@@ -6691,25 +6692,25 @@ FORMAT
                   )}
                 </div>
 
-                {/* C.2 — Formules interdites */}
+                {/* C.2 â Formules interdites */}
                 <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections["ton_interdits"]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,ton_interdits:!s["ton_interdits"]}))}>
                     <div>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:16}}>❌</span>
+                        <span style={{fontSize:16}}>â</span>
                         <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Formules interdites</span>
                         {tonStyle.formulesInterdites.length > 0 && <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#FEE2E2",color:"#991B1B",fontWeight:600}}>{tonStyle.formulesInterdites.length}</span>}
                       </div>
-                      <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Expressions à bannir absolument</div>
+                      <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Expressions Ã  bannir absolument</div>
                     </div>
-                    <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["ton_interdits"]?"▲":"▼"}</span>
+                    <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["ton_interdits"]?"â²":"â¼"}</span>
                   </div>
                   {srcSections["ton_interdits"] && (
                     <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:8}}>
                       {tonStyle.formulesInterdites.map((f, idx) => (
                         <div key={idx} style={{display:"flex",gap:8}}>
-                          <input value={f} onChange={e=>{const u=[...tonStyle.formulesInterdites]; u[idx]=e.target.value; saveTonStyle({...tonStyle,formulesInterdites:u});}} placeholder={`Ex: N'hésitez pas, Cordialement…`} style={{...inp,flex:1,fontSize:12}}/>
-                          <button onClick={()=>saveTonStyle({...tonStyle,formulesInterdites:tonStyle.formulesInterdites.filter((_,i)=>i!==idx)})} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"4px 6px"}}>✕</button>
+                          <input value={f} onChange={e=>{const u=[...tonStyle.formulesInterdites]; u[idx]=e.target.value; saveTonStyle({...tonStyle,formulesInterdites:u});}} placeholder={`Ex: N'hÃ©sitez pas, Cordialementâ¦`} style={{...inp,flex:1,fontSize:12}}/>
+                          <button onClick={()=>saveTonStyle({...tonStyle,formulesInterdites:tonStyle.formulesInterdites.filter((_,i)=>i!==idx)})} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"4px 6px"}}>â</button>
                         </div>
                       ))}
                       <button onClick={()=>saveTonStyle({...tonStyle,formulesInterdites:[...tonStyle.formulesInterdites,""]})} style={{padding:"8px 14px",borderRadius:8,border:"1px dashed #DC2626",background:"#FFFFFF",color:"#DC2626",fontSize:12,fontWeight:500,cursor:"pointer",alignSelf:"flex-start"}}>+ Ajouter une interdiction</button>
@@ -6717,17 +6718,17 @@ FORMAT
                   )}
                 </div>
 
-                {/* C.3 — Niveau de formalité par profil */}
+                {/* C.3 â Niveau de formalitÃ© par profil */}
                 <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections["ton_form"]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,ton_form:!s["ton_form"]}))}>
                     <div>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:16}}>📊</span>
-                        <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Niveau de formalité par profil</span>
+                        <span style={{fontSize:16}}>ð</span>
+                        <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Niveau de formalitÃ© par profil</span>
                       </div>
-                      <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Curseur : chaleureux ↔ professionnel</div>
+                      <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Curseur : chaleureux â professionnel</div>
                     </div>
-                    <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["ton_form"]?"▲":"▼"}</span>
+                    <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["ton_form"]?"â²":"â¼"}</span>
                   </div>
                   {srcSections["ton_form"] && (
                     <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:16}}>
@@ -6735,7 +6736,7 @@ FORMAT
                         ["particuliers", "Particuliers"],
                         ["entreprises", "Entreprises"],
                         ["institutionnels", "Institutionnels"],
-                        ["agences", "Agences événementielles"],
+                        ["agences", "Agences Ã©vÃ©nementielles"],
                       ] as [keyof TonStyle["formalite"], string][]).map(([key, label]) => (
                         <div key={key}>
                           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:12,color:"#1A1A1E"}}>
@@ -6745,7 +6746,7 @@ FORMAT
                           <input type="range" min="0" max="100" value={Math.round((tonStyle.formalite[key] || 0) * 100)} onChange={e=>saveTonStyle({...tonStyle,formalite:{...tonStyle.formalite,[key]:parseInt(e.target.value,10)/100}})} style={{width:"100%",accentColor:"#B8924F",cursor:"pointer"}}/>
                           <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#6B6E7E",marginTop:2}}>
                             <span>Chaleureux</span>
-                            <span>Très formel</span>
+                            <span>TrÃ¨s formel</span>
                           </div>
                         </div>
                       ))}
@@ -6755,44 +6756,44 @@ FORMAT
               </div>
             )}
 
-            {/* ═══════════════════════════════════════════════════════════════ */}
-            {/* 📚 SECTION D — APPRENTISSAGES ARCHANGE */}
-            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
+            {/* ð SECTION D â APPRENTISSAGES ARCHANGE */}
+            {/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
             {(sourcesFilter==="all"||sourcesFilter==="appr") && (
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 <div style={{padding:"10px 14px",background:"rgba(184,146,79,0.06)",borderLeft:"3px solid #B8924F",borderRadius:"0 8px 8px 0"}}>
                   <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:16}}>📚</span> Apprentissages ARCHANGE
+                    <span style={{fontSize:16}}>ð</span> Apprentissages ARCHANGE
                   </div>
                   <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,lineHeight:1.5}}>
-                    Cette section se remplira automatiquement quand ARCHANGE détectera des patterns récurrents dans vos corrections. Bientôt disponible.
+                    Cette section se remplira automatiquement quand ARCHANGE dÃ©tectera des patterns rÃ©currents dans vos corrections. BientÃ´t disponible.
                   </div>
                 </div>
 
                 {/* Message d'accueil */}
                 {apprentissages.reglesApprises.length === 0 && apprentissages.exemplesReference.length === 0 && apprentissages.suggestionsEnAttente.length === 0 ? (
                   <div style={{background:"#FFFFFF",borderRadius:3,border:"1px dashed #EBEAE5",padding:"32px 20px",textAlign:"center"}}>
-                    <div style={{fontSize:32,marginBottom:12,opacity:0.4}}>🌱</div>
+                    <div style={{fontSize:32,marginBottom:12,opacity:0.4}}>ð±</div>
                     <div style={{fontSize:14,color:"#1A1A1E",fontWeight:500,marginBottom:6,fontFamily:"'Fraunces',Georgia,serif"}}>ARCHANGE n'a encore rien appris</div>
                     <div style={{fontSize:12,color:"#6B6E7E",lineHeight:1.6,maxWidth:480,margin:"0 auto"}}>
-                      Quand vous modifiez une réponse générée avant envoi, ARCHANGE enregistre la correction.<br/>
-                      Après quelques corrections similaires (3 minimum), une règle apprise apparaîtra ici pour validation.
+                      Quand vous modifiez une rÃ©ponse gÃ©nÃ©rÃ©e avant envoi, ARCHANGE enregistre la correction.<br/>
+                      AprÃ¨s quelques corrections similaires (3 minimum), une rÃ¨gle apprise apparaÃ®tra ici pour validation.
                     </div>
                   </div>
                 ) : (
                   <>
-                    {/* D.1 — Règles apprises */}
+                    {/* D.1 â RÃ¨gles apprises */}
                     <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
                       <div style={{padding:"14px 20px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontSize:16}}>💡</span>
-                          <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Règles apprises</span>
+                          <span style={{fontSize:16}}>ð¡</span>
+                          <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>RÃ¨gles apprises</span>
                           <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"rgba(184,146,79,0.12)",color:"#B8924F",fontWeight:600}}>{apprentissages.reglesApprises.length}</span>
                         </div>
                       </div>
                       <div style={{padding:"16px 20px"}}>
                         {apprentissages.reglesApprises.length === 0 ? (
-                          <div style={{fontSize:12,color:"#A5A4A0",textAlign:"center",padding:"20px"}}>Aucune règle apprise pour l'instant</div>
+                          <div style={{fontSize:12,color:"#A5A4A0",textAlign:"center",padding:"20px"}}>Aucune rÃ¨gle apprise pour l'instant</div>
                         ) : (
                           <div style={{display:"flex",flexDirection:"column",gap:10}}>
                             {apprentissages.reglesApprises.map(r => (
@@ -6802,11 +6803,11 @@ FORMAT
                                   <div style={{fontSize:12.5,color:"#1A1A1E",lineHeight:1.5,opacity:r.active?1:0.5}}>{r.texte}</div>
                                   <div style={{display:"flex",gap:8,marginTop:4,fontSize:10,color:"#6B6E7E"}}>
                                     <span style={{padding:"2px 6px",background:"rgba(184,146,79,0.1)",color:"#B8924F",borderRadius:4,fontWeight:600}}>{r.categorie}</span>
-                                    <span>× {r.occurrences} fois</span>
+                                    <span>Ã {r.occurrences} fois</span>
                                     <span>{r.dateCreation}</span>
                                   </div>
                                 </div>
-                                <button onClick={()=>saveApprentissages({...apprentissages,reglesApprises:apprentissages.reglesApprises.filter(x=>x.id!==r.id)})} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:13,padding:"4px 6px"}}>✕</button>
+                                <button onClick={()=>saveApprentissages({...apprentissages,reglesApprises:apprentissages.reglesApprises.filter(x=>x.id!==r.id)})} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:13,padding:"4px 6px"}}>â</button>
                               </div>
                             ))}
                           </div>
@@ -6814,25 +6815,25 @@ FORMAT
                       </div>
                     </div>
 
-                    {/* D.2 — Exemples référence */}
+                    {/* D.2 â Exemples rÃ©fÃ©rence */}
                     <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
                       <div style={{padding:"14px 20px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontSize:16}}>⭐</span>
-                          <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Exemples de référence</span>
+                          <span style={{fontSize:16}}>â­</span>
+                          <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Exemples de rÃ©fÃ©rence</span>
                           <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"rgba(184,146,79,0.12)",color:"#B8924F",fontWeight:600}}>{apprentissages.exemplesReference.length}</span>
                         </div>
                       </div>
                       <div style={{padding:"16px 20px"}}>
                         {apprentissages.exemplesReference.length === 0 ? (
-                          <div style={{fontSize:12,color:"#A5A4A0",textAlign:"center",padding:"20px"}}>Aucun exemple — marquez une réponse comme "⭐ exemplaire" depuis la vue email pour l'ajouter ici</div>
+                          <div style={{fontSize:12,color:"#A5A4A0",textAlign:"center",padding:"20px"}}>Aucun exemple â marquez une rÃ©ponse comme "â­ exemplaire" depuis la vue email pour l'ajouter ici</div>
                         ) : (
                           <div style={{display:"flex",flexDirection:"column",gap:10}}>
                             {apprentissages.exemplesReference.map(ex => (
                               <div key={ex.id} style={{padding:"12px 14px",background:"#F9F8F6",borderRadius:8,border:"1px solid #EBEAE5"}}>
                                 <div style={{fontSize:12,fontWeight:600,color:"#1A1A1E",marginBottom:4}}>{ex.emailSubject}</div>
                                 <div style={{fontSize:11,color:"#6B6E7E",display:"flex",gap:10,flexWrap:"wrap"}}>
-                                  <span>📅 {ex.dateAjout}</span>
+                                  <span>ð {ex.dateAjout}</span>
                                   {ex.typeEvenement && <span style={{padding:"1px 6px",background:"rgba(184,146,79,0.1)",color:"#B8924F",borderRadius:4}}>{ex.typeEvenement}</span>}
                                   {ex.nombrePersonnes && <span>{ex.nombrePersonnes} pers.</span>}
                                   <button onClick={()=>saveApprentissages({...apprentissages,exemplesReference:apprentissages.exemplesReference.filter(x=>x.id!==ex.id)})} style={{marginLeft:"auto",background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:11}}>Retirer</button>
@@ -6844,12 +6845,12 @@ FORMAT
                       </div>
                     </div>
 
-                    {/* D.3 — Suggestions en attente */}
+                    {/* D.3 â Suggestions en attente */}
                     {apprentissages.suggestionsEnAttente.length > 0 && (
                       <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
                         <div style={{padding:"14px 20px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5"}}>
                           <div style={{display:"flex",alignItems:"center",gap:8}}>
-                            <span style={{fontSize:16}}>🕘</span>
+                            <span style={{fontSize:16}}>ð</span>
                             <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Suggestions en attente</span>
                             <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#FEF3C7",color:"#92400E",fontWeight:600}}>{apprentissages.suggestionsEnAttente.length}</span>
                           </div>
@@ -6857,15 +6858,15 @@ FORMAT
                         <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
                           {apprentissages.suggestionsEnAttente.map(s => (
                             <div key={s.id} style={{padding:"12px 14px",background:"rgba(254,243,199,0.3)",borderRadius:8,border:"1px solid #FDE68A"}}>
-                              <div style={{fontSize:12.5,color:"#1A1A1E",lineHeight:1.5,marginBottom:8}}>💡 {s.regleProposee}</div>
-                              <div style={{fontSize:10,color:"#6B6E7E",marginBottom:8}}>Détecté {s.dateDetection} · Basé sur {s.exemples.length} exemples</div>
+                              <div style={{fontSize:12.5,color:"#1A1A1E",lineHeight:1.5,marginBottom:8}}>ð¡ {s.regleProposee}</div>
+                              <div style={{fontSize:10,color:"#6B6E7E",marginBottom:8}}>DÃ©tectÃ© {s.dateDetection} Â· BasÃ© sur {s.exemples.length} exemples</div>
                               <div style={{display:"flex",gap:6}}>
                                 <button onClick={()=>{
                                   const nvRegle: ApprentissageRegle = {id:`r_${Date.now()}`,texte:s.regleProposee,categorie:"apprise",occurrences:s.exemples.length,active:true,dateCreation:new Date().toLocaleDateString("fr-FR")};
                                   saveApprentissages({...apprentissages,reglesApprises:[...apprentissages.reglesApprises,nvRegle],suggestionsEnAttente:apprentissages.suggestionsEnAttente.filter(x=>x.id!==s.id)});
-                                  toast("Règle adoptée ✓");
-                                }} style={{padding:"6px 12px",borderRadius:6,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:11,fontWeight:500,cursor:"pointer"}}>✓ Adopter</button>
-                                <button onClick={()=>saveApprentissages({...apprentissages,suggestionsEnAttente:apprentissages.suggestionsEnAttente.filter(x=>x.id!==s.id)})} style={{padding:"6px 12px",borderRadius:6,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#6B6E7E",fontSize:11,cursor:"pointer"}}>✗ Ignorer</button>
+                                  toast("RÃ¨gle adoptÃ©e â");
+                                }} style={{padding:"6px 12px",borderRadius:6,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:11,fontWeight:500,cursor:"pointer"}}>â Adopter</button>
+                                <button onClick={()=>saveApprentissages({...apprentissages,suggestionsEnAttente:apprentissages.suggestionsEnAttente.filter(x=>x.id!==s.id)})} style={{padding:"6px 12px",borderRadius:6,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#6B6E7E",fontSize:11,cursor:"pointer"}}>â Ignorer</button>
                               </div>
                             </div>
                           ))}
@@ -6877,17 +6878,17 @@ FORMAT
               </div>
             )}
 
-            {/* ═══════════════════════════════════════════════════════════════ */}
-            {/* 🌟 SECTION E — CAS PARTICULIERS */}
-            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
+            {/* ð SECTION E â CAS PARTICULIERS */}
+            {/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
             {(sourcesFilter==="all"||sourcesFilter==="cas_part") && (
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 <div style={{padding:"10px 14px",background:"rgba(184,146,79,0.06)",borderLeft:"3px solid #B8924F",borderRadius:"0 8px 8px 0"}}>
                   <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:16}}>🌟</span> Cas particuliers (clients VIP, partenaires)
+                    <span style={{fontSize:16}}>ð</span> Cas particuliers (clients VIP, partenaires)
                   </div>
                   <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,lineHeight:1.5}}>
-                    Matching automatique par domaine email et/ou nom. Quand un mail match, ARCHANGE active les règles spécifiques de la fiche.
+                    Matching automatique par domaine email et/ou nom. Quand un mail match, ARCHANGE active les rÃ¨gles spÃ©cifiques de la fiche.
                   </div>
                 </div>
 
@@ -6895,34 +6896,34 @@ FORMAT
                   <div key={cp.id} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
                     <div style={{padding:"14px 20px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <input value={cp.nom} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],nom:e.target.value}; saveCasParticuliers(u);}} placeholder="Nom du cas particulier (ex: Cabinet Dubois)" style={{...inp,flex:1,fontSize:13,fontWeight:600}}/>
-                      <button onClick={()=>saveCasParticuliers(casParticuliers.filter(x=>x.id!==cp.id))} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"4px 10px"}}>✕</button>
+                      <button onClick={()=>saveCasParticuliers(casParticuliers.filter(x=>x.id!==cp.id))} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"4px 10px"}}>â</button>
                     </div>
                     <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:12}}>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                         <div>
-                          <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>📧 Email / Domaine</label>
+                          <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ð§ Email / Domaine</label>
                           <input value={cp.emailPattern} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],emailPattern:e.target.value}; saveCasParticuliers(u);}} placeholder="@cabinetdubois.fr ou contact@exact.com" style={{...inp,fontSize:12}}/>
                         </div>
                         <div>
-                          <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>👤 Nom (contient)</label>
+                          <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ð¤ Nom (contient)</label>
                           <input value={cp.nomPattern} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],nomPattern:e.target.value}; saveCasParticuliers(u);}} placeholder="Dubois" style={{...inp,fontSize:12}}/>
                         </div>
                       </div>
                       <div>
-                        <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>⚙️ Mode de matching</label>
+                        <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>âï¸ Mode de matching</label>
                         <div style={{display:"flex",gap:8}}>
-                          <button onClick={()=>{const u=[...casParticuliers]; u[idx]={...u[idx],matchingMode:"auto"}; saveCasParticuliers(u);}} style={{padding:"6px 12px",borderRadius:6,border:cp.matchingMode==="auto"?"1px solid #B8924F":"1px solid #EBEAE5",background:cp.matchingMode==="auto"?"#B8924F":"#FFFFFF",color:cp.matchingMode==="auto"?"#FFFFFF":"#1A1A1E",fontSize:11,fontWeight:500,cursor:"pointer"}}>✨ Automatique</button>
-                          <button onClick={()=>{const u=[...casParticuliers]; u[idx]={...u[idx],matchingMode:"manuel"}; saveCasParticuliers(u);}} style={{padding:"6px 12px",borderRadius:6,border:cp.matchingMode==="manuel"?"1px solid #B8924F":"1px solid #EBEAE5",background:cp.matchingMode==="manuel"?"#B8924F":"#FFFFFF",color:cp.matchingMode==="manuel"?"#FFFFFF":"#1A1A1E",fontSize:11,fontWeight:500,cursor:"pointer"}}>✋ Manuel</button>
+                          <button onClick={()=>{const u=[...casParticuliers]; u[idx]={...u[idx],matchingMode:"auto"}; saveCasParticuliers(u);}} style={{padding:"6px 12px",borderRadius:6,border:cp.matchingMode==="auto"?"1px solid #B8924F":"1px solid #EBEAE5",background:cp.matchingMode==="auto"?"#B8924F":"#FFFFFF",color:cp.matchingMode==="auto"?"#FFFFFF":"#1A1A1E",fontSize:11,fontWeight:500,cursor:"pointer"}}>â¨ Automatique</button>
+                          <button onClick={()=>{const u=[...casParticuliers]; u[idx]={...u[idx],matchingMode:"manuel"}; saveCasParticuliers(u);}} style={{padding:"6px 12px",borderRadius:6,border:cp.matchingMode==="manuel"?"1px solid #B8924F":"1px solid #EBEAE5",background:cp.matchingMode==="manuel"?"#B8924F":"#FFFFFF",color:cp.matchingMode==="manuel"?"#FFFFFF":"#1A1A1E",fontSize:11,fontWeight:500,cursor:"pointer"}}>â Manuel</button>
                         </div>
-                        <div style={{fontSize:10,color:"#6B6E7E",marginTop:4}}>{cp.matchingMode==="auto"?"Appliqué automatiquement aux mails correspondants":"Ne s'applique que si vous le forcez (pour éviter les faux positifs)"}</div>
+                        <div style={{fontSize:10,color:"#6B6E7E",marginTop:4}}>{cp.matchingMode==="auto"?"AppliquÃ© automatiquement aux mails correspondants":"Ne s'applique que si vous le forcez (pour Ã©viter les faux positifs)"}</div>
                       </div>
                       <div>
-                        <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>📝 Contexte / historique</label>
-                        <textarea value={cp.contexte} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],contexte:e.target.value}; saveCasParticuliers(u);}} placeholder="Ex: Client fidèle depuis 2023, organise 4-5 événements/an, tarif préférentiel négocié." rows={2} style={{...inp,fontSize:12,resize:"vertical"}}/>
+                        <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ð Contexte / historique</label>
+                        <textarea value={cp.contexte} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],contexte:e.target.value}; saveCasParticuliers(u);}} placeholder="Ex: Client fidÃ¨le depuis 2023, organise 4-5 Ã©vÃ©nements/an, tarif prÃ©fÃ©rentiel nÃ©gociÃ©." rows={2} style={{...inp,fontSize:12,resize:"vertical"}}/>
                       </div>
                       <div>
-                        <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>⚡ Règles spécifiques</label>
-                        <textarea value={cp.regles} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],regles:e.target.value}; saveCasParticuliers(u);}} placeholder="Ex: Toujours vouvoyer. Tarif -10% systématique. Remise du devis en main propre." rows={3} style={{...inp,fontSize:12,resize:"vertical"}}/>
+                        <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>â¡ RÃ¨gles spÃ©cifiques</label>
+                        <textarea value={cp.regles} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],regles:e.target.value}; saveCasParticuliers(u);}} placeholder="Ex: Toujours vouvoyer. Tarif -10% systÃ©matique. Remise du devis en main propre." rows={3} style={{...inp,fontSize:12,resize:"vertical"}}/>
                       </div>
                     </div>
                   </div>
@@ -6932,9 +6933,9 @@ FORMAT
               </div>
             )}
 
-            {/* ═══════════════════════════════════════════════════════════════ */}
-            {/* 🚫 SECTION F — RÈGLES ABSOLUES (JAMAIS) */}
-            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
+            {/* ð« SECTION F â RÃGLES ABSOLUES (JAMAIS) */}
+            {/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
             {(sourcesFilter==="all"||sourcesFilter==="absolues") && (() => {
               const lignes = (reglesAbsolues || "").split("\n").filter((l: string)=>l.trim());
               const tooMany = lignes.length > 10;
@@ -6942,10 +6943,10 @@ FORMAT
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
                   <div style={{padding:"10px 14px",background:"rgba(220,38,38,0.04)",borderLeft:"3px solid #DC2626",borderRadius:"0 8px 8px 0"}}>
                     <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{fontSize:16}}>🚫</span> Règles absolues (JAMAIS transgresser)
+                      <span style={{fontSize:16}}>ð«</span> RÃ¨gles absolues (JAMAIS transgresser)
                     </div>
                     <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,lineHeight:1.5}}>
-                      Injectées en FIN de prompt (récence bias) pour maximiser le respect. Une règle par ligne, recommandé max 10.
+                      InjectÃ©es en FIN de prompt (rÃ©cence bias) pour maximiser le respect. Une rÃ¨gle par ligne, recommandÃ© max 10.
                     </div>
                   </div>
 
@@ -6953,21 +6954,21 @@ FORMAT
                     <textarea
                       value={reglesAbsolues}
                       onChange={e=>saveReglesAbsolues(e.target.value)}
-                      placeholder={`Une règle par ligne. Formulation forte (JAMAIS, TOUJOURS). Ex :
+                      placeholder={`Une rÃ¨gle par ligne. Formulation forte (JAMAIS, TOUJOURS). Ex :
 
-1. Ne jamais donner un tarif sans préciser "tarif indicatif"
-2. Ne jamais confirmer une date sans vérifier le planning
-3. Ne jamais s'engager sur un menu spécifique (dépend du chef)
+1. Ne jamais donner un tarif sans prÃ©ciser "tarif indicatif"
+2. Ne jamais confirmer une date sans vÃ©rifier le planning
+3. Ne jamais s'engager sur un menu spÃ©cifique (dÃ©pend du chef)
 4. Ne jamais mentionner le tarif d'un autre client
-5. Toujours mentionner l'acompte 30% pour les devis > 1000€`}
+5. Toujours mentionner l'acompte 30% pour les devis > 1000â¬`}
                       rows={12}
                       style={{...inp,lineHeight:1.8,resize:"vertical",width:"100%",fontFamily:"inherit",fontSize:13}}
                     />
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
                       <span style={{fontSize:11,color: tooMany ? "#DC2626" : "#6B6E7E"}}>
-                        {lignes.length} règle{lignes.length>1?"s":""} {tooMany ? `— ⚠️ trop nombreuses (max recommandé : 10)` : ""}
+                        {lignes.length} rÃ¨gle{lignes.length>1?"s":""} {tooMany ? `â â ï¸ trop nombreuses (max recommandÃ© : 10)` : ""}
                       </span>
-                      {reglesAbsolues && <button onClick={()=>saveReglesAbsolues("")} style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}}>Vider ×</button>}
+                      {reglesAbsolues && <button onClick={()=>saveReglesAbsolues("")} style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}}>Vider Ã</button>}
                     </div>
                   </div>
                 </div>
@@ -6981,16 +6982,16 @@ FORMAT
         })()}
       </main>
 
-      {/* ══ MODAL FICHE ÉVÉNEMENT depuis le Planning ══ */}
-      {/* Affiche la fiche complète en overlay sans quitter la vue Planning */}
-      {/* ══ FICHE ÉVÉNEMENT UNIFIÉE ══
-           UN seul composant — ouvert depuis Événements, Planning ou Mails
+      {/* ââ MODAL FICHE ÃVÃNEMENT depuis le Planning ââ */}
+      {/* Affiche la fiche complÃ¨te en overlay sans quitter la vue Planning */}
+      {/* ââ FICHE ÃVÃNEMENT UNIFIÃE ââ
+           UN seul composant â ouvert depuis ÃvÃ©nements, Planning ou Mails
            Toujours en modale slide-in (position:fixed), 4 onglets identiques partout */}
       {selResaGeneral && !editResaPanel && (()=>{
         const resa = selResaGeneral;
         const {prenom, nom} = splitNomPrenom(resa);
-        const fullName = [prenom, nom].filter(Boolean).join(" ") || "—";
-        const st = statuts.find(s=>s.id===(resa.statut||"nouveau")) || statuts[0] || {bg:"#F5F4F0",color:"#6B6B72",label:"—"};
+        const fullName = [prenom, nom].filter(Boolean).join(" ") || "â";
+        const st = statuts.find(s=>s.id===(resa.statut||"nouveau")) || statuts[0] || {bg:"#F5F4F0",color:"#6B6B72",label:"â"};
         const espaceNom = ESPACES.find(e=>e.id===resa.espaceId)?.nom || "";
         const linkedCount = getLinkedEmails(resa).length;
         const relancesCount = relances.filter(r=>r.resaId===resa.id).length;
@@ -7024,7 +7025,7 @@ FORMAT
                     <span style={{fontSize:11.5,fontWeight:500,color:st.color,textTransform:"uppercase",letterSpacing:"0.06em",fontFamily:"'Geist','system-ui',sans-serif"}}>{st.label}</span>
                   </div>
                 </div>
-                <button onClick={()=>{setSelResaGeneral(null);setResaOnglet("infos");}} title="Fermer" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+                <button onClick={()=>{setSelResaGeneral(null);setResaOnglet("infos");}} title="Fermer" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>Ã</button>
               </div>
               {(resa.email || resa.telephone) && (
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -7062,7 +7063,7 @@ FORMAT
             {/* Corps scrollable */}
             <div style={{flex:1,overflowY:"auto",padding:"22px 24px 24px"}}>
 
-              {/* ── Onglet INFOS ── */}
+              {/* ââ Onglet INFOS ââ */}
               {resaOnglet==="infos"&&(
                 <div>
                   {/* Changer le statut */}
@@ -7085,7 +7086,7 @@ FORMAT
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderTop:"1px solid #EBEAE5",marginBottom:22}}>
                     {([
                       [<IcCal/>, "Date", resa.dateDebut?fmtDateFr(resa.dateDebut):null],
-                      [<IcClock/>, "Horaires", (resa.heureDebut||resa.heureFin)?`${resa.heureDebut||"?"}${resa.heureFin?" → "+resa.heureFin:""}`:null],
+                      [<IcClock/>, "Horaires", (resa.heureDebut||resa.heureFin)?`${resa.heureDebut||"?"}${resa.heureFin?" â "+resa.heureFin:""}`:null],
                       [<IcPeople/>, "Personnes", resa.nombrePersonnes||null],
                       [<IcType/>, "Type", resa.typeEvenement||null],
                       [<IcPin/>, "Espace", espaceNom||null],
@@ -7093,7 +7094,7 @@ FORMAT
                     ] as const).map(([icon,k,v],i)=>(
                       <div key={String(k)} style={{padding:"14px 0",borderBottom:"1px solid #EBEAE5",paddingRight:i%2===0?16:0,paddingLeft:i%2===1?16:0,borderRight:i%2===0?"1px solid #EBEAE5":"none"}}>
                         <div style={infoLabelStyle}>{icon}{k}</div>
-                        <div style={k==="Budget"&&v?{...infoValueStyle,color:"#B8924F"}:(v?infoValueStyle:infoValueEmpty)}>{v||"Non renseigné"}</div>
+                        <div style={k==="Budget"&&v?{...infoValueStyle,color:"#B8924F"}:(v?infoValueStyle:infoValueEmpty)}>{v||"Non renseignÃ©"}</div>
                       </div>
                     ))}
                   </div>
@@ -7111,23 +7112,23 @@ FORMAT
                     <div style={{padding:"10px 14px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5",fontSize:11.5,fontWeight:500,color:"#1A1A1E",display:"flex",alignItems:"center",gap:6,fontFamily:"'Geist','system-ui',sans-serif"}}>
                       <svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{color:"#B8924F"}}><path d="M2 11l1-3 7-7 2 2-7 7-3 1z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 3l2 2" stroke="currentColor" strokeWidth="1.3"/></svg>
                       Note directeur
-                      <span style={{marginLeft:"auto",fontSize:10,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:500}}>Privé</span>
+                      <span style={{marginLeft:"auto",fontSize:10,color:"#A5A4A0",textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:500}}>PrivÃ©</span>
                     </div>
                     <div style={{padding:"12px 14px",background:"#FFFFFF"}}>
-                      <textarea value={resa.noteDirecteur||""} onChange={e=>{const upd=resas.map(r=>r.id===resa.id?{...r,noteDirecteur:e.target.value}:r);saveResas(upd);setSelResaGeneral({...resa,noteDirecteur:e.target.value});}} placeholder="Note confidentielle réservée à la direction…" rows={3} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid #EBEAE5",background:"#FAFAF7",color:"#1A1A1E",fontSize:13,lineHeight:1.6,resize:"vertical",outline:"none",fontFamily:"'Geist','system-ui',sans-serif"}}/>
+                      <textarea value={resa.noteDirecteur||""} onChange={e=>{const upd=resas.map(r=>r.id===resa.id?{...r,noteDirecteur:e.target.value}:r);saveResas(upd);setSelResaGeneral({...resa,noteDirecteur:e.target.value});}} placeholder="Note confidentielle rÃ©servÃ©e Ã  la directionâ¦" rows={3} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid #EBEAE5",background:"#FAFAF7",color:"#1A1A1E",fontSize:13,lineHeight:1.6,resize:"vertical",outline:"none",fontFamily:"'Geist','system-ui',sans-serif"}}/>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* ── Onglet MAILS ── */}
+              {/* ââ Onglet MAILS ââ */}
               {resaOnglet==="mails"&&(()=>{
                 const linked = getLinkedEmails(resa);
                 return linked.length===0?(
                   <div style={{textAlign:"center",padding:"48px 16px",color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>
                     <svg width="32" height="32" viewBox="0 0 14 14" fill="none" style={{color:"#C5C3BE",marginBottom:10}}><path d="M1 4l6 4.5L13 4M1 3.5h12v7H1z" stroke="currentColor" strokeWidth="1"/></svg>
-                    <div style={{fontSize:13,color:"#6B6B72"}}>Aucun mail associé</div>
-                    <div style={{fontSize:11.5,marginTop:4}}>à l'adresse {resa.email||"—"}</div>
+                    <div style={{fontSize:13,color:"#6B6B72"}}>Aucun mail associÃ©</div>
+                    <div style={{fontSize:11.5,marginTop:4}}>Ã  l'adresse {resa.email||"â"}</div>
                   </div>
                 ):(
                   <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -7136,13 +7137,13 @@ FORMAT
                         <div style={{background:"#FFFFFF",borderRadius:10,padding:"13px 15px",border:"1px solid #EBEAE5"}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,gap:10}}>
                             <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
-                              <span style={{fontSize:10,background:"#EDF2F8",color:"#2D5AA8",padding:"2px 7px",borderRadius:100,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:"'Geist','system-ui',sans-serif"}}>Reçu</span>
+                              <span style={{fontSize:10,background:"#EDF2F8",color:"#2D5AA8",padding:"2px 7px",borderRadius:100,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:"'Geist','system-ui',sans-serif"}}>ReÃ§u</span>
                               <span style={{fontSize:13,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.from}</span>
                             </div>
                             <span style={{fontSize:11,color:"#A5A4A0",flexShrink:0,fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>{m.date}</span>
                           </div>
-                          <div style={{fontSize:12.5,color:"#6B6B72",lineHeight:1.55,marginBottom:10,fontFamily:"'Geist','system-ui',sans-serif"}}>{(m.snippet||"").slice(0,120)}{(m.snippet||"").length>120?"…":""}</div>
-                          <button onClick={()=>{ouvrirMailDepuisEvenement(m,resa);}} style={{width:"100%",padding:"8px",borderRadius:8,border:"1px solid #E0DED7",background:"transparent",color:"#6B6B72",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>Ouvrir le mail →</button>
+                          <div style={{fontSize:12.5,color:"#6B6B72",lineHeight:1.55,marginBottom:10,fontFamily:"'Geist','system-ui',sans-serif"}}>{(m.snippet||"").slice(0,120)}{(m.snippet||"").length>120?"â¦":""}</div>
+                          <button onClick={()=>{ouvrirMailDepuisEvenement(m,resa);}} style={{width:"100%",padding:"8px",borderRadius:8,border:"1px solid #E0DED7",background:"transparent",color:"#6B6B72",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>Ouvrir le mail â</button>
                         </div>
                         {sentReplies[m.id]&&(
                           <div style={{marginLeft:20,marginTop:6,background:"#F6F9F3",borderRadius:10,padding:"11px 14px",border:"1px solid rgba(107,138,91,0.22)"}}>
@@ -7150,7 +7151,7 @@ FORMAT
                               <span style={{fontSize:10,background:"#EDF2E8",color:"#3F5B32",padding:"2px 7px",borderRadius:100,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:"'Geist','system-ui',sans-serif"}}>Vous</span>
                               <span style={{fontSize:11,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>{sentReplies[m.id].date}</span>
                             </div>
-                            <div style={{fontSize:12.5,color:"#374151",lineHeight:1.55,whiteSpace:"pre-wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>{sentReplies[m.id].text.slice(0,200)}{sentReplies[m.id].text.length>200?"…":""}</div>
+                            <div style={{fontSize:12.5,color:"#374151",lineHeight:1.55,whiteSpace:"pre-wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>{sentReplies[m.id].text.slice(0,200)}{sentReplies[m.id].text.length>200?"â¦":""}</div>
                           </div>
                         )}
                       </div>
@@ -7159,46 +7160,46 @@ FORMAT
                 );
               })()}
 
-              {/* ── Onglet NOTE IA ── */}
+              {/* ââ Onglet NOTE IA ââ */}
               {resaOnglet==="noteIA"&&(
                 <div>
                   {noteIA[resa.id]
                     ? <div>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                          <span style={{fontSize:11.5,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>Générée le {noteIA[resa.id].date}</span>
-                          <button onClick={()=>generateNoteIA(resa)} disabled={!!genNoteIA} style={{fontSize:12,padding:"6px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#6B6B72",cursor:genNoteIA?"wait":"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>↺ Régénérer</button>
+                          <span style={{fontSize:11.5,color:"#A5A4A0",fontFamily:"'Geist','system-ui',sans-serif"}}>GÃ©nÃ©rÃ©e le {noteIA[resa.id].date}</span>
+                          <button onClick={()=>generateNoteIA(resa)} disabled={!!genNoteIA} style={{fontSize:12,padding:"6px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#6B6B72",cursor:genNoteIA?"wait":"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>âº RÃ©gÃ©nÃ©rer</button>
                         </div>
                         <div style={{fontSize:13.5,color:"#1A1A1E",lineHeight:1.75,whiteSpace:"pre-wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>{noteIA[resa.id].text}</div>
                       </div>
                     : <div style={{textAlign:"center",padding:"48px 0",fontFamily:"'Geist','system-ui',sans-serif"}}>
                         <svg width="32" height="32" viewBox="0 0 14 14" fill="none" style={{color:"#B8924F",marginBottom:10,opacity:0.6}}><path d="M7 1v2M7 11v2M2.5 2.5l1.5 1.5M10 10l1.5 1.5M1 7h2M11 7h2M2.5 11.5l1.5-1.5M10 4l1.5-1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                        <div style={{fontSize:13,color:"#6B6B72",marginBottom:16}}>Générez une note de briefing basée sur les échanges emails</div>
+                        <div style={{fontSize:13,color:"#6B6B72",marginBottom:16}}>GÃ©nÃ©rez une note de briefing basÃ©e sur les Ã©changes emails</div>
                         <button onClick={()=>generateNoteIA(resa)} disabled={!!genNoteIA} style={{padding:"10px 18px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:genNoteIA?"wait":"pointer",display:"inline-flex",alignItems:"center",gap:8,fontFamily:"'Geist','system-ui',sans-serif",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
-                          {genNoteIA?<><Spin s={12}/> Génération…</>:<><span style={{fontSize:13}}>✦</span> Générer la note</>}
+                          {genNoteIA?<><Spin s={12}/> GÃ©nÃ©rationâ¦</>:<><span style={{fontSize:13}}>â¦</span> GÃ©nÃ©rer la note</>}
                         </button>
                       </div>
                   }
                 </div>
               )}
 
-              {/* ── Onglet RELANCES ── */}
+              {/* ââ Onglet RELANCES ââ */}
               {resaOnglet==="relances"&&(
                 <div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                    <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",letterSpacing:"-0.005em"}}>Relances planifiées</div>
+                    <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",letterSpacing:"-0.005em"}}>Relances planifiÃ©es</div>
                     <button onClick={()=>setShowRelanceForm(resa.id)} style={{fontSize:12,padding:"6px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500}}>+ Ajouter</button>
                   </div>
                   {relances.filter(r=>r.resaId===resa.id).length===0
-                    ? <div style={{textAlign:"center",padding:"32px 0",color:"#A5A4A0",fontSize:13,fontFamily:"'Geist','system-ui',sans-serif"}}>Aucune relance planifiée</div>
+                    ? <div style={{textAlign:"center",padding:"32px 0",color:"#A5A4A0",fontSize:13,fontFamily:"'Geist','system-ui',sans-serif"}}>Aucune relance planifiÃ©e</div>
                     : [...relances.filter(r=>r.resaId===resa.id)].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(rel=>{
                         const isOverdue = rel.date < new Date().toISOString().slice(0,10);
                         return (
                           <div key={rel.id} style={{padding:"11px 14px",background:"#FFFFFF",borderRadius:10,border:`1px solid ${isOverdue?"#FAEDEB":"#EBEAE5"}`,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                             <div>
-                              <div style={{fontSize:12.5,fontWeight:500,color:isOverdue?"#A84B45":"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>{fmtDateFr(rel.date)}{rel.heure&&` à ${rel.heure}`}{isOverdue&&" · en retard"}</div>
+                              <div style={{fontSize:12.5,fontWeight:500,color:isOverdue?"#A84B45":"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontVariantNumeric:"tabular-nums"}}>{fmtDateFr(rel.date)}{rel.heure&&` Ã  ${rel.heure}`}{isOverdue&&" Â· en retard"}</div>
                               {rel.note&&<div style={{fontSize:11.5,color:"#6B6B72",marginTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>{rel.note}</div>}
                             </div>
-                            <button onClick={()=>saveRelances(relances.filter(r=>r.id!==rel.id))} title="Supprimer" style={{background:"none",border:"none",color:"#A5A4A0",cursor:"pointer",fontSize:14,padding:"2px 6px",borderRadius:4,transition:"color .12s ease"}} onMouseEnter={e=>e.currentTarget.style.color="#A84B45"} onMouseLeave={e=>e.currentTarget.style.color="#A5A4A0"}>✕</button>
+                            <button onClick={()=>saveRelances(relances.filter(r=>r.id!==rel.id))} title="Supprimer" style={{background:"none",border:"none",color:"#A5A4A0",cursor:"pointer",fontSize:14,padding:"2px 6px",borderRadius:4,transition:"color .12s ease"}} onMouseEnter={e=>e.currentTarget.style.color="#A84B45"} onMouseLeave={e=>e.currentTarget.style.color="#A5A4A0"}>â</button>
                           </div>
                         );
                       })
@@ -7211,19 +7212,19 @@ FORMAT
                         <div><label style={{fontSize:10.5,color:"#6B6B72",display:"block",marginBottom:5,fontFamily:"'Geist','system-ui',sans-serif"}}>Date</label><DatePicker value={relanceDate} onChange={v=>setRelanceDate(v)}/></div>
                         <div><label style={{fontSize:10.5,color:"#6B6B72",display:"block",marginBottom:5,fontFamily:"'Geist','system-ui',sans-serif"}}>Heure</label><TimePicker value={relanceHeure} onChange={v=>setRelanceHeure(v)} placeholder="Heure"/></div>
                       </div>
-                      <div style={{marginBottom:12}}><label style={{fontSize:10.5,color:"#6B6B72",display:"block",marginBottom:5,fontFamily:"'Geist','system-ui',sans-serif"}}>Note (optionnel)</label><input value={relanceNote} onChange={e=>setRelanceNote(e.target.value)} placeholder="Ex: Rappeler pour le devis…" style={{width:"100%",padding:"9px 12px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,color:"#1A1A1E",outline:"none"}}/></div>
+                      <div style={{marginBottom:12}}><label style={{fontSize:10.5,color:"#6B6B72",display:"block",marginBottom:5,fontFamily:"'Geist','system-ui',sans-serif"}}>Note (optionnel)</label><input value={relanceNote} onChange={e=>setRelanceNote(e.target.value)} placeholder="Ex: Rappeler pour le devisâ¦" style={{width:"100%",padding:"9px 12px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,color:"#1A1A1E",outline:"none"}}/></div>
                       <div style={{display:"flex",gap:8}}>
-                        <button onClick={()=>{if(!relanceDate)return;const rel={id:"rel_"+Date.now(),resaId:resa.id,resaNom:fullName,resaEmail:resa.email,date:relanceDate,heure:relanceHeure,note:relanceNote};saveRelances([...relances,rel]);setShowRelanceForm(null);setRelanceDate("");setRelanceHeure("");setRelanceNote("");toast("Relance programmée !");}} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,fontWeight:500,cursor:"pointer"}}>Confirmer</button>
+                        <button onClick={()=>{if(!relanceDate)return;const rel={id:"rel_"+Date.now(),resaId:resa.id,resaNom:fullName,resaEmail:resa.email,date:relanceDate,heure:relanceHeure,note:relanceNote};saveRelances([...relances,rel]);setShowRelanceForm(null);setRelanceDate("");setRelanceHeure("");setRelanceNote("");toast("Relance programmÃ©e !");}} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,fontWeight:500,cursor:"pointer"}}>Confirmer</button>
                         <button onClick={()=>setShowRelanceForm(null)} style={{padding:"8px 12px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,cursor:"pointer"}}>Annuler</button>
                       </div>
                     </div>
                   )}
-                  <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(resa);}} style={{width:"100%",padding:"10px",borderRadius:10,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontSize:12.5,fontWeight:500,cursor:"pointer",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Geist','system-ui',sans-serif"}}><span style={{fontSize:13,color:"#B8924F"}}>✦</span> Générer une relance IA</button>
+                  <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(resa);}} style={{width:"100%",padding:"10px",borderRadius:10,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontSize:12.5,fontWeight:500,cursor:"pointer",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Geist','system-ui',sans-serif"}}><span style={{fontSize:13,color:"#B8924F"}}>â¦</span> GÃ©nÃ©rer une relance IA</button>
                 </div>
               )}
             </div>
 
-            {/* Footer hiérarchisé */}
+            {/* Footer hiÃ©rarchisÃ© */}
             <div style={{padding:"14px 24px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7",display:"flex",flexDirection:"column",gap:8,flexShrink:0}}>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 <button onClick={()=>openSendMail(resa)} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",boxShadow:"0 1px 2px rgba(184,146,79,0.2)",justifyContent:"center"}}>
@@ -7231,7 +7232,7 @@ FORMAT
                   Envoyer un mail
                 </button>
                 <button onClick={()=>{setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");setShowRelanceIA(resa);}} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"1px solid #1A1A1E",background:"#1A1A1E",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",justifyContent:"center"}}>
-                  <span style={{fontSize:13,color:"#B8924F"}}>✦</span> Relance ARCHANGE
+                  <span style={{fontSize:13,color:"#B8924F"}}>â¦</span> Relance ARCHANGE
                 </button>
               </div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -7244,13 +7245,13 @@ FORMAT
                   Programmer une relance
                 </button>
               </div>
-              <button onClick={()=>{if(!window.confirm(`Supprimer l'événement de ${fullName||"ce client"} ? Cette action est irréversible.`))return;saveResas(resas.filter(r=>r.id!==resa.id));setSelResaGeneral(null);toast("Supprimé");}} style={{padding:"8px 12px",border:"none",background:"transparent",color:"#A84B45",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,fontWeight:400,cursor:"pointer",borderRadius:6,transition:"background .12s ease"}} onMouseEnter={e=>e.currentTarget.style.background="#FAEDEB"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>Supprimer l'événement</button>
+              <button onClick={()=>{if(!window.confirm(`Supprimer l'Ã©vÃ©nement de ${fullName||"ce client"} ? Cette action est irrÃ©versible.`))return;saveResas(resas.filter(r=>r.id!==resa.id));setSelResaGeneral(null);toast("SupprimÃ©");}} style={{padding:"8px 12px",border:"none",background:"transparent",color:"#A84B45",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12,fontWeight:400,cursor:"pointer",borderRadius:6,transition:"background .12s ease"}} onMouseEnter={e=>e.currentTarget.style.background="#FAEDEB"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>Supprimer l'Ã©vÃ©nement</button>
             </div>
           </div>
         </div>
         );
       })()}
-      {/* Formulaire modification événement — v3 */}
+      {/* Formulaire modification Ã©vÃ©nement â v3 */}
       {editResaPanel&&selResaGeneral&&(()=>{
         const grpLabel:any = {fontSize:10.5,fontWeight:500,color:"#A5A4A0",textTransform:"uppercase" as const,letterSpacing:"0.08em",marginBottom:9,fontFamily:"'Geist','system-ui',sans-serif"};
         const fieldLabel:any = {fontSize:12,color:"#6B6B72",marginBottom:5,display:"inline-flex",alignItems:"center",gap:5,fontWeight:400,fontFamily:"'Geist','system-ui',sans-serif"};
@@ -7266,11 +7267,11 @@ FORMAT
                   <svg width="18" height="18" viewBox="0 0 14 14" fill="none"><path d="M2 11l1-3 7-7 2 2-7 7-3 1z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 3l2 2" stroke="currentColor" strokeWidth="1.4"/></svg>
                 </div>
                 <div>
-                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",lineHeight:1.2}}>Modifier l'événement</div>
-                  <div style={{fontSize:11.5,color:"#6B6B72",marginTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Éditer les informations de la demande</div>
+                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",lineHeight:1.2}}>Modifier l'Ã©vÃ©nement</div>
+                  <div style={{fontSize:11.5,color:"#6B6B72",marginTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Ãditer les informations de la demande</div>
                 </div>
               </div>
-              <button onClick={()=>setEditResaPanel(null)} title="Annuler" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              <button onClick={()=>setEditResaPanel(null)} title="Annuler" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>Ã</button>
             </div>
             {/* Body */}
             <div style={{flex:1,overflowY:"auto",padding:"20px 22px 18px"}}>
@@ -7279,15 +7280,15 @@ FORMAT
                 <div style={grpLabel}>Client</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
                   <div>
-                    <label style={fieldLabel}>Prénom</label>
-                    <input value={editResaPanel.prenom||""} onChange={e=>setEditResaPanel({...editResaPanel,prenom:e.target.value})} placeholder="Prénom" style={inputStyle}/>
+                    <label style={fieldLabel}>PrÃ©nom</label>
+                    <input value={editResaPanel.prenom||""} onChange={e=>setEditResaPanel({...editResaPanel,prenom:e.target.value})} placeholder="PrÃ©nom" style={inputStyle}/>
                   </div>
                   <div>
                     <label style={fieldLabel}>Nom</label>
                     <input value={editResaPanel.nom||""} onChange={e=>setEditResaPanel({...editResaPanel,nom:e.target.value})} placeholder="Nom" style={inputStyle}/>
                   </div>
                   <div>
-                    <label style={fieldLabel}>Société</label>
+                    <label style={fieldLabel}>SociÃ©tÃ©</label>
                     <input value={editResaPanel.entreprise||""} onChange={e=>setEditResaPanel({...editResaPanel,entreprise:e.target.value})} placeholder="Optionnel" style={inputStyle}/>
                   </div>
                 </div>
@@ -7301,7 +7302,7 @@ FORMAT
                     <input value={editResaPanel.email||""} onChange={e=>setEditResaPanel({...editResaPanel,email:e.target.value})} placeholder="nom@exemple.com" style={inputStyle}/>
                   </div>
                   <div>
-                    <label style={fieldLabel}>Téléphone</label>
+                    <label style={fieldLabel}>TÃ©lÃ©phone</label>
                     <input value={editResaPanel.telephone||""} onChange={e=>setEditResaPanel({...editResaPanel,telephone:e.target.value})} placeholder="+33 6 12 34 56 78" style={{...inputStyle,fontVariantNumeric:"tabular-nums"}}/>
                   </div>
                 </div>
@@ -7315,8 +7316,8 @@ FORMAT
                     <DatePicker value={editResaPanel.dateDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,dateDebut:v})}/>
                   </div>
                   <div>
-                    <label style={fieldLabel}>Heure de début</label>
-                    <TimePicker value={editResaPanel.heureDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,heureDebut:v})} placeholder="Heure de début"/>
+                    <label style={fieldLabel}>Heure de dÃ©but</label>
+                    <TimePicker value={editResaPanel.heureDebut||""} onChange={v=>setEditResaPanel({...editResaPanel,heureDebut:v})} placeholder="Heure de dÃ©but"/>
                   </div>
                   <div>
                     <label style={fieldLabel}>Heure de fin</label>
@@ -7324,17 +7325,17 @@ FORMAT
                   </div>
                 </div>
               </div>
-              {/* INVITÉS */}
+              {/* INVITÃS */}
               <div style={{marginBottom:18}}>
-                <div style={grpLabel}>Invités</div>
+                <div style={grpLabel}>InvitÃ©s</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
                   <div>
                     <label style={fieldLabel}>Nombre de personnes</label>
                     <input type="number" min="1" value={editResaPanel.nombrePersonnes||""} onChange={e=>setEditResaPanel({...editResaPanel,nombrePersonnes:e.target.value})} style={{...inputStyle,fontVariantNumeric:"tabular-nums"}}/>
                   </div>
                   <div>
-                    <label style={fieldLabel}>Type d'événement</label>
-                    <input value={editResaPanel.typeEvenement||""} onChange={e=>setEditResaPanel({...editResaPanel,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={inputStyle}/>
+                    <label style={fieldLabel}>Type d'Ã©vÃ©nement</label>
+                    <input value={editResaPanel.typeEvenement||""} onChange={e=>setEditResaPanel({...editResaPanel,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, DÃ®nerâ¦" style={inputStyle}/>
                   </div>
                 </div>
               </div>
@@ -7350,7 +7351,7 @@ FORMAT
                   </div>
                   <div>
                     <label style={fieldLabel}>Budget client</label>
-                    <input value={editResaPanel.budget||""} onChange={e=>setEditResaPanel({...editResaPanel,budget:e.target.value})} placeholder="Ex: 5 000€…" style={inputStyle}/>
+                    <input value={editResaPanel.budget||""} onChange={e=>setEditResaPanel({...editResaPanel,budget:e.target.value})} placeholder="Ex: 5 000â¬â¦" style={inputStyle}/>
                   </div>
                 </div>
               </div>
@@ -7364,14 +7365,14 @@ FORMAT
               {/* NOTES */}
               <div>
                 <div style={grpLabel}>Notes</div>
-                <textarea value={editResaPanel.notes||""} onChange={e=>setEditResaPanel({...editResaPanel,notes:e.target.value})} rows={3} placeholder="Informations complémentaires, demandes spécifiques…" style={{...inputStyle,resize:"vertical",minHeight:70,lineHeight:1.55}}/>
+                <textarea value={editResaPanel.notes||""} onChange={e=>setEditResaPanel({...editResaPanel,notes:e.target.value})} rows={3} placeholder="Informations complÃ©mentaires, demandes spÃ©cifiquesâ¦" style={{...inputStyle,resize:"vertical",minHeight:70,lineHeight:1.55}}/>
               </div>
             </div>
             {/* Footer */}
             <div style={{padding:"14px 22px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
               <div style={{flex:1}}/>
               <button onClick={()=>setEditResaPanel(null)} style={{padding:"9px 13px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,fontWeight:500,cursor:"pointer"}}>Annuler</button>
-              <button onClick={()=>{if(!editResaPanel.nom?.trim()&&!editResaPanel.prenom?.trim()){toast("Prénom ou nom requis","err");return;}const upd=resas.map(r=>r.id===editResaPanel.id?editResaPanel:r);saveResas(upd);setSelResaGeneral(editResaPanel);setEditResaPanel(null);toast("Mis à jour !");}} style={{padding:"9px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
+              <button onClick={()=>{if(!editResaPanel.nom?.trim()&&!editResaPanel.prenom?.trim()){toast("PrÃ©nom ou nom requis","err");return;}const upd=resas.map(r=>r.id===editResaPanel.id?editResaPanel:r);saveResas(upd);setSelResaGeneral(editResaPanel);setEditResaPanel(null);toast("Mis Ã  jour !");}} style={{padding:"9px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
                 <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 Enregistrer
               </button>
@@ -7380,27 +7381,27 @@ FORMAT
         </div>
         );
       })()}
-      {/* ══ MODALE RADAR — CRÉER RÉSERVATION ══ */}
+      {/* ââ MODALE RADAR â CRÃER RÃSERVATION ââ */}
       {radarResaModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99998,padding:24}}>
           <div style={{background:"#FFFFFF",borderRadius:16,width:"min(540px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,.3)"}}>
             <div style={{padding:"18px 22px",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-              <div style={{fontSize:15,fontWeight:600,color:"#1A1A1E"}}>📅 Créer la réservation</div>
-              <button onClick={()=>setRadarResaModal(null)} style={{width:30,height:30,borderRadius:7,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              <div style={{fontSize:15,fontWeight:600,color:"#1A1A1E"}}>ð CrÃ©er la rÃ©servation</div>
+              <button onClick={()=>setRadarResaModal(null)} style={{width:30,height:30,borderRadius:7,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>Ã</button>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:10}}>
-              <div style={{background:"#FEF9EE",borderRadius:9,padding:"9px 13px",fontSize:12,color:"#854F0B"}}>Données pré-remplies par ARCHANGE — vérifiez avant de valider.</div>
-              {[["nom","👤 Nom"],["email","📧 Email"],["telephone","📞 Téléphone"],["entreprise","🏢 Entreprise"],["nombrePersonnes","👥 Nb personnes"],["budget","💰 Budget"]].map(([k,l])=>(
+              <div style={{background:"#FEF9EE",borderRadius:9,padding:"9px 13px",fontSize:12,color:"#854F0B"}}>DonnÃ©es prÃ©-remplies par ARCHANGE â vÃ©rifiez avant de valider.</div>
+              {[["nom","ð¤ Nom"],["email","ð§ Email"],["telephone","ð TÃ©lÃ©phone"],["entreprise","ð¢ Entreprise"],["nombrePersonnes","ð¥ Nb personnes"],["budget","ð° Budget"]].map(([k,l])=>(
                 <div key={k}><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>{l}</label><input value={radarResaModal[k]||""} onChange={e=>setRadarResaModal({...radarResaModal,[k]:e.target.value})} style={{...inp}}/></div>
               ))}
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>📅 Date</label><DatePicker value={radarResaModal.dateDebut||""} onChange={v=>setRadarResaModal({...radarResaModal,dateDebut:v})}/></div>
+              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>ð Date</label><DatePicker value={radarResaModal.dateDebut||""} onChange={v=>setRadarResaModal({...radarResaModal,dateDebut:v})}/></div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>🕐 Heure début</label><TimePicker value={radarResaModal.heureDebut||""} onChange={v=>setRadarResaModal({...radarResaModal,heureDebut:v})} placeholder="Heure début"/></div>
-                <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>🕕 Heure fin</label><TimePicker value={radarResaModal.heureFin||""} onChange={v=>setRadarResaModal({...radarResaModal,heureFin:v})} placeholder="Heure fin"/></div>
+                <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>ð Heure dÃ©but</label><TimePicker value={radarResaModal.heureDebut||""} onChange={v=>setRadarResaModal({...radarResaModal,heureDebut:v})} placeholder="Heure dÃ©but"/></div>
+                <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>ð Heure fin</label><TimePicker value={radarResaModal.heureFin||""} onChange={v=>setRadarResaModal({...radarResaModal,heureFin:v})} placeholder="Heure fin"/></div>
               </div>
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>🎉 Type d'événement</label><input value={radarResaModal.typeEvenement||""} onChange={e=>setRadarResaModal({...radarResaModal,typeEvenement:e.target.value})} style={{...inp}}/></div>
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>📍 Espace</label><select value={radarResaModal.espaceId||espacesDyn[0]?.id||""} onChange={e=>setRadarResaModal({...radarResaModal,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
-              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>📝 Notes</label><textarea value={radarResaModal.notes||""} onChange={e=>setRadarResaModal({...radarResaModal,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
+              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>ð Type d'Ã©vÃ©nement</label><input value={radarResaModal.typeEvenement||""} onChange={e=>setRadarResaModal({...radarResaModal,typeEvenement:e.target.value})} style={{...inp}}/></div>
+              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>ð Espace</label><select value={radarResaModal.espaceId||espacesDyn[0]?.id||""} onChange={e=>setRadarResaModal({...radarResaModal,espaceId:e.target.value})} style={{...inp}}>{ESPACES.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}</select></div>
+              <div><label style={{fontSize:11,color:"#6B6E7E",display:"block",marginBottom:3,fontWeight:500}}>ð Notes</label><textarea value={radarResaModal.notes||""} onChange={e=>setRadarResaModal({...radarResaModal,notes:e.target.value})} rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
             </div>
             <div style={{padding:"14px 20px",borderTop:"1px solid #EBEAE5",display:"flex",gap:8,flexShrink:0}}>
               <button onClick={()=>{
@@ -7409,47 +7410,47 @@ FORMAT
                 const updated=[...resas,newResa]; saveResas(updated);
                 if(radarResaModal._emailId) saveEmailResaLinks({...emailResaLinks,[radarResaModal._emailId]:newResa.id});
                 setRadarTraites(prev=>new Set([...prev,radarResaModal._emailId]));
-                setRadarResaModal(null); toast("Réservation créée !");
-              }} style={{flex:1,...gold,padding:"10px"}}>Créer la réservation</button>
+                setRadarResaModal(null); toast("RÃ©servation crÃ©Ã©e !");
+              }} style={{flex:1,...gold,padding:"10px"}}>CrÃ©er la rÃ©servation</button>
               <button onClick={()=>setRadarResaModal(null)} style={{...out}}>Annuler</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ══ MODALE RADAR — GÉNÉRER RÉPONSE v3 ══ */}
+      {/* ââ MODALE RADAR â GÃNÃRER RÃPONSE v3 ââ */}
       {radarReplyModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(26,26,30,0.45)",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99998,padding:24}}>
           <div style={{background:"#FFFFFF",borderRadius:16,width:"min(620px,100%)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(15,15,20,0.18), 0 0 0 1px rgba(184,146,79,0.15)",overflow:"hidden"}}>
-            {/* Header doré cohérent avec Réponse ARCHANGE inline */}
+            {/* Header dorÃ© cohÃ©rent avec RÃ©ponse ARCHANGE inline */}
             <div style={{padding:"14px 22px",borderBottom:"1px solid rgba(184,146,79,0.15)",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:"linear-gradient(180deg, rgba(184,146,79,0.06) 0%, #FFFFFF 100%)"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-                <span style={{fontSize:16,color:"#B8924F",lineHeight:1,flexShrink:0}}>✦</span>
+                <span style={{fontSize:16,color:"#B8924F",lineHeight:1,flexShrink:0}}>â¦</span>
                 <div style={{minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:500,color:"#B8924F",letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Réponse ARCHANGE</div>
+                  <div style={{fontSize:13,fontWeight:500,color:"#B8924F",letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>RÃ©ponse ARCHANGE</div>
                   <div style={{fontSize:12.5,color:"#1A1A1E",marginTop:2,fontFamily:"'Geist','system-ui',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{radarReplyModal.m?.from}</div>
                 </div>
               </div>
-              <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} title="Fermer" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease",flexShrink:0}}>×</button>
+              <button onClick={()=>{setRadarReplyModal(null);setRadarReplyText("");}} title="Fermer" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6E7E",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s ease",flexShrink:0}}>Ã</button>
             </div>
             {/* Body */}
             <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
               {radarReplyLoading
-                ? <div style={{display:"flex",alignItems:"center",gap:12,color:"#6B6E7E",padding:"48px 0",justifyContent:"center",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13}}><Spin s={16}/> Archange rédige la réponse…</div>
+                ? <div style={{display:"flex",alignItems:"center",gap:12,color:"#6B6E7E",padding:"48px 0",justifyContent:"center",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13}}><Spin s={16}/> Archange rÃ©dige la rÃ©ponseâ¦</div>
                 : radarReplyText
                   ? <textarea value={radarReplyText} onChange={e=>setRadarReplyText(e.target.value)} rows={14} style={{width:"100%",padding:"14px 16px",fontFamily:"'Geist','system-ui',sans-serif",fontSize:14,color:"#1A1A1E",lineHeight:1.65,border:"1px solid #EBEAE5",borderRadius:10,outline:"none",resize:"vertical",background:"#FAFAF7",transition:"border-color .12s ease"}}/>
                   : <div style={{padding:"40px 0",display:"flex",flexDirection:"column",alignItems:"center",gap:12,fontFamily:"'Geist','system-ui',sans-serif"}}>
-                      <div style={{color:"#6B6E7E",textAlign:"center",fontSize:13,lineHeight:1.5,maxWidth:340}}>La réponse générée par Archange apparaîtra ici. Vous pourrez l'éditer avant de la copier ou de la marquer en brouillon.</div>
+                      <div style={{color:"#6B6E7E",textAlign:"center",fontSize:13,lineHeight:1.5,maxWidth:340}}>La rÃ©ponse gÃ©nÃ©rÃ©e par Archange apparaÃ®tra ici. Vous pourrez l'Ã©diter avant de la copier ou de la marquer en brouillon.</div>
                     </div>
               }
             </div>
-            {/* Footer avec hiérarchie claire : primary doré + ghost + text */}
+            {/* Footer avec hiÃ©rarchie claire : primary dorÃ© + ghost + text */}
             <div style={{padding:"14px 22px",borderTop:"1px solid #EBEAE5",display:"flex",gap:8,flexShrink:0,background:"#FAFAF7",alignItems:"center"}}>
-              <button onClick={()=>{navigator.clipboard.writeText(radarReplyText);toast("Copié !");}} disabled={!radarReplyText||radarReplyLoading} style={{padding:"9px 14px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontSize:13,fontWeight:500,cursor:(!radarReplyText||radarReplyLoading)?"not-allowed":"pointer",opacity:!radarReplyText||radarReplyLoading?0.5:1,fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:6,transition:"all .14s ease"}}>
+              <button onClick={()=>{navigator.clipboard.writeText(radarReplyText);toast("CopiÃ© !");}} disabled={!radarReplyText||radarReplyLoading} style={{padding:"9px 14px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontSize:13,fontWeight:500,cursor:(!radarReplyText||radarReplyLoading)?"not-allowed":"pointer",opacity:!radarReplyText||radarReplyLoading?0.5:1,fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:6,transition:"all .14s ease"}}>
                 <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M10.5 3.5V2a.5.5 0 00-.5-.5H2a.5.5 0 00-.5.5v8a.5.5 0 00.5.5h1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
                 Copier
               </button>
-              <button onClick={()=>{if(radarReplyModal?.m) {setDrafted(prev=>new Set([...prev,radarReplyModal.m.id]));} setRadarReplyModal(null);setRadarReplyText("");toast("Brouillon marqué !");}} disabled={!radarReplyText||radarReplyLoading} style={{padding:"9px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:(!radarReplyText||radarReplyLoading)?"not-allowed":"pointer",opacity:!radarReplyText||radarReplyLoading?0.5:1,fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:6,transition:"all .14s ease",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
+              <button onClick={()=>{if(radarReplyModal?.m) {setDrafted(prev=>new Set([...prev,radarReplyModal.m.id]));} setRadarReplyModal(null);setRadarReplyText("");toast("Brouillon marquÃ© !");}} disabled={!radarReplyText||radarReplyLoading} style={{padding:"9px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:13,fontWeight:500,cursor:(!radarReplyText||radarReplyLoading)?"not-allowed":"pointer",opacity:!radarReplyText||radarReplyLoading?0.5:1,fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:6,transition:"all .14s ease",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
                 <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 Marquer brouillon
               </button>
@@ -7470,10 +7471,10 @@ FORMAT
                 </div>
                 <div>
                   <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:17,fontWeight:500,color:"#1A1A1E",letterSpacing:"-0.01em",lineHeight:1.2}}>Nouvelle demande</div>
-                  <div style={{fontSize:11.5,color:"#6B6B72",marginTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Saisie manuelle — indépendante d'un email</div>
+                  <div style={{fontSize:11.5,color:"#6B6B72",marginTop:2,fontFamily:"'Geist','system-ui',sans-serif"}}>Saisie manuelle â indÃ©pendante d'un email</div>
                 </div>
               </div>
-              <button onClick={()=>setShowNewEvent(false)} title="Annuler" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              <button onClick={()=>setShowNewEvent(false)} title="Annuler" style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:"#6B6B72",cursor:"pointer",fontSize:18,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>Ã</button>
             </div>
             {/* Body */}
             <div style={{flex:1,overflowY:"auto",padding:"20px 22px 18px"}}>
@@ -7482,7 +7483,7 @@ FORMAT
                 const fieldLabel = (hasErr:boolean) => ({fontSize:12,color:hasErr?"#A84B45":"#6B6B72",marginBottom:5,display:"inline-flex",alignItems:"center",gap:5,fontWeight:400,fontFamily:"'Geist','system-ui',sans-serif"});
                 const req:any = {color:"#A84B45",fontSize:12,fontWeight:500};
                 const inputStyle:any = {width:"100%",padding:"9px 12px",border:"1px solid #EBEAE5",borderRadius:8,background:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13.5,color:"#1A1A1E",outline:"none"};
-                const errMsg = (k:string) => newEventErrors[k] ? <div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>⚠ {newEventErrors[k]}</div> : null;
+                const errMsg = (k:string) => newEventErrors[k] ? <div style={{fontSize:11,color:"#A84B45",marginTop:3,fontFamily:"'Geist','system-ui',sans-serif"}}>â  {newEventErrors[k]}</div> : null;
                 return (
                 <>
                   {/* CLIENT */}
@@ -7490,8 +7491,8 @@ FORMAT
                     <div style={grpLabel}>Client</div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12}}>
                       <div>
-                        <label style={fieldLabel(!!newEventErrors.prenom)}>Prénom<span style={req}>*</span></label>
-                        <input value={newEvent.prenom||""} onChange={e=>setNewEvent({...newEvent,prenom:e.target.value})} placeholder="Prénom" style={{...inputStyle,borderColor:newEventErrors.prenom?"#A84B45":"#EBEAE5"}}/>
+                        <label style={fieldLabel(!!newEventErrors.prenom)}>PrÃ©nom<span style={req}>*</span></label>
+                        <input value={newEvent.prenom||""} onChange={e=>setNewEvent({...newEvent,prenom:e.target.value})} placeholder="PrÃ©nom" style={{...inputStyle,borderColor:newEventErrors.prenom?"#A84B45":"#EBEAE5"}}/>
                         {errMsg("prenom")}
                       </div>
                       <div>
@@ -7500,7 +7501,7 @@ FORMAT
                         {errMsg("nom")}
                       </div>
                       <div>
-                        <label style={fieldLabel(false)}>Société</label>
+                        <label style={fieldLabel(false)}>SociÃ©tÃ©</label>
                         <input value={newEvent.entreprise||""} onChange={e=>setNewEvent({...newEvent,entreprise:e.target.value})} placeholder="Optionnel" style={inputStyle}/>
                       </div>
                     </div>
@@ -7514,7 +7515,7 @@ FORMAT
                         <input value={newEvent.email||""} onChange={e=>setNewEvent({...newEvent,email:e.target.value})} placeholder="nom@exemple.com" style={inputStyle}/>
                       </div>
                       <div>
-                        <label style={fieldLabel(false)}>Téléphone</label>
+                        <label style={fieldLabel(false)}>TÃ©lÃ©phone</label>
                         <input value={newEvent.telephone||""} onChange={e=>setNewEvent({...newEvent,telephone:e.target.value})} placeholder="+33 6 12 34 56 78" style={{...inputStyle,fontVariantNumeric:"tabular-nums"}}/>
                       </div>
                     </div>
@@ -7529,8 +7530,8 @@ FORMAT
                         {errMsg("dateDebut")}
                       </div>
                       <div>
-                        <label style={fieldLabel(!!newEventErrors.heureDebut)}>Heure de début<span style={req}>*</span></label>
-                        <TimePicker value={newEvent.heureDebut||""} onChange={v=>setNewEvent({...newEvent,heureDebut:v})} placeholder="Heure de début" light={true}/>
+                        <label style={fieldLabel(!!newEventErrors.heureDebut)}>Heure de dÃ©but<span style={req}>*</span></label>
+                        <TimePicker value={newEvent.heureDebut||""} onChange={v=>setNewEvent({...newEvent,heureDebut:v})} placeholder="Heure de dÃ©but" light={true}/>
                         {errMsg("heureDebut")}
                       </div>
                       <div>
@@ -7540,17 +7541,17 @@ FORMAT
                       </div>
                     </div>
                   </div>
-                  {/* INVITÉS */}
+                  {/* INVITÃS */}
                   <div style={{marginBottom:18}}>
-                    <div style={grpLabel}>Invités</div>
+                    <div style={grpLabel}>InvitÃ©s</div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:12}}>
                       <div>
                         <label style={fieldLabel(false)}>Nombre de personnes</label>
                         <input type="number" min="1" value={newEvent.nombrePersonnes||""} onChange={e=>setNewEvent({...newEvent,nombrePersonnes:e.target.value})} placeholder="Ex: 50" style={{...inputStyle,fontVariantNumeric:"tabular-nums"}}/>
                       </div>
                       <div>
-                        <label style={fieldLabel(false)}>Type d'événement</label>
-                        <input value={newEvent.typeEvenement||""} onChange={e=>setNewEvent({...newEvent,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, Dîner…" style={inputStyle}/>
+                        <label style={fieldLabel(false)}>Type d'Ã©vÃ©nement</label>
+                        <input value={newEvent.typeEvenement||""} onChange={e=>setNewEvent({...newEvent,typeEvenement:e.target.value})} placeholder="Ex: Cocktail, DÃ®nerâ¦" style={inputStyle}/>
                       </div>
                     </div>
                   </div>
@@ -7566,14 +7567,14 @@ FORMAT
                       </div>
                       <div>
                         <label style={fieldLabel(false)}>Budget client</label>
-                        <input value={newEvent.budget||""} onChange={e=>setNewEvent({...newEvent,budget:e.target.value})} placeholder="Ex: 5 000€, 45€/pers…" style={inputStyle}/>
+                        <input value={newEvent.budget||""} onChange={e=>setNewEvent({...newEvent,budget:e.target.value})} placeholder="Ex: 5 000â¬, 45â¬/persâ¦" style={inputStyle}/>
                       </div>
                     </div>
                   </div>
                   {/* NOTES */}
                   <div>
                     <div style={grpLabel}>Notes</div>
-                    <textarea value={newEvent.notes||""} onChange={e=>setNewEvent({...newEvent,notes:e.target.value})} rows={3} placeholder="Informations complémentaires, demandes spécifiques…" style={{...inputStyle,resize:"vertical",minHeight:70,lineHeight:1.55}}/>
+                    <textarea value={newEvent.notes||""} onChange={e=>setNewEvent({...newEvent,notes:e.target.value})} rows={3} placeholder="Informations complÃ©mentaires, demandes spÃ©cifiquesâ¦" style={{...inputStyle,resize:"vertical",minHeight:70,lineHeight:1.55}}/>
                   </div>
                 </>
                 );
@@ -7582,31 +7583,31 @@ FORMAT
             {/* Footer */}
             <div style={{padding:"14px 22px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
               <div style={{fontSize:11.5,color:"#A5A4A0",display:"inline-flex",alignItems:"center",gap:9,flexWrap:"wrap",fontFamily:"'Geist','system-ui',sans-serif"}}>
-                <span><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>⌘</kbd><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>↩</kbd> créer</span>
-                <span style={{color:"#E0DED7"}}>·</span>
+                <span><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>â</kbd><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>â©</kbd> crÃ©er</span>
+                <span style={{color:"#E0DED7"}}>Â·</span>
                 <span><kbd style={{fontFamily:"inherit",fontSize:10.5,padding:"2px 6px",border:"1px solid #EBEAE5",borderRadius:4,background:"#FFFFFF",color:"#6B6B72",fontWeight:500,margin:"0 2px"}}>Esc</kbd> annuler</span>
               </div>
               <div style={{flex:1}}/>
               <button onClick={()=>setShowNewEvent(false)} style={{padding:"9px 13px",borderRadius:10,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif",fontSize:12.5,fontWeight:500,cursor:"pointer"}}>Annuler</button>
               <button onClick={()=>{
                 const errs:any={};
-                if(!newEvent.prenom?.trim()) errs.prenom="Prénom obligatoire";
+                if(!newEvent.prenom?.trim()) errs.prenom="PrÃ©nom obligatoire";
                 if(!newEvent.nom?.trim()) errs.nom="Nom obligatoire";
                 if(!newEvent.dateDebut) errs.dateDebut="Date obligatoire";
-                if(!newEvent.heureDebut) errs.heureDebut="Heure de début obligatoire";
+                if(!newEvent.heureDebut) errs.heureDebut="Heure de dÃ©but obligatoire";
                 if(!newEvent.heureFin) errs.heureFin="Heure de fin obligatoire";
                 if(Object.keys(errs).length>0){ setNewEventErrors(errs); return; }
                 const r={...newEvent,id:"r"+Date.now(),statut:newEvent.statut||"nouveau",nombrePersonnes:parseInt(newEvent.nombrePersonnes)||newEvent.nombrePersonnes};
-                saveResas([...resas,r]); setShowNewEvent(false); setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setNewEventErrors({}); toast("Demande créée !");
+                saveResas([...resas,r]); setShowNewEvent(false); setNewEvent({...EMPTY_RESA, espaceId: espacesDyn[0]?.id || ""}); setNewEventErrors({}); toast("Demande crÃ©Ã©e !");
               }} style={{padding:"9px 16px",borderRadius:10,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontFamily:"'Geist','system-ui',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,letterSpacing:"-0.005em",boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
                 <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Créer la demande
+                CrÃ©er la demande
               </button>
             </div>
           </div>
         </div>
       )}
-      {/* ══ MODALE SUGGESTIONS MODIFICATIONS IA ══ */}
+      {/* ââ MODALE SUGGESTIONS MODIFICATIONS IA ââ */}
       {pendingSuggestions && (() => {
         const resa = resas.find(r => r.id === pendingSuggestions.resaId);
         if (!resa) return null;
@@ -7617,11 +7618,11 @@ FORMAT
               {/* Header */}
               <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #EBEAE5"}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
-                  <span style={{fontSize:20}}>⚡</span>
-                  <div style={{fontSize:15,fontWeight:700,color:"#1A1A1E"}}>Modifications détectées</div>
+                  <span style={{fontSize:20}}>â¡</span>
+                  <div style={{fontSize:15,fontWeight:700,color:"#1A1A1E"}}>Modifications dÃ©tectÃ©es</div>
                 </div>
                 <div style={{fontSize:12,color:"#6B6E7E"}}>
-                  ARCHANGE a détecté des changements dans l'email de <strong>{resa.nom || "ce contact"}</strong>. Validez les modifications à appliquer.
+                  ARCHANGE a dÃ©tectÃ© des changements dans l'email de <strong>{resa.nom || "ce contact"}</strong>. Validez les modifications Ã  appliquer.
                 </div>
               </div>
 
@@ -7635,7 +7636,7 @@ FORMAT
                   style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",borderRadius:10,border:`1.5px solid ${s.selectionnee?"#B8924F":"#EBEAE5"}`,background:s.selectionnee?"#FFFBF0":"#F9F8F6",cursor:"pointer",transition:"all .15s"}}>
                     {/* Checkbox */}
                     <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${s.selectionnee?"#B8924F":"#C8C0B4"}`,background:s.selectionnee?"#B8924F":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
-                      {s.selectionnee&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}
+                      {s.selectionnee&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>â</span>}
                     </div>
                     {/* Contenu */}
                     <div style={{flex:1,minWidth:0}}>
@@ -7644,7 +7645,7 @@ FORMAT
                         <span style={{fontSize:12,color:"#6B6E7E",background:"#FAFAF7",padding:"2px 8px",borderRadius:6,textDecoration:"line-through"}}>
                           {s.ancienne !== null && s.ancienne !== "" ? String(s.ancienne) : "(vide)"}
                         </span>
-                        <span style={{fontSize:12,color:"#6B6E7E"}}>→</span>
+                        <span style={{fontSize:12,color:"#6B6E7E"}}>â</span>
                         <span style={{fontSize:12,color:"#1A1A1E",fontWeight:600,background:s.selectionnee?"#FEF3C7":"#F5F4F0",padding:"2px 8px",borderRadius:6}}>
                           {s.nouvelle !== null && s.nouvelle !== "" ? String(s.nouvelle) : "(vide)"}
                         </span>
@@ -7667,10 +7668,10 @@ FORMAT
                     selected.forEach(s => { patch[s.champ] = s.nouvelle; });
                     const updated = resas.map(r => r.id === pendingSuggestions.resaId ? {...r, ...patch} : r);
                     saveResas(updated);
-                    // Mettre à jour selResaGeneral si c'est l'événement ouvert
+                    // Mettre Ã  jour selResaGeneral si c'est l'Ã©vÃ©nement ouvert
                     if (selResaGeneral?.id === pendingSuggestions.resaId) setSelResaGeneral((prev:any) => ({...prev, ...patch}));
                     setPendingSuggestions(null);
-                    toast(`${selected.length} modification${selected.length>1?"s":""} appliquée${selected.length>1?"s":""}  ✓`);
+                    toast(`${selected.length} modification${selected.length>1?"s":""} appliquÃ©e${selected.length>1?"s":""}  â`);
                   }}
                   style={{flex:2,padding:"11px",borderRadius:8,border:"none",background:nbSel>0?"#B8924F":"#EBEAE5",color:nbSel>0?"#1A1A1E":"#A09890",fontSize:13,fontWeight:600,cursor:nbSel>0?"pointer":"not-allowed",transition:"all .15s"}}>
                   Appliquer {nbSel>0?`(${nbSel})`:""}
@@ -7684,32 +7685,32 @@ FORMAT
         );
       })()}
 
-      {/* ── Modal Composer — Nouveau mail ── */}
+      {/* ââ Modal Composer â Nouveau mail ââ */}
       {showCompose&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:9980,display:"flex",alignItems:"flex-end",justifyContent:"flex-end",padding:"0 24px 24px"}}>
           <div style={{background:"#FFFFFF",borderRadius:16,boxShadow:"0 24px 80px rgba(0,0,0,.25)",width:540,maxHeight:"80vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-            {/* En-tête */}
+            {/* En-tÃªte */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",background:"#1A1A1E",borderRadius:"16px 16px 0 0"}}>
-              <span style={{fontSize:13,fontWeight:700,color:"#B8924F",letterSpacing:"0.06em"}}>✏ Nouveau message</span>
-              <button onClick={()=>{if((composeBody.trim()||composeTo.trim())&&!window.confirm("Fermer sans sauvegarder ?"))return;setShowCompose(false);}} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:18}}>×</button>
+              <span style={{fontSize:13,fontWeight:700,color:"#B8924F",letterSpacing:"0.06em"}}>â Nouveau message</span>
+              <button onClick={()=>{if((composeBody.trim()||composeTo.trim())&&!window.confirm("Fermer sans sauvegarder ?"))return;setShowCompose(false);}} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:18}}>Ã</button>
             </div>
             {/* Champs */}
             <div style={{padding:"12px 16px",borderBottom:"1px solid #EBEAE5"}}>
-              <input value={composeTo} onChange={e=>setComposeTo(e.target.value)} placeholder="À : destinataire@exemple.com" style={{width:"100%",border:"none",borderBottom:"1px solid #EBEAE5",outline:"none",fontSize:13,color:"#1A1A1E",padding:"6px 0",marginBottom:8,background:"transparent"}}/>
+              <input value={composeTo} onChange={e=>setComposeTo(e.target.value)} placeholder="Ã : destinataire@exemple.com" style={{width:"100%",border:"none",borderBottom:"1px solid #EBEAE5",outline:"none",fontSize:13,color:"#1A1A1E",padding:"6px 0",marginBottom:8,background:"transparent"}}/>
               <input value={composeSubject} onChange={e=>setComposeSubject(e.target.value)} placeholder="Objet" style={{width:"100%",border:"none",borderBottom:"1px solid #EBEAE5",outline:"none",fontSize:13,color:"#1A1A1E",padding:"6px 0",background:"transparent"}}/>
             </div>
             {/* Corps */}
             <textarea
               value={composeBody}
               onChange={e=>setComposeBody(e.target.value)}
-              placeholder="Rédigez votre message…"
+              placeholder="RÃ©digez votre messageâ¦"
               style={{flex:1,padding:"14px 16px",fontSize:13,color:"#1A1A1E",lineHeight:1.8,border:"none",outline:"none",resize:"none",fontFamily:"inherit",minHeight:220}}
               autoFocus
             />
             {/* Actions */}
             <div style={{display:"flex",gap:8,padding:"10px 16px",borderTop:"1px solid #EBEAE5",background:"#F5F4F0"}}>
               <button onClick={sendNewMail} disabled={composeSending||!composeTo.trim()||!composeSubject.trim()||!composeBody.trim()} style={{padding:"9px 22px",borderRadius:8,border:"none",background:"#1A1A1E",color:"#B8924F",fontSize:13,fontWeight:700,cursor:composeSending?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:composeSending||!composeTo.trim()||!composeSubject.trim()||!composeBody.trim()?0.5:1}}>
-                {composeSending?<><Spin s={12}/> Envoi…</>:"✉ Envoyer"}
+                {composeSending?<><Spin s={12}/> Envoiâ¦</>:"â Envoyer"}
               </button>
               <button onClick={saveDraft} style={{padding:"9px 16px",borderRadius:8,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",fontSize:12,cursor:"pointer"}}>Brouillon</button>
               <div style={{flex:1}}/>
@@ -7726,34 +7727,34 @@ FORMAT
             {/* Header */}
             <div style={{padding:"20px 24px",borderBottom:"1px solid #E5E7EB",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
               <div>
-                <div style={{fontSize:16,fontWeight:700,color:"#111111"}}>✨ Mail de relance ARCHANGE</div>
-                <div style={{fontSize:12,color:"#9CA3AF",marginTop:3}}>{showRelanceIA.nom}{showRelanceIA.email ? " · " + showRelanceIA.email : ""}</div>
+                <div style={{fontSize:16,fontWeight:700,color:"#111111"}}>â¨ Mail de relance ARCHANGE</div>
+                <div style={{fontSize:12,color:"#9CA3AF",marginTop:3}}>{showRelanceIA.nom}{showRelanceIA.email ? " Â· " + showRelanceIA.email : ""}</div>
               </div>
-              <button onClick={()=>{setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"#F3F4F6",color:"#111111",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:300}}>×</button>
+              <button onClick={()=>{setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"#F3F4F6",color:"#111111",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:300}}>Ã</button>
             </div>
 
-            {/* Sélecteur de motif */}
+            {/* SÃ©lecteur de motif */}
             <div style={{padding:"14px 24px",borderBottom:"1px solid #EBEAE5",flexShrink:0,background:"#FAFAFA"}}>
               <div style={{fontSize:11,fontWeight:700,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:9}}>Motif de la relance</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
                 {motifsRelance.map((m, i) => (
                   <div key={i} style={{display:"flex",alignItems:"center",borderRadius:100,border:`1.5px solid ${motifSelectionne===m?"#B8924F":"#EBEAE5"}`,background:motifSelectionne===m?"#FEF3C7":"#FFFFFF",overflow:"hidden"}}>
                     <button onClick={()=>setMotifSelectionne(motifSelectionne===m?"":m)} style={{padding:"5px 10px",fontSize:11,fontWeight:motifSelectionne===m?600:400,color:motifSelectionne===m?"#92400E":"#6B6B72",background:"transparent",border:"none",cursor:"pointer"}}>{m}</button>
-                    <button onClick={()=>{const upd=motifsRelance.filter((_,j)=>j!==i);saveMotifsRelance(upd);if(motifSelectionne===m)setMotifSelectionne("");}} title="Supprimer" style={{padding:"5px 8px 5px 0",fontSize:10,color:"#C5C3BE",background:"transparent",border:"none",cursor:"pointer"}} onMouseEnter={e=>(e.currentTarget.style.color="#DC2626")} onMouseLeave={e=>(e.currentTarget.style.color="#C5C3BE")}>×</button>
+                    <button onClick={()=>{const upd=motifsRelance.filter((_,j)=>j!==i);saveMotifsRelance(upd);if(motifSelectionne===m)setMotifSelectionne("");}} title="Supprimer" style={{padding:"5px 8px 5px 0",fontSize:10,color:"#C5C3BE",background:"transparent",border:"none",cursor:"pointer"}} onMouseEnter={e=>(e.currentTarget.style.color="#DC2626")} onMouseLeave={e=>(e.currentTarget.style.color="#C5C3BE")}>Ã</button>
                   </div>
                 ))}
                 {showAddMotif?(
                   <div style={{display:"flex",alignItems:"center",gap:5}}>
-                    <input autoFocus value={newMotifLabel} onChange={e=>setNewMotifLabel(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newMotifLabel.trim()){const upd=[...motifsRelance,newMotifLabel.trim()];saveMotifsRelance(upd);setNewMotifLabel("");setShowAddMotif(false);}if(e.key==="Escape"){setShowAddMotif(false);setNewMotifLabel("");}}} placeholder="Nouveau motif…" style={{padding:"5px 10px",fontSize:11,borderRadius:100,border:"1.5px solid #B8924F",outline:"none",width:150}}/>
+                    <input autoFocus value={newMotifLabel} onChange={e=>setNewMotifLabel(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newMotifLabel.trim()){const upd=[...motifsRelance,newMotifLabel.trim()];saveMotifsRelance(upd);setNewMotifLabel("");setShowAddMotif(false);}if(e.key==="Escape"){setShowAddMotif(false);setNewMotifLabel("");}}} placeholder="Nouveau motifâ¦" style={{padding:"5px 10px",fontSize:11,borderRadius:100,border:"1.5px solid #B8924F",outline:"none",width:150}}/>
                     <button onClick={()=>{if(newMotifLabel.trim()){const upd=[...motifsRelance,newMotifLabel.trim()];saveMotifsRelance(upd);setNewMotifLabel("");setShowAddMotif(false);}}} style={{padding:"5px 10px",fontSize:11,borderRadius:100,border:"none",background:"#B8924F",color:"#1A1A1E",cursor:"pointer",fontWeight:600}}>+</button>
-                    <button onClick={()=>{setShowAddMotif(false);setNewMotifLabel("");}} style={{padding:"5px 8px",fontSize:11,borderRadius:100,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer"}}>✕</button>
+                    <button onClick={()=>{setShowAddMotif(false);setNewMotifLabel("");}} style={{padding:"5px 8px",fontSize:11,borderRadius:100,border:"1px solid #EBEAE5",background:"transparent",color:"#6B6E7E",cursor:"pointer"}}>â</button>
                   </div>
                 ):(
                   <button onClick={()=>setShowAddMotif(true)} style={{padding:"5px 12px",fontSize:11,borderRadius:100,border:"1.5px dashed #B8924F",background:"transparent",color:"#B8924F",cursor:"pointer",fontWeight:500}}>+ Ajouter</button>
                 )}
               </div>
-              {motifSelectionne==="Autre"&&<input value={motifPersonnalise} onChange={e=>setMotifPersonnalise(e.target.value)} placeholder="Précisez le motif…" style={{width:"100%",padding:"7px 12px",fontSize:12,borderRadius:8,border:"1px solid #B8924F",outline:"none",marginTop:4}}/>}
-              {!motifSelectionne&&<div style={{fontSize:11,color:"#B0AAA2",fontStyle:"italic",marginTop:2}}>Optionnel — guide la rédaction</div>}
+              {motifSelectionne==="Autre"&&<input value={motifPersonnalise} onChange={e=>setMotifPersonnalise(e.target.value)} placeholder="PrÃ©cisez le motifâ¦" style={{width:"100%",padding:"7px 12px",fontSize:12,borderRadius:8,border:"1px solid #B8924F",outline:"none",marginTop:4}}/>}
+              {!motifSelectionne&&<div style={{fontSize:11,color:"#B0AAA2",fontStyle:"italic",marginTop:2}}>Optionnel â guide la rÃ©daction</div>}
             </div>
 
             {/* Corps */}
@@ -7761,40 +7762,40 @@ FORMAT
               {genRelanceIA?(
                 <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,color:"#9CA3AF"}}>
                   <Spin s={32}/>
-                  <div style={{fontSize:14,fontWeight:500}}>Rédaction en cours…</div>
-                  <div style={{fontSize:12,opacity:.6}}>Analyse de l'historique et du motif sélectionné</div>
+                  <div style={{fontSize:14,fontWeight:500}}>RÃ©daction en coursâ¦</div>
+                  <div style={{fontSize:12,opacity:.6}}>Analyse de l'historique et du motif sÃ©lectionnÃ©</div>
                 </div>
               ):relanceIAText?(
                 <textarea value={relanceIAText} onChange={e=>setRelanceIAText(e.target.value)} style={{flex:1,width:"100%",padding:"16px 18px",fontSize:13,color:"#111111",lineHeight:1.9,border:"1px solid #D1D5DB",borderRadius:12,background:"#F3F4F6",resize:"none",outline:"none",fontFamily:"inherit"}}/>
               ):(
                 <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,color:"#9CA3AF"}}>
-                  <div style={{fontSize:36}}>✨</div>
-                  <div style={{fontSize:13,textAlign:"center",maxWidth:280}}>{motifSelectionne?`Motif sélectionné : "${motifSelectionne==="Autre"?motifPersonnalise||"Autre":motifSelectionne}"` : "Sélectionnez un motif ou générez directement"}</div>
-                  <button onClick={()=>genRelanceIAFn(showRelanceIA)} style={{...gold,fontSize:12,padding:"9px 20px"}}>✨ Générer le mail</button>
+                  <div style={{fontSize:36}}>â¨</div>
+                  <div style={{fontSize:13,textAlign:"center",maxWidth:280}}>{motifSelectionne?`Motif sÃ©lectionnÃ© : "${motifSelectionne==="Autre"?motifPersonnalise||"Autre":motifSelectionne}"` : "SÃ©lectionnez un motif ou gÃ©nÃ©rez directement"}</div>
+                  <button onClick={()=>genRelanceIAFn(showRelanceIA)} style={{...gold,fontSize:12,padding:"9px 20px"}}>â¨ GÃ©nÃ©rer le mail</button>
                 </div>
               )}
             </div>
 
             {/* Footer */}
             <div style={{padding:"16px 24px",borderTop:"1px solid #EBEAE5",display:"flex",gap:8,flexShrink:0}}>
-              <button onClick={()=>{if(!relanceIAText) return;window.sendPrompt("CREATE_DRAFT|"+showRelanceIA.email+"|Relance — "+showRelanceIA.nom+"|"+relanceIAText);toast("Brouillon créé !");setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} disabled={!relanceIAText||genRelanceIA} style={{...gold,flex:1,padding:"11px",fontSize:13,opacity:(!relanceIAText||genRelanceIA)?0.4:1,cursor:(!relanceIAText||genRelanceIA)?"not-allowed":"pointer"}}>📧 Créer le brouillon</button>
-              <button onClick={()=>genRelanceIAFn(showRelanceIA)} disabled={genRelanceIA} style={{...out,padding:"11px 18px",fontSize:13,opacity:genRelanceIA?0.4:1,display:"flex",alignItems:"center",gap:6}}>{genRelanceIA?<Spin s={12}/>:"↻"} {relanceIAText?"Regénérer":"Générer"}</button>
+              <button onClick={()=>{if(!relanceIAText) return;window.sendPrompt("CREATE_DRAFT|"+showRelanceIA.email+"|Relance â "+showRelanceIA.nom+"|"+relanceIAText);toast("Brouillon crÃ©Ã© !");setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} disabled={!relanceIAText||genRelanceIA} style={{...gold,flex:1,padding:"11px",fontSize:13,opacity:(!relanceIAText||genRelanceIA)?0.4:1,cursor:(!relanceIAText||genRelanceIA)?"not-allowed":"pointer"}}>ð§ CrÃ©er le brouillon</button>
+              <button onClick={()=>genRelanceIAFn(showRelanceIA)} disabled={genRelanceIA} style={{...out,padding:"11px 18px",fontSize:13,opacity:genRelanceIA?0.4:1,display:"flex",alignItems:"center",gap:6}}>{genRelanceIA?<Spin s={12}/>:"â»"} {relanceIAText?"RegÃ©nÃ©rer":"GÃ©nÃ©rer"}</button>
               <button onClick={()=>{setShowRelanceIA(null);setRelanceIAText("");setMotifSelectionne("");setMotifPersonnalise("");}} style={{...out,padding:"11px 18px",fontSize:13}}>Fermer</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ══ MODAL ENVOYER MAIL ══ */}
+      {/* ââ MODAL ENVOYER MAIL ââ */}
       {showSendMail&&(
         <div style={{position:"fixed",inset:0,background:"#111111",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99999,padding:24,backdropFilter:"blur(2px)"}}>
           <div style={{background:"#FFFFFF",borderRadius:18,width:"100%",maxWidth:540,maxHeight:"88vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.5)"}}>
             <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #E5E7EB",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
               <div>
-                <div style={{fontSize:16,fontWeight:700,color:"#111111"}}>📤 Envoyer un mail</div>
-                <div style={{fontSize:12,color:"#9CA3AF",marginTop:3}}>À : <strong>{showSendMail.nom}</strong> · {showSendMail.email}</div>
+                <div style={{fontSize:16,fontWeight:700,color:"#111111"}}>ð¤ Envoyer un mail</div>
+                <div style={{fontSize:12,color:"#9CA3AF",marginTop:3}}>Ã : <strong>{showSendMail.nom}</strong> Â· {showSendMail.email}</div>
               </div>
-              <button onClick={()=>setShowSendMail(null)} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"transparent",color:"#9CA3AF",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              <button onClick={()=>setShowSendMail(null)} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"transparent",color:"#9CA3AF",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>Ã</button>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:24,display:"flex",flexDirection:"column",gap:16,minHeight:0}}>
               <div>
@@ -7807,18 +7808,18 @@ FORMAT
               </div>
               <div style={{flex:1,display:"flex",flexDirection:"column"}}>
                 <label style={{fontSize:11,color:"#6B7280",display:"block",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>MESSAGE</label>
-                <textarea value={sendMailBody} onChange={e=>setSendMailBody(e.target.value)} placeholder="Rédigez votre message…" rows={9} style={{...inpLight,resize:"none",lineHeight:1.8,flex:1,fontFamily:"inherit"}}/>
+                <textarea value={sendMailBody} onChange={e=>setSendMailBody(e.target.value)} placeholder="RÃ©digez votre messageâ¦" rows={9} style={{...inpLight,resize:"none",lineHeight:1.8,flex:1,fontFamily:"inherit"}}/>
               </div>
             </div>
             <div style={{padding:"16px 24px",borderTop:"1px solid #EBEAE5",display:"flex",gap:8,flexShrink:0,background:"#F3F4F6"}}>
-              <button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+showSendMail.email+"|"+sendMailSubject+"|"+sendMailBody); toast("Brouillon créé !"); setShowSendMail(null); }} disabled={!sendMailBody||!sendMailSubject} style={{...gold,flex:1,padding:"11px",fontSize:13,opacity:!sendMailBody||!sendMailSubject?0.4:1,cursor:!sendMailBody||!sendMailSubject?"not-allowed":"pointer"}}>📧 Créer le brouillon Gmail</button>
+              <button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+showSendMail.email+"|"+sendMailSubject+"|"+sendMailBody); toast("Brouillon crÃ©Ã© !"); setShowSendMail(null); }} disabled={!sendMailBody||!sendMailSubject} style={{...gold,flex:1,padding:"11px",fontSize:13,opacity:!sendMailBody||!sendMailSubject?0.4:1,cursor:!sendMailBody||!sendMailSubject?"not-allowed":"pointer"}}>ð§ CrÃ©er le brouillon Gmail</button>
               <button onClick={()=>setShowSendMail(null)} style={{...out,fontSize:12,padding:"11px 16px"}}>Annuler</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ══ MODALE — TESTER ARCHANGE ══ */}
+      {/* ââ MODALE â TESTER ARCHANGE ââ */}
       {showTestArchange && (
         <div style={{position:"fixed",inset:0,background:"rgba(15,15,20,0.5)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)"}} onClick={()=>!testRunning && setShowTestArchange(false)}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#FFFFFF",borderRadius:14,maxWidth:780,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
@@ -7826,18 +7827,18 @@ FORMAT
             <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"flex-start",background:"linear-gradient(135deg, rgba(184,146,79,0.06) 0%, #FFFFFF 60%)"}}>
               <div>
                 <div style={{fontSize:20,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.02em",display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:18,color:"#B8924F"}}>⚡</span> Tester ARCHANGE
+                  <span style={{fontSize:18,color:"#B8924F"}}>â¡</span> Tester ARCHANGE
                 </div>
-                <div style={{fontSize:12,color:"#6B6E7E",marginTop:4}}>Collez un mail fictif et voyez exactement ce qu'ARCHANGE en extrait. Sans persistance — purement test.</div>
+                <div style={{fontSize:12,color:"#6B6E7E",marginTop:4}}>Collez un mail fictif et voyez exactement ce qu'ARCHANGE en extrait. Sans persistance â purement test.</div>
               </div>
-              <button onClick={()=>!testRunning && setShowTestArchange(false)} disabled={testRunning} style={{background:"none",border:"none",color:"#6B6E7E",fontSize:20,cursor:testRunning?"not-allowed":"pointer",padding:"4px 8px",lineHeight:1}}>×</button>
+              <button onClick={()=>!testRunning && setShowTestArchange(false)} disabled={testRunning} style={{background:"none",border:"none",color:"#6B6E7E",fontSize:20,cursor:testRunning?"not-allowed":"pointer",padding:"4px 8px",lineHeight:1}}>Ã</button>
             </div>
 
-            {/* Body — scrollable */}
+            {/* Body â scrollable */}
             <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
                 <div>
-                  <label style={{fontSize:10.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6,fontFamily:"'Geist','system-ui',sans-serif"}}>De (expéditeur)</label>
+                  <label style={{fontSize:10.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6,fontFamily:"'Geist','system-ui',sans-serif"}}>De (expÃ©diteur)</label>
                   <input value={testMailFrom} onChange={e=>setTestMailFrom(e.target.value)} placeholder="Ex: Marie Dupont &lt;marie@example.com&gt;" style={{...inp,fontSize:13}}/>
                 </div>
                 <div>
@@ -7846,7 +7847,7 @@ FORMAT
                 </div>
               </div>
               <label style={{fontSize:10.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6,fontFamily:"'Geist','system-ui',sans-serif"}}>Corps du mail</label>
-              <textarea value={testMailContent} onChange={e=>setTestMailContent(e.target.value)} placeholder="Collez ici le corps complet d'un mail (peut être un Fwd:, un mail Zenchef, un mail direct…)" rows={8} style={{...inp,fontSize:13,lineHeight:1.6,resize:"vertical",width:"100%",fontFamily:"inherit"}}/>
+              <textarea value={testMailContent} onChange={e=>setTestMailContent(e.target.value)} placeholder="Collez ici le corps complet d'un mail (peut Ãªtre un Fwd:, un mail Zenchef, un mail directâ¦)" rows={8} style={{...inp,fontSize:13,lineHeight:1.6,resize:"vertical",width:"100%",fontFamily:"inherit"}}/>
 
               {/* Boutons d'action */}
               <div style={{display:"flex",gap:8,marginTop:14,alignItems:"center"}}>
@@ -7854,22 +7855,22 @@ FORMAT
                   onClick={runTestArchange}
                   disabled={testRunning || !testMailContent.trim()}
                   style={{padding:"9px 18px",borderRadius:8,border:"1px solid #B8924F",background:testRunning||!testMailContent.trim()?"rgba(184,146,79,0.15)":"#B8924F",color:testRunning||!testMailContent.trim()?"#A5A4A0":"#FFFFFF",fontSize:13,fontWeight:500,cursor:testRunning||!testMailContent.trim()?"not-allowed":"pointer",fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:7}}>
-                  {testRunning ? <><Spin s={11}/> Analyse en cours…</> : <>⚡ Lancer l'analyse</>}
+                  {testRunning ? <><Spin s={11}/> Analyse en coursâ¦</> : <>â¡ Lancer l'analyse</>}
                 </button>
                 {testResult && !testRunning && (
-                  <button onClick={()=>{setTestResult(null); setTestMailContent(""); setTestMailSubject(""); setTestMailFrom("");}} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#6B6E7E",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>Réinitialiser</button>
+                  <button onClick={()=>{setTestResult(null); setTestMailContent(""); setTestMailSubject(""); setTestMailFrom("");}} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#6B6E7E",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>RÃ©initialiser</button>
                 )}
               </div>
 
-              {/* Résultats */}
+              {/* RÃ©sultats */}
               {testResult && !testResult.error && (
                 <div style={{marginTop:20,padding:"16px 18px",background:"#FAFAF7",borderRadius:10,border:"1px solid #EBEAE5"}}>
-                  <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Résultat de l'analyse</div>
+                  <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>RÃ©sultat de l'analyse</div>
 
-                  {/* Métriques */}
+                  {/* MÃ©triques */}
                   <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:8,marginBottom:14}}>
                     <div style={{padding:"8px 10px",background:"#FFFFFF",borderRadius:7,border:"1px solid #EBEAE5"}}>
-                      <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3}}>Durée</div>
+                      <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3}}>DurÃ©e</div>
                       <div style={{fontSize:14,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{testResult.duree}s</div>
                     </div>
                     <div style={{padding:"8px 10px",background:"#FFFFFF",borderRadius:7,border:"1px solid #EBEAE5"}}>
@@ -7881,17 +7882,17 @@ FORMAT
                       <div style={{fontSize:14,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{testResult.tokensOut.toLocaleString("fr-FR")}</div>
                     </div>
                     <div style={{padding:"8px 10px",background:"#FFFFFF",borderRadius:7,border:"1px solid #EBEAE5"}}>
-                      <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3}}>Coût</div>
+                      <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3}}>CoÃ»t</div>
                       <div style={{fontSize:14,fontWeight:500,color:"#B8924F",fontVariantNumeric:"tabular-nums"}}>${testResult.cout.toFixed(4)}</div>
                     </div>
                   </div>
 
-                  {/* Détection */}
+                  {/* DÃ©tection */}
                   {(testResult.plateforme || testResult.estForward) && (
                     <div style={{marginBottom:14,padding:"10px 12px",background:"rgba(184,146,79,0.08)",borderRadius:7,border:"1px solid rgba(184,146,79,0.25)"}}>
                       <div style={{fontSize:11,color:"#1A1A1E",lineHeight:1.5}}>
-                        {testResult.plateforme && <><strong style={{color:"#B8924F"}}>📨 Plateforme détectée :</strong> {testResult.plateforme}<br/></>}
-                        {testResult.estForward && <><strong style={{color:"#B8924F"}}>↪️ Mail forwardé détecté</strong></>}
+                        {testResult.plateforme && <><strong style={{color:"#B8924F"}}>ð¨ Plateforme dÃ©tectÃ©e :</strong> {testResult.plateforme}<br/></>}
+                        {testResult.estForward && <><strong style={{color:"#B8924F"}}>âªï¸ Mail forwardÃ© dÃ©tectÃ©</strong></>}
                       </div>
                     </div>
                   )}
@@ -7899,23 +7900,23 @@ FORMAT
                   {/* Champs extraits */}
                   <div style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:"6px 14px",fontSize:12,fontFamily:"'Geist','system-ui',sans-serif"}}>
                     {[
-                      ["Réservation ?", testResult.extracted.isReservation ? "✓ Oui" : "✗ Non"],
-                      ["Confiance", testResult.extracted.confiance || "—"],
-                      ["Nom", testResult.extracted.nom || "—"],
-                      ["Email", testResult.extracted.email || "—"],
-                      ["Téléphone", testResult.extracted.telephone || "—"],
-                      ["Entreprise", testResult.extracted.entreprise || "—"],
-                      ["Type événement", testResult.extracted.typeEvenement || "—"],
-                      ["Nb personnes", testResult.extracted.nombrePersonnes || "—"],
-                      ["Espace détecté", testResult.extracted.espaceDetecte || "—"],
-                      ["Date début", testResult.extracted.dateDebut || "—"],
-                      ["Heure", (testResult.extracted.heureDebut || "—") + (testResult.extracted.heureFin ? ` → ${testResult.extracted.heureFin}` : "")],
-                      ["Budget", testResult.extracted.budget || "—"],
-                      ["Source", testResult.extracted.sourceEmail || "—"],
+                      ["RÃ©servation ?", testResult.extracted.isReservation ? "â Oui" : "â Non"],
+                      ["Confiance", testResult.extracted.confiance || "â"],
+                      ["Nom", testResult.extracted.nom || "â"],
+                      ["Email", testResult.extracted.email || "â"],
+                      ["TÃ©lÃ©phone", testResult.extracted.telephone || "â"],
+                      ["Entreprise", testResult.extracted.entreprise || "â"],
+                      ["Type Ã©vÃ©nement", testResult.extracted.typeEvenement || "â"],
+                      ["Nb personnes", testResult.extracted.nombrePersonnes || "â"],
+                      ["Espace dÃ©tectÃ©", testResult.extracted.espaceDetecte || "â"],
+                      ["Date dÃ©but", testResult.extracted.dateDebut || "â"],
+                      ["Heure", (testResult.extracted.heureDebut || "â") + (testResult.extracted.heureFin ? ` â ${testResult.extracted.heureFin}` : "")],
+                      ["Budget", testResult.extracted.budget || "â"],
+                      ["Source", testResult.extracted.sourceEmail || "â"],
                     ].map(([label, val]: [string, any], idx) => (
                       <React.Fragment key={idx}>
                         <span style={{color:"#6B6E7E",fontWeight:500}}>{label}</span>
-                        <span style={{color: val==="—" ? "#A5A4A0" : "#1A1A1E", fontWeight: val==="—" ? 400 : 500}}>{String(val)}</span>
+                        <span style={{color: val==="â" ? "#A5A4A0" : "#1A1A1E", fontWeight: val==="â" ? 400 : 500}}>{String(val)}</span>
                       </React.Fragment>
                     ))}
                   </div>
@@ -7929,7 +7930,7 @@ FORMAT
 
                   {testResult.extracted.resume && (
                     <div style={{marginTop:8,padding:"10px 12px",background:"rgba(184,146,79,0.05)",borderRadius:7,border:"1px solid rgba(184,146,79,0.2)"}}>
-                      <div style={{fontSize:10,fontWeight:500,color:"#B8924F",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:5}}>Résumé IA</div>
+                      <div style={{fontSize:10,fontWeight:500,color:"#B8924F",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:5}}>RÃ©sumÃ© IA</div>
                       <div style={{fontSize:12,color:"#1A1A1E",lineHeight:1.5,fontFamily:"'Fraunces',Georgia,serif"}}>{testResult.extracted.resume}</div>
                     </div>
                   )}
@@ -7938,7 +7939,7 @@ FORMAT
 
               {testResult && testResult.error && (
                 <div style={{marginTop:20,padding:"14px 16px",background:"rgba(220,38,38,0.06)",borderRadius:10,border:"1px solid rgba(220,38,38,0.25)"}}>
-                  <div style={{fontSize:13,fontWeight:500,color:"#DC2626",marginBottom:5}}>❌ Erreur d'analyse</div>
+                  <div style={{fontSize:13,fontWeight:500,color:"#DC2626",marginBottom:5}}>â Erreur d'analyse</div>
                   <div style={{fontSize:12,color:"#6B6E7E"}}>{testResult.error}</div>
                 </div>
               )}
@@ -7946,7 +7947,7 @@ FORMAT
 
             {/* Footer */}
             <div style={{padding:"12px 24px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:11,color:"#6B6E7E"}}>💡 Astuce : testez avec un mail Zenchef ou ABC Salles forwardé pour vérifier la détection</span>
+              <span style={{fontSize:11,color:"#6B6E7E"}}>ð¡ Astuce : testez avec un mail Zenchef ou ABC Salles forwardÃ© pour vÃ©rifier la dÃ©tection</span>
               <button onClick={()=>!testRunning && setShowTestArchange(false)} disabled={testRunning} style={{padding:"7px 14px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",fontSize:12,cursor:testRunning?"not-allowed":"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>Fermer</button>
             </div>
           </div>
