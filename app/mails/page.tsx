@@ -1383,6 +1383,16 @@ export default function App() {
   const [sourcesFilter, setSourcesFilter] = useState<string>("all"); // "all" | "infos" | "regles_com" | "ton" | "appr" | "cas_part" | "absolues"
   // UI : quel accordéon ouvert dans chaque sous-section de règles commerciales
   const [openReglesComTab, setOpenReglesComTab] = useState<string>(""); // "" = aucun, sinon "dim_X_tab_Y"
+  // ── Modale "Tester ARCHANGE" — analyse à la volée d'un mail test ──────────
+  const [showTestArchange, setShowTestArchange] = useState<boolean>(false);
+  const [testMailContent, setTestMailContent] = useState<string>("");
+  const [testMailSubject, setTestMailSubject] = useState<string>("");
+  const [testMailFrom, setTestMailFrom] = useState<string>("");
+  const [testRunning, setTestRunning] = useState<boolean>(false);
+  const [testResult, setTestResult] = useState<any>(null);
+  // ── Stats : période + focus pour la sidebar ──────────────────────────────
+  const [statsPeriode, setStatsPeriode] = useState<string>("mois"); // "semaine" | "mois" | "trimestre" | "annee" | "tout"
+  const [statsFocus, setStatsFocus] = useState<string>("ensemble"); // "ensemble" | "perf_ia" | "espaces" | "types" | "profils"
 
   // Save helpers (debounce 1s pour éviter spam)
   const saveReglesCommerciales = (rc: ReglesCommerciales) => {
@@ -1897,6 +1907,45 @@ export default function App() {
       toast("Re-analyse échouée : " + humanError(e), "err");
     }
     setReanalysingId(null);
+  };
+
+  // ─── Tester ARCHANGE sur un mail fictif (modale) ────────────────────────
+  const runTestArchange = async () => {
+    if (!testMailContent.trim()) { toast("Collez un mail pour tester", "err"); return; }
+    setTestRunning(true);
+    setTestResult(null);
+    try {
+      const fakeEmail = {
+        id: "test_" + Date.now(),
+        from: testMailFrom || "Test client",
+        fromEmail: (testMailFrom.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)?.[0]) || "test@example.com",
+        subject: testMailSubject || "(test sans objet)",
+        body: testMailContent,
+        snippet: testMailContent.slice(0, 200),
+      };
+      const tStart = Date.now();
+      const tokensInDebut = apiUsageStats.totalInputTokens;
+      const tokensOutDebut = apiUsageStats.totalOutputTokens;
+      const coutDebut = apiUsageStats.totalCostUSD;
+      const raw = await callClaude(
+        buildExtractMessage(fakeEmail),
+        buildExtractPrompt(nomEtab, espacesDyn), null,
+        "test_archange"
+      );
+      const extracted = JSON.parse(raw.replace(/```json|```/g, "").trim());
+      const duree = ((Date.now() - tStart) / 1000).toFixed(1);
+      const dTokensIn = apiUsageStats.totalInputTokens - tokensInDebut;
+      const dTokensOut = apiUsageStats.totalOutputTokens - tokensOutDebut;
+      const dCout = apiUsageStats.totalCostUSD - coutDebut;
+      const plateforme = detectPlateforme(fakeEmail.fromEmail, fakeEmail.body);
+      const estForward = estMailForwarde({ subject: fakeEmail.subject, body: fakeEmail.body });
+      setTestResult({ extracted, duree, tokensIn: dTokensIn, tokensOut: dTokensOut, cout: dCout, plateforme, estForward });
+      toast("Test terminé ✓");
+    } catch (e: any) {
+      toast("Test échoué : " + humanError(e), "err");
+      setTestResult({ error: humanError(e) });
+    }
+    setTestRunning(false);
   };
 
   // Chargement/synchronisation des emails — déclenche d'abord une sync Gmail, puis relit Supabase
@@ -5493,143 +5542,663 @@ FORMAT
         })()}
 
         {/* ══ STATS ══ */}
-        {view==="stats" && (
-          <div style={{flex:1,overflowY:"auto",padding:24}}>
-            <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.02em",marginBottom:24}}>Vue d'ensemble</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:28}}>
-              {[["Demandes totales",total,"#6B7280"],["Confirmées",conf,"#059669"],["En attente",att,"#D97706"],["Taux de conversion",taux+"%","#2563EB"]].map(([l,v,c])=>(
-                <div key={l} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5",boxShadow:"0 1px 4px rgba(26,26,30,.04)",padding:"16px 18px"}}>
-                  <div style={{fontSize:11,color:"#6B6E7E",marginBottom:8,textTransform:"uppercase",letterSpacing:".05em"}}>{l}</div>
-                  <div style={{fontSize:28,fontWeight:700,color:c}}>{v}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-              <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5",boxShadow:"0 1px 4px rgba(26,26,30,.04)",padding:20}}>
-                <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",letterSpacing:"-0.01em",marginBottom:20}}>Par espace</div>
-                {parEspace.map(e=>(
-                  <div key={e.id} style={{marginBottom:16}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                      <span style={{fontSize:13,color:"#1A1A1E",fontWeight:500}}>{e.nom}</span>
-                      <span style={{fontSize:12,color:"#6B6E7E"}}>{e.c}/{e.n}</span>
-                    </div>
-                    <div style={{height:8,background:"#F5F4F0",borderRadius:4,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:Math.round(e.n/maxN*100)+"%",background:e.color,borderRadius:4}}/>
-                    </div>
-                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>{e.n>0?Math.round(e.c/e.n*100)+"% confirmés":"Aucune demande"}</div>
-                  </div>
-                ))}
+        {view==="stats" && (() => {
+          // ═══ Calculs des KPI étendus ═══
+          // Filtre selon la période
+          const today = new Date();
+          let dateLimit: Date | null = null;
+          if (statsPeriode === "semaine") { dateLimit = new Date(today); dateLimit.setDate(today.getDate() - 7); }
+          else if (statsPeriode === "mois") { dateLimit = new Date(today); dateLimit.setDate(1); }
+          else if (statsPeriode === "trimestre") { dateLimit = new Date(today); dateLimit.setMonth(today.getMonth() - 3); }
+          else if (statsPeriode === "annee") { dateLimit = new Date(today); dateLimit.setFullYear(today.getFullYear() - 1); }
+
+          const resasFiltrees = dateLimit
+            ? resas.filter(r => { try { return r.dateDebut && new Date(r.dateDebut) >= dateLimit!; } catch { return false; } })
+            : resas;
+
+          const totalP = resasFiltrees.length;
+          const confP = resasFiltrees.filter(r => r.statut === "confirme").length;
+          const attP = resasFiltrees.filter(r => r.statut === "en_attente" || r.statut === "nouveau" || r.statut === "en_cours").length;
+          const tauxP = totalP > 0 ? Math.round(confP / totalP * 100) : 0;
+
+          // CA prévisionnel (somme budgets confirmés + en cours)
+          const caPrev = resasFiltrees.reduce((sum, r) => {
+            const b = String(r.budget || "");
+            const matchTotal = b.match(/(\d+[\s.,]?\d*)\s*€/);
+            const matchPers = b.match(/(\d+)\s*€?\s*(?:\/|par)\s*(?:pers|personne)/);
+            let val = 0;
+            if (matchPers) val = parseInt(matchPers[1], 10) * (parseInt(String(r.nombrePersonnes||0), 10) || 0);
+            else if (matchTotal) val = parseInt(matchTotal[1].replace(/[\s.,]/g, ""), 10);
+            return sum + val;
+          }, 0);
+
+          // Délai de réponse moyen (en heures)
+          const delaisReponse: number[] = [];
+          Object.entries(sentReplies).forEach(([eId, sr]: [string, any]) => {
+            const m = emails.find(em => em.id === eId);
+            if (m && m.rawDate && sr.date) {
+              try {
+                const dRecu = new Date(m.rawDate).getTime();
+                // sr.date est format "DD/MM/YYYY" — on prend midi par défaut
+                const parts = sr.date.split("/");
+                if (parts.length === 3) {
+                  const dEnvoi = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), 12, 0).getTime();
+                  const diffHours = (dEnvoi - dRecu) / 3600000;
+                  if (diffHours > 0 && diffHours < 720) delaisReponse.push(diffHours);
+                }
+              } catch {}
+            }
+          });
+          const delaiMoyen = delaisReponse.length > 0
+            ? (delaisReponse.reduce((a, b) => a + b, 0) / delaisReponse.length)
+            : null;
+
+          // Taux de modification IA (réponses modifiées avant envoi)
+          let tauxModifIA = 0;
+          let modifiedCount = 0;
+          let totalCachedReplies = 0;
+          Object.values(repliesCache).forEach((rc: any) => {
+            if (rc.reply && rc.editReply) {
+              totalCachedReplies++;
+              if (rc.reply !== rc.editReply) modifiedCount++;
+            }
+          });
+          if (totalCachedReplies > 0) tauxModifIA = Math.round(modifiedCount / totalCachedReplies * 100);
+
+          // Tokens / mail moyen
+          const tokensPerMail = apiUsageStats.totalCalls > 0
+            ? Math.round((apiUsageStats.totalInputTokens + apiUsageStats.totalOutputTokens) / apiUsageStats.totalCalls)
+            : 0;
+          const coutPerMail = apiUsageStats.totalCalls > 0
+            ? apiUsageStats.totalCostUSD / apiUsageStats.totalCalls
+            : 0;
+
+          // Espaces — utiliser ESPACES dynamiques
+          const parEspaceP = ESPACES.map(e => ({
+            ...e,
+            n: resasFiltrees.filter(r => r.espaceId === e.id).length,
+            c: resasFiltrees.filter(r => r.espaceId === e.id && r.statut === "confirme").length,
+          })).sort((a, b) => b.n - a.n);
+          const maxNP = Math.max(...parEspaceP.map(e => e.n), 1);
+
+          // Types
+          const parTypeP = TYPES_EVT.map(t => ({
+            t,
+            n: resasFiltrees.filter(r => r.typeEvenement === t).length,
+          })).filter(x => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 5);
+
+          // Profils (estimés depuis l'extraction)
+          const profilsCount = { entreprises: 0, particuliers: 0, institutionnels: 0, agences: 0 };
+          resasFiltrees.forEach(r => {
+            const entr = String(r.entreprise || "").trim();
+            const nom = String(r.nom || "").trim();
+            if (!entr || /mr|mme|m\.|mlle|madame|monsieur/i.test(nom)) profilsCount.particuliers++;
+            else if (/mairie|ministère|université|ambassade|préfecture/i.test(entr)) profilsCount.institutionnels++;
+            else if (/agence|event|incentive|communication|marketing/i.test(entr)) profilsCount.agences++;
+            else profilsCount.entreprises++;
+          });
+
+          // Évolution sur 12 mois
+          const evol12: { mois: string; demandes: number; confirmes: number; annules: number }[] = [];
+          for (let i = 11; i >= 0; i--) {
+            const d = new Date(today);
+            d.setMonth(d.getMonth() - i);
+            const m = d.getMonth(), y = d.getFullYear();
+            const inMonth = resas.filter(r => {
+              try { const rd = new Date(r.dateDebut); return rd.getMonth() === m && rd.getFullYear() === y; } catch { return false; }
+            });
+            evol12.push({
+              mois: d.toLocaleDateString("fr-FR", { month: "short" }),
+              demandes: inMonth.length,
+              confirmes: inMonth.filter(r => r.statut === "confirme").length,
+              annules: inMonth.filter(r => r.statut === "annule").length,
+            });
+          }
+          const maxEvol = Math.max(...evol12.map(e => e.demandes), 1);
+
+          // Performance ARCHANGE — distribution par callType
+          const callTypeStats: Record<string, { count: number; tokensIn: number; tokensOut: number; cost: number }> = {};
+          (apiUsageStats.history || []).forEach(h => {
+            if (!callTypeStats[h.type]) callTypeStats[h.type] = { count: 0, tokensIn: 0, tokensOut: 0, cost: 0 };
+            callTypeStats[h.type].count++;
+            callTypeStats[h.type].tokensIn += h.inputTokens;
+            callTypeStats[h.type].tokensOut += h.outputTokens;
+            callTypeStats[h.type].cost += h.costUSD;
+          });
+          const callTypesArr = Object.entries(callTypeStats).sort((a, b) => b[1].count - a[1].count);
+
+          // Sous-titre dynamique selon période
+          const periodeLabel = {
+            semaine: "Cette semaine",
+            mois: "Ce mois (" + today.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }) + ")",
+            trimestre: "Ces 3 derniers mois",
+            annee: "Cette année",
+            tout: "Toute la période",
+          }[statsPeriode] || "Ce mois";
+
+          const exportCSV = () => {
+            const rows = [
+              ["KPI", "Valeur"],
+              ["CA prévisionnel", caPrev + " €"],
+              ["Taux de conversion", tauxP + "%"],
+              ["Délai de réponse moyen (h)", delaiMoyen !== null ? delaiMoyen.toFixed(1) : "—"],
+              ["Événements confirmés", confP],
+              ["Taux modification IA", tauxModifIA + "%"],
+              ["Tokens / mail moyen", tokensPerMail],
+              ["Coût / mail moyen ($)", coutPerMail.toFixed(4)],
+            ];
+            const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = `archange-stats-${statsPeriode}.csv`; a.click();
+            URL.revokeObjectURL(url);
+            toast("Export CSV généré ✓");
+          };
+
+          return (
+          <div style={{flex:1,display:"flex",overflow:"hidden",background:"#F5F4F0"}}>
+            {/* ═══ SIDEBAR SECONDAIRE ═══ */}
+            <div style={{width:220,flexShrink:0,background:"#FAFAF7",borderRight:"1px solid #EBEAE5",padding:"22px 16px",display:"flex",flexDirection:"column",overflowY:"auto"}}>
+              {/* Bloc PÉRIODE */}
+              <div style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Période</div>
+              <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:24}}>
+                {[
+                  {k:"semaine", l:"Cette semaine"},
+                  {k:"mois", l:"Ce mois"},
+                  {k:"trimestre", l:"Ce trimestre"},
+                  {k:"annee", l:"Cette année"},
+                  {k:"tout", l:"Tout"},
+                ].map(p => {
+                  const isActive = statsPeriode === p.k;
+                  return (
+                    <button key={p.k} onClick={()=>setStatsPeriode(p.k)} style={{padding:"9px 12px",borderRadius:7,border:"none",background:isActive?"#B8924F":"transparent",color:isActive?"#FFFFFF":"#1A1A1E",fontSize:12.5,fontWeight:isActive?500:400,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",textAlign:"left",transition:"background .14s ease"}} onMouseEnter={e=>{ if(!isActive) e.currentTarget.style.background="rgba(184,146,79,0.06)"; }} onMouseLeave={e=>{ if(!isActive) e.currentTarget.style.background="transparent"; }}>{p.l}</button>
+                  );
+                })}
               </div>
-              <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5",boxShadow:"0 1px 4px rgba(26,26,30,.04)",padding:20}}>
-                <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",letterSpacing:"-0.01em",marginBottom:16}}>Types d'événements</div>
-                {parType.length===0&&<div style={{fontSize:13,color:"#6B6E7E"}}>Aucune donnée</div>}
-                {parType.map((t,i)=>(
-                  <div key={t.t} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:i<parType.length-1?"1px solid #EBEAE5":"none"}}>
-                    <div style={{flex:1,fontSize:13,color:"#6B6E7E"}}>{t.t}</div>
-                    <div style={{width:60,height:6,background:"#F5F4F0",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:Math.round(t.n/parType[0].n*100)+"%",background:"#C9A876",borderRadius:3}}/></div>
-                    <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E",minWidth:16}}>{t.n}</span>
+
+              {/* Bloc FOCUS */}
+              <div style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Focus</div>
+              <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                {[
+                  {k:"ensemble", l:"Vue d'ensemble"},
+                  {k:"perf_ia", l:"Performance ARCHANGE"},
+                  {k:"espaces", l:"Espaces"},
+                  {k:"types", l:"Types d'événements"},
+                  {k:"profils", l:"Profils clients"},
+                ].map(f => {
+                  const isActive = statsFocus === f.k;
+                  return (
+                    <button key={f.k} onClick={()=>setStatsFocus(f.k)} style={{padding:"9px 12px",borderRadius:7,border:"none",borderLeft:isActive?"3px solid #B8924F":"3px solid transparent",background:isActive?"rgba(184,146,79,0.08)":"transparent",color:"#1A1A1E",fontSize:12.5,fontWeight:isActive?500:400,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",textAlign:"left",transition:"all .14s ease"}} onMouseEnter={e=>{ if(!isActive) e.currentTarget.style.background="rgba(184,146,79,0.06)"; }} onMouseLeave={e=>{ if(!isActive) e.currentTarget.style.background="transparent"; }}>{f.l}</button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ═══ ZONE PRINCIPALE ═══ */}
+            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
+              {/* Header */}
+              <div style={{padding:"22px 28px 16px",flexShrink:0,borderBottom:"1px solid #EBEAE5",background:"#F5F4F0"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18,flexWrap:"wrap",gap:12}}>
+                  <div>
+                    <div style={{fontSize:22,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.02em"}}>Statistiques</div>
+                    <div style={{fontSize:12,color:"#6B6E7E",marginTop:3}}>Performance commerciale · {periodeLabel}</div>
                   </div>
-                ))}
+                  <button onClick={exportCSV} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:6,transition:"all .14s ease"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#B8924F";e.currentTarget.style.color="#B8924F";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#EBEAE5";e.currentTarget.style.color="#1A1A1E";}}>
+                    <span style={{fontSize:13}}>📥</span> Exporter CSV
+                  </button>
+                </div>
+
+                {/* 6 KPI cards */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:10}}>
+                  <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <span style={{fontSize:13}}>💰</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>CA prévisionnel</span>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{caPrev.toLocaleString("fr-FR")} €</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{totalP} demande{totalP>1?"s":""} sur la période</div>
+                  </div>
+                  <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <span style={{fontSize:13}}>📈</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Taux conversion</span>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:300,color:tauxP>=40?"#639922":tauxP>=20?"#B8924F":"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{tauxP}%</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{confP} confirmées sur {totalP}</div>
+                  </div>
+                  <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <span style={{fontSize:13}}>⏱</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Délai réponse</span>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{delaiMoyen !== null ? delaiMoyen.toFixed(1) + " h" : "—"}</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>moyenne sur {delaisReponse.length} envois</div>
+                  </div>
+                  <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <span style={{fontSize:13}}>✅</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Confirmés</span>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{confP}</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{attP} en attente</div>
+                  </div>
+                  <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <span style={{fontSize:13}}>✏️</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Tx modif IA</span>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:300,color:tauxModifIA<25?"#639922":tauxModifIA<50?"#B8924F":"#A03939",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{tauxModifIA}%</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{modifiedCount}/{totalCachedReplies} réponses modifiées</div>
+                  </div>
+                  <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <span style={{fontSize:13}}>✨</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Tokens / mail</span>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{tokensPerMail >= 1000 ? (tokensPerMail/1000).toFixed(1) + " k" : tokensPerMail}</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>≈ ${coutPerMail.toFixed(4)} / mail</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Zone scrollable */}
+              <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px",display:"flex",flexDirection:"column",gap:12,minHeight:0}}>
+
+                {/* Graphique évolution 12 mois */}
+                <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+                    <span style={{fontSize:13,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif"}}>Évolution sur 12 mois</span>
+                    <div style={{display:"flex",gap:14,fontSize:11,color:"#6B6E7E",alignItems:"center"}}>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:10,height:2,background:"#B8924F",display:"inline-block"}}/>Demandes</span>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:10,height:2,background:"#639922",display:"inline-block"}}/>Confirmées</span>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:10,height:2,background:"#E89999",display:"inline-block"}}/>Annulées</span>
+                    </div>
+                  </div>
+                  <svg viewBox="0 0 600 140" style={{width:"100%",height:130}}>
+                    {[0, 1, 2, 3].map(i => (
+                      <line key={i} x1="40" y1={20 + i * 30} x2="595" y2={20 + i * 30} stroke="#EBEAE5" strokeWidth="0.5" strokeDasharray={i === 3 ? "" : "2 3"}/>
+                    ))}
+                    {evol12.map((e, i) => {
+                      const x = 40 + (i * (555 / 11));
+                      return (
+                        <text key={i} x={x} y={130} fontSize="9" fill="#6B6E7E" textAnchor="middle">{e.mois}</text>
+                      );
+                    })}
+                    <polyline
+                      points={evol12.map((e, i) => `${40 + i * (555 / 11)},${110 - (e.demandes / maxEvol) * 90}`).join(" ")}
+                      fill="none" stroke="#B8924F" strokeWidth="2"
+                    />
+                    <polyline
+                      points={evol12.map((e, i) => `${40 + i * (555 / 11)},${110 - (e.confirmes / maxEvol) * 90}`).join(" ")}
+                      fill="none" stroke="#639922" strokeWidth="2"
+                    />
+                    <polyline
+                      points={evol12.map((e, i) => `${40 + i * (555 / 11)},${110 - (e.annules / maxEvol) * 90}`).join(" ")}
+                      fill="none" stroke="#E89999" strokeWidth="1.5" opacity="0.7"
+                    />
+                    {evol12.map((e, i) => {
+                      const x = 40 + i * (555 / 11);
+                      return e.demandes > 0 ? (
+                        <circle key={i} cx={x} cy={110 - (e.demandes / maxEvol) * 90} r="3" fill="#B8924F"/>
+                      ) : null;
+                    })}
+                  </svg>
+                </div>
+
+                {/* 2 panneaux contextuels selon focus */}
+                {statsFocus === "ensemble" && (
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                    {/* Top espaces */}
+                    <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
+                      <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:12,fontFamily:"'Geist','system-ui',sans-serif"}}>Top espaces réservés</div>
+                      {parEspaceP.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucune donnée</div> : (
+                        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                          {parEspaceP.slice(0, 5).map(e => (
+                            <div key={e.id} style={{display:"flex",alignItems:"center",gap:10}}>
+                              <span style={{fontSize:11.5,color:"#1A1A1E",flex:"0 0 110px"}}>{e.nom}</span>
+                              <div style={{flex:1,height:6,background:"#EBEAE5",borderRadius:3,overflow:"hidden"}}>
+                                <div style={{height:"100%",width:`${(e.n/maxNP)*100}%`,background:"#B8924F",borderRadius:3,transition:"width .3s ease"}}/>
+                              </div>
+                              <span style={{fontSize:10.5,color:"#6B6E7E",flex:"0 0 32px",textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{e.n}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* Top types */}
+                    <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
+                      <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:12,fontFamily:"'Geist','system-ui',sans-serif"}}>Top types d'événements</div>
+                      {parTypeP.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucune donnée</div> : (
+                        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                          {parTypeP.map(t => (
+                            <div key={t.t} style={{display:"flex",alignItems:"center",gap:10}}>
+                              <span style={{fontSize:11.5,color:"#1A1A1E",flex:"0 0 110px"}}>{t.t}</span>
+                              <div style={{flex:1,height:6,background:"#EBEAE5",borderRadius:3,overflow:"hidden"}}>
+                                <div style={{height:"100%",width:`${(t.n/parTypeP[0].n)*100}%`,background:"#639922",borderRadius:3,transition:"width .3s ease"}}/>
+                              </div>
+                              <span style={{fontSize:10.5,color:"#6B6E7E",flex:"0 0 32px",textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{t.n}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {statsFocus === "espaces" && (
+                  <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
+                    <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Détail par espace</div>
+                    {parEspaceP.map(e => (
+                      <div key={e.id} style={{marginBottom:14,paddingBottom:14,borderBottom:"1px solid #EBEAE5"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                          <span style={{fontSize:13,color:"#1A1A1E",fontWeight:500}}>{e.nom}</span>
+                          <span style={{fontSize:12,color:"#6B6E7E",fontVariantNumeric:"tabular-nums"}}>{e.c}/{e.n}</span>
+                        </div>
+                        <div style={{height:8,background:"#EBEAE5",borderRadius:4,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${(e.n/maxNP)*100}%`,background:e.color || "#B8924F",borderRadius:4}}/>
+                        </div>
+                        <div style={{fontSize:11,color:"#6B6E7E",marginTop:4}}>{e.n>0?Math.round(e.c/e.n*100)+"% confirmés":"Aucune demande"}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {statsFocus === "types" && (
+                  <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
+                    <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Répartition par type d'événement</div>
+                    {parTypeP.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucune donnée disponible</div> : (
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        {parTypeP.map(t => (
+                          <div key={t.t} style={{display:"flex",alignItems:"center",gap:12}}>
+                            <span style={{fontSize:13,color:"#1A1A1E",flex:"0 0 140px"}}>{t.t}</span>
+                            <div style={{flex:1,height:8,background:"#EBEAE5",borderRadius:4,overflow:"hidden"}}>
+                              <div style={{height:"100%",width:`${(t.n/parTypeP[0].n)*100}%`,background:"#639922",borderRadius:4}}/>
+                            </div>
+                            <span style={{fontSize:13,color:"#6B6E7E",flex:"0 0 30px",textAlign:"right",fontVariantNumeric:"tabular-nums",fontWeight:500}}>{t.n}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {statsFocus === "profils" && (
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                    {([
+                      ["Entreprises", profilsCount.entreprises, "🏢"],
+                      ["Particuliers", profilsCount.particuliers, "👤"],
+                      ["Institutionnels", profilsCount.institutionnels, "🏛"],
+                      ["Agences", profilsCount.agences, "📣"],
+                    ] as [string, number, string][]).map(([l, n, ic]) => {
+                      const totalProfils = profilsCount.entreprises + profilsCount.particuliers + profilsCount.institutionnels + profilsCount.agences;
+                      const pct = totalProfils > 0 ? Math.round(n / totalProfils * 100) : 0;
+                      return (
+                        <div key={l} style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                            <span style={{fontSize:16}}>{ic}</span>
+                            <span style={{fontSize:12,fontWeight:500,color:"#1A1A1E",fontFamily:"'Geist','system-ui',sans-serif"}}>{l}</span>
+                          </div>
+                          <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{n}</div>
+                          <div style={{fontSize:11,color:"#6B6E7E",marginTop:6,fontVariantNumeric:"tabular-nums"}}>{pct}% du total</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {statsFocus === "perf_ia" && (
+                  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    {/* Vue globale */}
+                    <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
+                      <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Synthèse API ARCHANGE — session en cours</div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:10}}>
+                        <div style={{padding:"10px 12px",background:"#FAFAF7",borderRadius:8}}>
+                          <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>Appels totaux</div>
+                          <div style={{fontSize:18,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{apiUsageStats.totalCalls}</div>
+                        </div>
+                        <div style={{padding:"10px 12px",background:"#FAFAF7",borderRadius:8}}>
+                          <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>Tokens entrée</div>
+                          <div style={{fontSize:18,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{apiUsageStats.totalInputTokens.toLocaleString("fr-FR")}</div>
+                        </div>
+                        <div style={{padding:"10px 12px",background:"#FAFAF7",borderRadius:8}}>
+                          <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>Tokens sortie</div>
+                          <div style={{fontSize:18,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{apiUsageStats.totalOutputTokens.toLocaleString("fr-FR")}</div>
+                        </div>
+                        <div style={{padding:"10px 12px",background:"#FAFAF7",borderRadius:8}}>
+                          <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>Coût total</div>
+                          <div style={{fontSize:18,fontWeight:500,color:"#B8924F",fontVariantNumeric:"tabular-nums"}}>${apiUsageStats.totalCostUSD.toFixed(4)}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Détail par callType */}
+                    <div style={{background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",padding:"14px 18px"}}>
+                      <div style={{fontSize:13,fontWeight:500,color:"#1A1A1E",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Distribution par type d'appel</div>
+                      {callTypesArr.length === 0 ? <div style={{fontSize:12,color:"#A5A4A0"}}>Aucun appel encore enregistré dans cette session</div> : (
+                        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                          {callTypesArr.map(([type, st]) => (
+                            <div key={type} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",borderBottom:"1px solid #EBEAE5"}}>
+                              <span style={{fontSize:11.5,color:"#1A1A1E",flex:"0 0 200px",fontFamily:"'Geist','system-ui',sans-serif"}}>{type}</span>
+                              <span style={{fontSize:11,color:"#6B6E7E",flex:"0 0 60px",fontVariantNumeric:"tabular-nums"}}>{st.count} appel{st.count>1?"s":""}</span>
+                              <div style={{flex:1,height:5,background:"#EBEAE5",borderRadius:3,overflow:"hidden"}}>
+                                <div style={{height:"100%",width:`${(st.count/Math.max(...callTypesArr.map(c=>c[1].count)))*100}%`,background:"#B8924F",borderRadius:3}}/>
+                              </div>
+                              <span style={{fontSize:11,color:"#B8924F",flex:"0 0 70px",textAlign:"right",fontVariantNumeric:"tabular-nums",fontWeight:500}}>${st.cost.toFixed(4)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
                 {/* ══ SOURCES IA ══ */}
-        {view==="sources" && (
-          <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#F5F4F0"}}>
+        {view==="sources" && (() => {
+          // ── Calcul des KPI ───────────────────────────────────────────────
+          const totalZones = 18;
+          const zonesRemplies = (nomEtab?1:0) + (menusCtx?1:0) + (conditionsCtx?1:0) + (espacesCtx?1:0) + (customCtx?1:0)
+            + (Object.values(reglesCommerciales.parNombrePersonnes).filter(Boolean).length>0?1:0)
+            + (Object.values(reglesCommerciales.parBudgetParPers).filter(Boolean).length>0?1:0)
+            + (Object.values(reglesCommerciales.parBudgetTotal).filter(Boolean).length>0?1:0)
+            + (Object.values(reglesCommerciales.parProfilClient).filter(Boolean).length>0?1:0)
+            + (Object.values(reglesCommerciales.parMoment).filter(Boolean).length>0?1:0)
+            + (Object.values(reglesCommerciales.parEspace).filter(Boolean).length>0?1:0)
+            + (tonStyle.formulesValides.length>0?1:0)
+            + (tonStyle.formulesInterdites.length>0?1:0)
+            + (casParticuliers.length>0?1:0)
+            + ((reglesAbsolues||"").trim().length>0?1:0)
+            + (espacesDyn.length>0?1:0)
+            + (Object.values(linksFetched).filter(Boolean).length>0?1:0)
+            + (customTags.length>0?1:0);
+          const completude = Math.round((zonesRemplies / totalZones) * 100);
+          const reglesActives = Object.values(reglesCommerciales.parNombrePersonnes).filter(Boolean).length
+            + Object.values(reglesCommerciales.parBudgetParPers).filter(Boolean).length
+            + Object.values(reglesCommerciales.parBudgetTotal).filter(Boolean).length
+            + Object.values(reglesCommerciales.parProfilClient).filter(Boolean).length
+            + Object.values(reglesCommerciales.parMoment).filter(Boolean).length
+            + Object.values(reglesCommerciales.parEspace).filter(Boolean).length;
+          const dimensionsCouvertes = [
+            Object.values(reglesCommerciales.parNombrePersonnes).filter(Boolean).length>0,
+            Object.values(reglesCommerciales.parBudgetParPers).filter(Boolean).length>0,
+            Object.values(reglesCommerciales.parBudgetTotal).filter(Boolean).length>0,
+            Object.values(reglesCommerciales.parProfilClient).filter(Boolean).length>0,
+            Object.values(reglesCommerciales.parMoment).filter(Boolean).length>0,
+            Object.values(reglesCommerciales.parEspace).filter(Boolean).length>0,
+          ].filter(Boolean).length;
+          // Qualité prédictive : pondération simple
+          const qualitePred = Math.min(100, Math.round(
+            (completude * 0.4) +
+            (Math.min(reglesActives, 12) / 12 * 100 * 0.3) +
+            (casParticuliers.length>0?20:0) +
+            ((reglesAbsolues||"").trim().length>0?10:0)
+          ));
+          // Compteurs par catégorie pour la sidebar
+          const counts = {
+            infos: (nomEtab?1:0) + (menusCtx?1:0) + (conditionsCtx?1:0) + (espacesCtx?1:0) + (customCtx?1:0),
+            regles_com: reglesActives,
+            ton: tonStyle.formulesValides.length + tonStyle.formulesInterdites.length,
+            appr: apprentissages.reglesApprises.length + apprentissages.exemplesReference.length + apprentissages.suggestionsEnAttente.length,
+            cas_part: casParticuliers.length,
+            absolues: (reglesAbsolues||"").split("\n").filter((l: string)=>l.trim()).length,
+          };
+          const totalCount = counts.infos + counts.regles_com + counts.ton + counts.appr + counts.cas_part + counts.absolues;
+          // Définition catégories sidebar
+          const categories: {key: string; icon: string; label: string; count: number; isAbsolue?: boolean}[] = [
+            {key:"all", icon:"🏠", label:"Tout", count: totalCount},
+            {key:"infos", icon:"🏢", label:"Identité", count: counts.infos},
+            {key:"regles_com", icon:"⚡", label:"Règles com.", count: counts.regles_com},
+            {key:"ton", icon:"🎨", label:"Ton & Style", count: counts.ton},
+            {key:"appr", icon:"📚", label:"Apprentissages", count: counts.appr},
+            {key:"cas_part", icon:"🌟", label:"Cas part.", count: counts.cas_part},
+            {key:"absolues", icon:"🚫", label:"Absolues", count: counts.absolues, isAbsolue: true},
+          ];
 
-            {/* ── Header fixe — titre + stats ── */}
-            <div style={{padding:"24px 28px 16px",flexShrink:0,borderBottom:"1px solid #EBEAE5",background:"#F5F4F0"}}>
-              <div style={{fontSize:22,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.02em"}}>Sources ARCHANGE</div>
-              <div style={{fontSize:12,color:"#6B6E7E",marginTop:4,marginBottom:14}}>Tout ce que vous écrivez ici est transmis à ARCHANGE à chaque génération.</div>
+          return (
+          <div style={{flex:1,display:"flex",overflow:"hidden",background:"#F5F4F0"}}>
+            {/* ═══ SIDEBAR SECONDAIRE (200px) ═══════════════════════════════ */}
+            <div style={{width:220,flexShrink:0,background:"#FAFAF7",borderRight:"1px solid #EBEAE5",padding:"22px 16px",display:"flex",flexDirection:"column",overflowY:"auto"}}>
+              {/* Bloc Catégories */}
+              <div style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Catégories</div>
+              <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:24}}>
+                {categories.map(cat => {
+                  const isActive = sourcesFilter === cat.key;
+                  return (
+                    <button
+                      key={cat.key}
+                      onClick={()=>setSourcesFilter(cat.key)}
+                      style={{
+                        padding:"9px 12px",
+                        borderRadius:7,
+                        border:"none",
+                        background: isActive ? "#B8924F" : "transparent",
+                        color: isActive ? "#FFFFFF" : (cat.count===0 ? "#A5A4A0" : "#1A1A1E"),
+                        fontSize:12.5,
+                        fontWeight: isActive ? 500 : 400,
+                        cursor:"pointer",
+                        fontFamily:"'Geist','system-ui',sans-serif",
+                        display:"flex",
+                        justifyContent:"space-between",
+                        alignItems:"center",
+                        gap:8,
+                        transition:"background .14s ease",
+                        textAlign:"left",
+                      }}
+                      onMouseEnter={e=>{ if(!isActive) e.currentTarget.style.background="rgba(184,146,79,0.06)"; }}
+                      onMouseLeave={e=>{ if(!isActive) e.currentTarget.style.background="transparent"; }}
+                    >
+                      <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
+                        <span style={{fontSize:13}}>{cat.icon}</span>
+                        {cat.label}
+                      </span>
+                      {cat.count > 0 ? (
+                        <span style={{
+                          fontSize:10,
+                          fontWeight:500,
+                          padding:"1px 7px",
+                          borderRadius:100,
+                          background: isActive ? "rgba(255,255,255,0.25)" : (cat.isAbsolue?"rgba(220,38,38,0.1)":"rgba(184,146,79,0.12)"),
+                          color: isActive ? "#FFFFFF" : (cat.isAbsolue?"#DC2626":"#B8924F"),
+                          fontVariantNumeric:"tabular-nums",
+                        }}>{cat.count}</span>
+                      ) : (
+                        <span style={{fontSize:10,color: isActive ? "rgba(255,255,255,0.6)" : "#C5C3BE",fontVariantNumeric:"tabular-nums"}}>0</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
 
-              {/* C4 — Bandeau onboarding si aucune source n'est configurée */}
-              {!menusCtx && !conditionsCtx && !tonCtx && !espacesCtx && (
-                <div style={{marginBottom:14,padding:"12px 16px",background:"rgba(184,146,79,0.08)",border:"1px solid rgba(184,146,79,0.3)",borderLeft:"3px solid #B8924F",borderRadius:"0 6px 6px 0",display:"flex",alignItems:"flex-start",gap:12}}>
-                  <span style={{fontSize:18,flexShrink:0}}>✨</span>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",marginBottom:3}}>Personnalisez ARCHANGE pour votre établissement</div>
-                    <div style={{fontSize:12,color:"#6B6E7E",lineHeight:1.5}}>
-                      Aucune source n'est encore configurée. En renseignant vos menus, conditions et règles de ton, ARCHANGE rédigera des réponses parfaitement adaptées à votre brasserie — et non des réponses génériques.
-                    </div>
-                    <div style={{fontSize:11,color:"#B8924F",marginTop:6,fontWeight:500}}>👇 Commencez par "Menus & Tarifs" ci-dessous</div>
-                  </div>
+              <div style={{flex:1}}/>
+
+              {/* Bloc Statut général */}
+              <div style={{padding:14,background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                <div style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:9,fontFamily:"'Geist','system-ui',sans-serif"}}>Statut général</div>
+                <div style={{fontSize:11.5,color:"#1A1A1E",marginBottom:8,lineHeight:1.4}}>
+                  ARCHANGE est nourri à <strong style={{color:"#B8924F",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{completude}%</strong>
                 </div>
-              )}
-
-              <div style={{display:"flex",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5",overflow:"hidden"}}>
-                {[
-                  ["Menus", menusCtx?"Actif":"—","🍽️"],
-                  ["Conditions", conditionsCtx?"Actif":"—","📜"],
-                  ["Ton & Règles", tonCtx?"Actif":"—","✏️"],
-                  ["Liens web", Object.values(linksFetched).filter(Boolean).length||"—","🔗"],
-                ].map(([l,v,icon],i,arr)=>(
-                  <div key={String(l)} style={{flex:1,padding:"10px 12px",borderRight:i<arr.length-1?"1px solid #EBEAE5":"none",textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#6B6E7E",fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:3}}>{icon} {l}</div>
-                    <div style={{fontSize:13,fontWeight:600,color:v==="—"?"#C5C3BE":"#1A1A1E"}}>{v}</div>
-                  </div>
-                ))}
+                <div style={{height:5,background:"#EBEAE5",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${completude}%`,background:"#B8924F",transition:"width .3s ease"}}/>
+                </div>
+                <div style={{fontSize:10,color:"#6B6E7E",marginTop:8,lineHeight:1.4}}>
+                  {totalZones - zonesRemplies > 0 ? `${totalZones - zonesRemplies} zone${(totalZones-zonesRemplies)>1?"s":""} à compléter` : "Toutes les zones sont remplies !"}
+                </div>
               </div>
             </div>
 
-            {/* ── Tags filtres Sources v2 ── */}
-            <div style={{padding:"12px 28px",background:"#F5F4F0",borderBottom:"1px solid #EBEAE5",flexShrink:0,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:10,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",marginRight:4}}>Filtrer :</span>
-              {([
-                ["all", "Tout", "🏠", null],
-                ["infos", "Infos", "🏢", (nomEtab?1:0) + (menusCtx?1:0) + (conditionsCtx?1:0) + (espacesCtx?1:0) + (customCtx?1:0)],
-                ["regles_com", "Règles com.", "⚡",
-                  Object.values(reglesCommerciales.parNombrePersonnes).filter(Boolean).length
-                  + Object.values(reglesCommerciales.parBudgetParPers).filter(Boolean).length
-                  + Object.values(reglesCommerciales.parBudgetTotal).filter(Boolean).length
-                  + Object.values(reglesCommerciales.parProfilClient).filter(Boolean).length
-                  + Object.values(reglesCommerciales.parMoment).filter(Boolean).length
-                  + Object.values(reglesCommerciales.parEspace).filter(Boolean).length
-                ],
-                ["ton", "Ton", "🎨", tonStyle.formulesValides.length + tonStyle.formulesInterdites.length],
-                ["appr", "Appr.", "📚", apprentissages.reglesApprises.length + apprentissages.exemplesReference.length + apprentissages.suggestionsEnAttente.length],
-                ["cas_part", "Cas part.", "🌟", casParticuliers.length],
-                ["absolues", "Absolues", "🚫", (reglesAbsolues||"").split("\n").filter((l: string)=>l.trim()).length],
-              ] as [string, string, string, number|null][]).map(([key, label, icon, count]) => {
-                const isActive = sourcesFilter === key;
-                return (
-                  <button
-                    key={key}
-                    onClick={()=>setSourcesFilter(key)}
-                    style={{
-                      padding:"6px 12px",
-                      borderRadius:100,
-                      border: isActive ? "1px solid #B8924F" : "1px solid #EBEAE5",
-                      background: isActive ? "#B8924F" : "#FFFFFF",
-                      color: isActive ? "#FFFFFF" : "#1A1A1E",
-                      fontSize:11.5,
-                      fontWeight:500,
-                      cursor:"pointer",
-                      fontFamily:"'Geist','system-ui',sans-serif",
-                      display:"inline-flex",
-                      alignItems:"center",
-                      gap:5,
-                      transition:"all .14s ease",
-                      fontVariantNumeric:"tabular-nums",
-                    }}
-                  >
-                    <span style={{fontSize:12}}>{icon}</span>
-                    {label}
-                    {count !== null && count > 0 && (
-                      <span style={{
-                        fontSize:10,
-                        fontWeight:600,
-                        padding:"1px 6px",
-                        borderRadius:100,
-                        background: isActive ? "rgba(255,255,255,0.25)" : "rgba(184,146,79,0.12)",
-                        color: isActive ? "#FFFFFF" : "#B8924F",
-                      }}>{count}</span>
-                    )}
+            {/* ═══ ZONE PRINCIPALE ══════════════════════════════════════════ */}
+            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
+              {/* Header */}
+              <div style={{padding:"22px 28px 16px",flexShrink:0,borderBottom:"1px solid #EBEAE5",background:"#F5F4F0"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18,flexWrap:"wrap",gap:12}}>
+                  <div>
+                    <div style={{fontSize:22,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.02em"}}>Sources ARCHANGE</div>
+                    <div style={{fontSize:12,color:"#6B6E7E",marginTop:3}}>Tout ce qu'ARCHANGE sait sur votre établissement</div>
+                  </div>
+                  <button onClick={()=>setShowTestArchange(true)} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 1px 2px rgba(184,146,79,0.2)"}}>
+                    <span style={{fontSize:13}}>⚡</span> Tester ARCHANGE
                   </button>
-                );
-              })}
-            </div>
+                </div>
+
+                {/* C4 — Bandeau onboarding si aucune source n'est configurée */}
+                {!menusCtx && !conditionsCtx && !tonCtx && !espacesCtx && (
+                  <div style={{marginBottom:14,padding:"12px 16px",background:"rgba(184,146,79,0.08)",border:"1px solid rgba(184,146,79,0.3)",borderLeft:"3px solid #B8924F",borderRadius:"0 6px 6px 0",display:"flex",alignItems:"flex-start",gap:12}}>
+                    <span style={{fontSize:18,flexShrink:0}}>✨</span>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",marginBottom:3}}>Personnalisez ARCHANGE pour votre établissement</div>
+                      <div style={{fontSize:12,color:"#6B6E7E",lineHeight:1.5}}>
+                        Aucune source n'est encore configurée. En renseignant vos menus, conditions et règles, ARCHANGE rédigera des réponses parfaitement adaptées à votre brasserie.
+                      </div>
+                      <div style={{fontSize:11,color:"#B8924F",marginTop:6,fontWeight:500}}>👇 Commencez par "Identité" dans la sidebar</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4 KPI cards — refonte design moderne */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:10}}>
+                  <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <span style={{fontSize:13}}>📊</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Complétude</span>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{completude}%</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5,fontVariantNumeric:"tabular-nums"}}>{zonesRemplies} / {totalZones} zones remplies</div>
+                  </div>
+                  <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <span style={{fontSize:13}}>⚡</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Règles actives</span>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{reglesActives}</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>{dimensionsCouvertes} / 6 dimensions couvertes</div>
+                  </div>
+                  <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <span style={{fontSize:13}}>🌟</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Cas particuliers</span>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{casParticuliers.length}</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>
+                      {casParticuliers.length > 0
+                        ? `${casParticuliers.filter(c=>c.matchingMode==="auto").length} en mode auto`
+                        : "aucun défini"}
+                    </div>
+                  </div>
+                  <div style={{padding:"12px 14px",background:"#FFFFFF",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                      <span style={{fontSize:13}}>✨</span>
+                      <span style={{fontSize:9.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>Qualité IA</span>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:300,color:"#B8924F",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{qualitePred}%</div>
+                    <div style={{fontSize:10,color:"#6B6E7E",marginTop:5}}>prédictif sur extractions</div>
+                  </div>
+                </div>
+              </div>
 
             {/* ── Zone scrollable ── */}
             <div style={{flex:1,overflowY:"scroll",padding:"16px 28px 28px",display:"flex",flexDirection:"column",gap:12,minHeight:0}}>
@@ -6406,8 +6975,10 @@ FORMAT
             })()}
 
             </div>
+            </div>
           </div>
-        )}
+          );
+        })()}
       </main>
 
       {/* ══ MODAL FICHE ÉVÉNEMENT depuis le Planning ══ */}
@@ -7242,6 +7813,141 @@ FORMAT
             <div style={{padding:"16px 24px",borderTop:"1px solid #EBEAE5",display:"flex",gap:8,flexShrink:0,background:"#F3F4F6"}}>
               <button onClick={()=>{ window.sendPrompt("CREATE_DRAFT|"+showSendMail.email+"|"+sendMailSubject+"|"+sendMailBody); toast("Brouillon créé !"); setShowSendMail(null); }} disabled={!sendMailBody||!sendMailSubject} style={{...gold,flex:1,padding:"11px",fontSize:13,opacity:!sendMailBody||!sendMailSubject?0.4:1,cursor:!sendMailBody||!sendMailSubject?"not-allowed":"pointer"}}>📧 Créer le brouillon Gmail</button>
               <button onClick={()=>setShowSendMail(null)} style={{...out,fontSize:12,padding:"11px 16px"}}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODALE — TESTER ARCHANGE ══ */}
+      {showTestArchange && (
+        <div style={{position:"fixed",inset:0,background:"rgba(15,15,20,0.5)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)"}} onClick={()=>!testRunning && setShowTestArchange(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#FFFFFF",borderRadius:14,maxWidth:780,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+            {/* Header modale */}
+            <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"flex-start",background:"linear-gradient(135deg, rgba(184,146,79,0.06) 0%, #FFFFFF 60%)"}}>
+              <div>
+                <div style={{fontSize:20,fontWeight:300,color:"#1A1A1E",fontFamily:"'Fraunces',Georgia,serif",letterSpacing:"0.02em",display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:18,color:"#B8924F"}}>⚡</span> Tester ARCHANGE
+                </div>
+                <div style={{fontSize:12,color:"#6B6E7E",marginTop:4}}>Collez un mail fictif et voyez exactement ce qu'ARCHANGE en extrait. Sans persistance — purement test.</div>
+              </div>
+              <button onClick={()=>!testRunning && setShowTestArchange(false)} disabled={testRunning} style={{background:"none",border:"none",color:"#6B6E7E",fontSize:20,cursor:testRunning?"not-allowed":"pointer",padding:"4px 8px",lineHeight:1}}>×</button>
+            </div>
+
+            {/* Body — scrollable */}
+            <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+                <div>
+                  <label style={{fontSize:10.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6,fontFamily:"'Geist','system-ui',sans-serif"}}>De (expéditeur)</label>
+                  <input value={testMailFrom} onChange={e=>setTestMailFrom(e.target.value)} placeholder="Ex: Marie Dupont &lt;marie@example.com&gt;" style={{...inp,fontSize:13}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:10.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6,fontFamily:"'Geist','system-ui',sans-serif"}}>Objet</label>
+                  <input value={testMailSubject} onChange={e=>setTestMailSubject(e.target.value)} placeholder="Ex: Demande devis cocktail" style={{...inp,fontSize:13}}/>
+                </div>
+              </div>
+              <label style={{fontSize:10.5,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6,fontFamily:"'Geist','system-ui',sans-serif"}}>Corps du mail</label>
+              <textarea value={testMailContent} onChange={e=>setTestMailContent(e.target.value)} placeholder="Collez ici le corps complet d'un mail (peut être un Fwd:, un mail Zenchef, un mail direct…)" rows={8} style={{...inp,fontSize:13,lineHeight:1.6,resize:"vertical",width:"100%",fontFamily:"inherit"}}/>
+
+              {/* Boutons d'action */}
+              <div style={{display:"flex",gap:8,marginTop:14,alignItems:"center"}}>
+                <button
+                  onClick={runTestArchange}
+                  disabled={testRunning || !testMailContent.trim()}
+                  style={{padding:"9px 18px",borderRadius:8,border:"1px solid #B8924F",background:testRunning||!testMailContent.trim()?"rgba(184,146,79,0.15)":"#B8924F",color:testRunning||!testMailContent.trim()?"#A5A4A0":"#FFFFFF",fontSize:13,fontWeight:500,cursor:testRunning||!testMailContent.trim()?"not-allowed":"pointer",fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:7}}>
+                  {testRunning ? <><Spin s={11}/> Analyse en cours…</> : <>⚡ Lancer l'analyse</>}
+                </button>
+                {testResult && !testRunning && (
+                  <button onClick={()=>{setTestResult(null); setTestMailContent(""); setTestMailSubject(""); setTestMailFrom("");}} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#6B6E7E",fontSize:12,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>Réinitialiser</button>
+                )}
+              </div>
+
+              {/* Résultats */}
+              {testResult && !testResult.error && (
+                <div style={{marginTop:20,padding:"16px 18px",background:"#FAFAF7",borderRadius:10,border:"1px solid #EBEAE5"}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:14,fontFamily:"'Geist','system-ui',sans-serif"}}>Résultat de l'analyse</div>
+
+                  {/* Métriques */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:8,marginBottom:14}}>
+                    <div style={{padding:"8px 10px",background:"#FFFFFF",borderRadius:7,border:"1px solid #EBEAE5"}}>
+                      <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3}}>Durée</div>
+                      <div style={{fontSize:14,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{testResult.duree}s</div>
+                    </div>
+                    <div style={{padding:"8px 10px",background:"#FFFFFF",borderRadius:7,border:"1px solid #EBEAE5"}}>
+                      <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3}}>Tokens IN</div>
+                      <div style={{fontSize:14,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{testResult.tokensIn.toLocaleString("fr-FR")}</div>
+                    </div>
+                    <div style={{padding:"8px 10px",background:"#FFFFFF",borderRadius:7,border:"1px solid #EBEAE5"}}>
+                      <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3}}>Tokens OUT</div>
+                      <div style={{fontSize:14,fontWeight:500,color:"#1A1A1E",fontVariantNumeric:"tabular-nums"}}>{testResult.tokensOut.toLocaleString("fr-FR")}</div>
+                    </div>
+                    <div style={{padding:"8px 10px",background:"#FFFFFF",borderRadius:7,border:"1px solid #EBEAE5"}}>
+                      <div style={{fontSize:9.5,color:"#6B6E7E",fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3}}>Coût</div>
+                      <div style={{fontSize:14,fontWeight:500,color:"#B8924F",fontVariantNumeric:"tabular-nums"}}>${testResult.cout.toFixed(4)}</div>
+                    </div>
+                  </div>
+
+                  {/* Détection */}
+                  {(testResult.plateforme || testResult.estForward) && (
+                    <div style={{marginBottom:14,padding:"10px 12px",background:"rgba(184,146,79,0.08)",borderRadius:7,border:"1px solid rgba(184,146,79,0.25)"}}>
+                      <div style={{fontSize:11,color:"#1A1A1E",lineHeight:1.5}}>
+                        {testResult.plateforme && <><strong style={{color:"#B8924F"}}>📨 Plateforme détectée :</strong> {testResult.plateforme}<br/></>}
+                        {testResult.estForward && <><strong style={{color:"#B8924F"}}>↪️ Mail forwardé détecté</strong></>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Champs extraits */}
+                  <div style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:"6px 14px",fontSize:12,fontFamily:"'Geist','system-ui',sans-serif"}}>
+                    {[
+                      ["Réservation ?", testResult.extracted.isReservation ? "✓ Oui" : "✗ Non"],
+                      ["Confiance", testResult.extracted.confiance || "—"],
+                      ["Nom", testResult.extracted.nom || "—"],
+                      ["Email", testResult.extracted.email || "—"],
+                      ["Téléphone", testResult.extracted.telephone || "—"],
+                      ["Entreprise", testResult.extracted.entreprise || "—"],
+                      ["Type événement", testResult.extracted.typeEvenement || "—"],
+                      ["Nb personnes", testResult.extracted.nombrePersonnes || "—"],
+                      ["Espace détecté", testResult.extracted.espaceDetecte || "—"],
+                      ["Date début", testResult.extracted.dateDebut || "—"],
+                      ["Heure", (testResult.extracted.heureDebut || "—") + (testResult.extracted.heureFin ? ` → ${testResult.extracted.heureFin}` : "")],
+                      ["Budget", testResult.extracted.budget || "—"],
+                      ["Source", testResult.extracted.sourceEmail || "—"],
+                    ].map(([label, val]: [string, any], idx) => (
+                      <React.Fragment key={idx}>
+                        <span style={{color:"#6B6E7E",fontWeight:500}}>{label}</span>
+                        <span style={{color: val==="—" ? "#A5A4A0" : "#1A1A1E", fontWeight: val==="—" ? 400 : 500}}>{String(val)}</span>
+                      </React.Fragment>
+                    ))}
+                  </div>
+
+                  {testResult.extracted.notes && (
+                    <div style={{marginTop:12,padding:"10px 12px",background:"#FFFFFF",borderRadius:7,border:"1px solid #EBEAE5"}}>
+                      <div style={{fontSize:10,fontWeight:500,color:"#6B6E7E",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:5}}>Notes</div>
+                      <div style={{fontSize:12,color:"#1A1A1E",lineHeight:1.5}}>{testResult.extracted.notes}</div>
+                    </div>
+                  )}
+
+                  {testResult.extracted.resume && (
+                    <div style={{marginTop:8,padding:"10px 12px",background:"rgba(184,146,79,0.05)",borderRadius:7,border:"1px solid rgba(184,146,79,0.2)"}}>
+                      <div style={{fontSize:10,fontWeight:500,color:"#B8924F",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:5}}>Résumé IA</div>
+                      <div style={{fontSize:12,color:"#1A1A1E",lineHeight:1.5,fontFamily:"'Fraunces',Georgia,serif"}}>{testResult.extracted.resume}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {testResult && testResult.error && (
+                <div style={{marginTop:20,padding:"14px 16px",background:"rgba(220,38,38,0.06)",borderRadius:10,border:"1px solid rgba(220,38,38,0.25)"}}>
+                  <div style={{fontSize:13,fontWeight:500,color:"#DC2626",marginBottom:5}}>❌ Erreur d'analyse</div>
+                  <div style={{fontSize:12,color:"#6B6E7E"}}>{testResult.error}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{padding:"12px 24px",borderTop:"1px solid #EBEAE5",background:"#FAFAF7",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:11,color:"#6B6E7E"}}>💡 Astuce : testez avec un mail Zenchef ou ABC Salles forwardé pour vérifier la détection</span>
+              <button onClick={()=>!testRunning && setShowTestArchange(false)} disabled={testRunning} style={{padding:"7px 14px",borderRadius:7,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#1A1A1E",fontSize:12,cursor:testRunning?"not-allowed":"pointer",fontFamily:"'Geist','system-ui',sans-serif"}}>Fermer</button>
             </div>
           </div>
         </div>
