@@ -222,11 +222,25 @@ export default function MobileApp() {
         // Sources
         try { const ctx = JSON.parse(data.context||"{}"); setNomEtab(ctx.nomEtab||""); setAdresseEtab(ctx.adresseEtab||""); setEmailEtab(ctx.emailEtab||""); setMenusCtx(ctx.menus||""); setConditionsCtx(ctx.conditions||""); setTonCtx(ctx.ton||""); } catch {}
 
-        // Charger les emails
+        // Charger les emails — format tolérant (accepte plusieurs structures de réponse)
         const emRes = await fetch("/api/emails");
         if (emRes.ok) {
           const em = await emRes.json();
-          if (!cancelled) setEmails(em.messages || []);
+          if (!cancelled) {
+            // Tolère : {messages:[...]}, {emails:[...]}, {data:[...]}, [...], ou autre
+            const list = Array.isArray(em) ? em
+              : Array.isArray(em?.messages) ? em.messages
+              : Array.isArray(em?.emails) ? em.emails
+              : Array.isArray(em?.data) ? em.data
+              : Array.isArray(em?.items) ? em.items
+              : Array.isArray(em?.results) ? em.results
+              : [];
+            console.log(`[ARCHANGE Mobile] Loaded ${list.length} emails (raw response keys: ${em && typeof em === 'object' ? Object.keys(em).join(',') : 'array'})`);
+            setEmails(list);
+          }
+        } else {
+          console.error("[ARCHANGE Mobile] /api/emails failed:", emRes.status, emRes.statusText);
+          showToast(`Mails indisponibles (${emRes.status})`, "err");
         }
       } catch (e) {
         console.error(e);
