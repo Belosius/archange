@@ -1,52 +1,103 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
-import { supabaseAdmin } from '@/lib/supabase'
-import { setupGmailWatch } from '@/lib/gmail'
+/**
+ * ═══════════════════════════════════════════════════════════════
+ *  /api/gmail/watch — Setup/renouvellement du Gmail Push
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * Gmail push watch doit être renouvelé tous les 7 jours max.
+ * On stocke l'expiration + history_id dans gmail_connections.
+ *
+ * POST : setup ou renouvellement du watch pour la connexion Gmail
+ *        de l'organisation active
+ * GET  : statut du watch (expiry, history_id)
+ */
 
-// ─── GET — statut du watch Gmail ─────────────────────────────────────────────
+import { NextRequest, NextResponse } from 'next/server';
+import { getOrgContext } from '@/lib/org/getOrgContext';
+import { getGmailConnection } from '@/lib/gmail/getGmailConnection';
+import { supabaseAdmin } from '@/lib/supabase';
+
+const PUBSUB_TOPIC = process.env.GMAIL_PUBSUB_TOPIC || 'projects/archange-reva/topics/gmail-watch';
+
+// ─── GET : status du watch de la connexion active ───────────────────────
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return NextResponse.json({ error: 'Non connecte' }, { status: 401 })
+  const ctx = await getOrgContext(req);
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { data } = await supabaseAdmin
-    .from('user_settings')
-    .select('watch_expiry, last_history_id')
-    .eq('user_id', session.user.id)
-    .single()
+    .from('gmail_connections')
+    .select('id, email, history_id, watch_expiry, last_sync_at')
+    .eq('organisation_id', ctx.activeOrgId)
+    .eq('is_active', true)
+    .limit(1)
+    .single();
 
-  const now = Date.now()
-  const expiry = data?.watch_expiry ? new Date(data.watch_expiry).getTime() : 0
-  const active = expiry > now + 24 * 60 * 60 * 1000
+  if (!data) {
+    return NextResponse.json({ connected: false });
+  }
 
   return NextResponse.json({
-    active,
-    expiry: data?.watch_expiry || null,
-    historyId: data?.last_history_id || null,
-  })
+    connected: true,
+    email: data.email,
+    history_id: data.history_id,
+    watch_expiry: data.watch_expiry,
+    last_sync_at: data.last_sync_at,
+    is_expired: data.watch_expiry ? new Date(data.watch_expiry) < new Date() : true,
+  });
 }
 
-// ─── POST — configurer ou renouveler le watch Gmail ───────────────────────────
+// ─── POST : démarrer/renouveler le watch ────────────────────────────────
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return NextResponse.json({ error: 'Non connecte' }, { status: 401 })
+  const ctx = await getOrgContext(req);
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  if (!ctx.permissions.canManageOrg) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const conn = await getGmailConnection(ctx.activeOrgId);
+  if (!conn) {
+    return NextResponse.json({ error: 'No Gmail connection' }, { status: 400 });
+  }
 
   try {
-    // setupGmailWatch gere lui-meme le upsert dans user_settings
-    await setupGmailWatch(session.user.id)
+    const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${conn.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        topicName: PUBSUB_TOPIC,
+        labelIds: ['INBOX'],
+        labelFilterAction: 'include',
+      }),
+    });
 
-    // Relire pour retourner le statut mis a jour
-    const { data } = await supabaseAdmin
-      .from('user_settings')
-      .select('watch_expiry, last_history_id')
-      .eq('user_id', session.user.id)
-      .single()
-
-    return NextResponse.json({ ok: true, expiry: data?.watch_expiry, historyId: data?.last_history_id })
-  } catch (e: any) {
-    if (e.message === 'GMAIL_AUTH_EXPIRED') {
-      return NextResponse.json({ error: 'GMAIL_AUTH_EXPIRED' }, { status: 401 })
+    if (!r.ok) {
+      const errText = await r.text();
+      console.error('[gmail/watch] Gmail API error:', errText);
+      return NextResponse.json({ error: 'Watch setup failed', details: errText }, { status: r.status });
     }
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+
+    const { historyId, expiration } = await r.json();
+    const expiryDate = new Date(Number(expiration));
+
+    // Persister
+    await supabaseAdmin
+      .from('gmail_connections')
+      .update({
+        history_id: historyId,
+        watch_expiry: expiryDate.toISOString(),
+      })
+      .eq('id', conn.id);
+
+    return NextResponse.json({
+      success: true,
+      history_id: historyId,
+      watch_expiry: expiryDate.toISOString(),
+    });
+  } catch (err) {
+    console.error('[gmail/watch] Exception:', err);
+    return NextResponse.json({ error: 'Watch setup failed' }, { status: 500 });
   }
 }

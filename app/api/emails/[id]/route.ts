@@ -1,43 +1,62 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
-import { supabaseAdmin } from '@/lib/supabase'
-import { getGmailClient } from '@/lib/gmail'
+/**
+ * ═══════════════════════════════════════════════════════════════
+ *  /api/emails/[id] — Opérations sur un email de la table `emails`
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * Note : cette route travaille sur la table `emails` (pas `emails_cache`).
+ * Dans la prod actuelle, `emails` contient 364 rows et est la table
+ * "historique" originale. emails_cache est la table plus moderne.
+ *
+ * On maintient la compatibilité en filtrant par organisation_id.
+ */
 
-// PATCH /api/emails/[id] — mettre à jour un email (lu, flags, etc.)
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { getOrgContext } from '@/lib/org/getOrgContext';
+
+// ─── PATCH : modifier un email (flags, labels, etc.) ────────────────────
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return NextResponse.json({ error: 'Non connecté' }, { status: 401 })
+  const ctx = await getOrgContext(req);
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const updates = await req.json()
-
-  // Mettre à jour dans Supabase
-  const { data, error } = await supabaseAdmin
-    .from('emails')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', params.id)
-    .eq('user_id', session.user.id)
-    .select()
-    .single()
-
-  if (error) return NextResponse.json({ error }, { status: 500 })
-
-  // Synchroniser avec Gmail si nécessaire (marquer comme lu/non lu)
-  if ('is_unread' in updates && data.gmail_id) {
-    try {
-      const gmail = await getGmailClient(session.user.id)
-      await gmail.users.messages.modify({
-        userId: 'me',
-        id: data.gmail_id,
-        requestBody: {
-          addLabelIds: updates.is_unread ? ['UNREAD'] : [],
-          removeLabelIds: updates.is_unread ? [] : ['UNREAD'],
-        },
-      })
-    } catch (e) {
-      console.error('Erreur sync Gmail labels:', e)
-    }
+  if (ctx.role === 'lecture') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  return NextResponse.json(data)
+  const { id } = params;
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+  const body = await req.json();
+
+  // Whitelist des champs modifiables
+  const allowed = ['is_unread', 'is_starred', 'a_traiter', 'flags', 'labels'];
+  const safeUpdates: Record<string, unknown> = {};
+  for (const k of allowed) {
+    if (k in body) safeUpdates[k] = body[k];
+  }
+  safeUpdates.updated_at = new Date().toISOString();
+
+  // Vérifier que l'email appartient bien à l'org active
+  const { data: existing } = await supabaseAdmin
+    .from('emails')
+    .select('id, organisation_id')
+    .eq('id', id)
+    .single();
+
+  if (!existing || existing.organisation_id !== ctx.activeOrgId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const { error } = await supabaseAdmin
+    .from('emails')
+    .update(safeUpdates)
+    .eq('id', id)
+    .eq('organisation_id', ctx.activeOrgId);
+
+  if (error) {
+    console.error('[emails/[id] PATCH]', error);
+    return NextResponse.json({ error: 'Database error' }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
 }

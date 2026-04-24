@@ -1,29 +1,47 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
-import { downloadAttachment } from '@/lib/gmail'
+/**
+ * ═══════════════════════════════════════════════════════════════
+ *  /api/gmail/attachment — Récupérer une pièce jointe Gmail
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * Query params :
+ *   - messageId : id du message Gmail
+ *   - attachmentId : id de la pièce jointe
+ *
+ * Retourne le contenu base64 de la pièce jointe.
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getOrgContext } from '@/lib/org/getOrgContext';
+import { getGmailConnection } from '@/lib/gmail/getGmailConnection';
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return NextResponse.json({ error: 'Non connecte' }, { status: 401 })
-  const { searchParams } = req.nextUrl
-  const gmailId = searchParams.get('gmailId')
-  const attachmentId = searchParams.get('attachmentId')
-  const filename = searchParams.get('filename') || 'attachment'
-  if (!gmailId || !attachmentId) return NextResponse.json({ error: 'Params manquants' }, { status: 400 })
+  const ctx = await getOrgContext(req);
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const url = new URL(req.url);
+  const messageId = url.searchParams.get('messageId');
+  const attachmentId = url.searchParams.get('attachmentId');
+  if (!messageId || !attachmentId) {
+    return NextResponse.json({ error: 'messageId and attachmentId required' }, { status: 400 });
+  }
+
+  const conn = await getGmailConnection(ctx.activeOrgId);
+  if (!conn) {
+    return NextResponse.json({ error: 'No Gmail connection' }, { status: 400 });
+  }
+
   try {
-    const base64Data = await downloadAttachment(session.user.id, gmailId, attachmentId)
-    if (!base64Data) return NextResponse.json({ error: 'Introuvable' }, { status: 404 })
-    const buffer = Buffer.from(base64Data.replace(/-/g, '+').replace(/_/g, '/'), 'base64')
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Disposition': 'attachment; filename="' + filename + '"',
-        'Content-Type': 'application/octet-stream',
-        'Content-Length': String(buffer.length),
-      }
-    })
-  } catch (e: any) {
-    if (e.message === 'GMAIL_AUTH_EXPIRED') return NextResponse.json({ error: 'GMAIL_AUTH_EXPIRED' }, { status: 401 })
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    const r = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentId}`,
+      { headers: { Authorization: `Bearer ${conn.accessToken}` } }
+    );
+    if (!r.ok) {
+      return NextResponse.json({ error: 'Gmail API error' }, { status: r.status });
+    }
+    const data = await r.json();
+    return NextResponse.json(data);
+  } catch (err) {
+    console.error('[gmail/attachment]', err);
+    return NextResponse.json({ error: 'Fetch failed' }, { status: 500 });
   }
 }
