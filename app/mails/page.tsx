@@ -1603,6 +1603,42 @@ export default function App() {
     }
   };
 
+  // ─── Re-analyser un email spécifique (force une nouvelle extraction) ──────
+  // Utile quand le prompt a été amélioré ou que l'extraction précédente était incorrecte
+  const [reanalysingId, setReanalysingId] = useState<string | null>(null);
+  const reanalyserEmail = async (email: any) => {
+    if (!email || reanalysingId) return;
+    setReanalysingId(email.id);
+    try {
+      const raw = await callClaude(
+        buildExtractMessage(email),
+        buildExtractPrompt(nomEtab, espacesDyn), null,
+        "reanalyse_manuelle"
+      );
+      const nouvelle = JSON.parse(raw.replace(/```json|```/g, "").trim());
+      // Mettre à jour cache React (immédiat) + state local extracted si ce mail est sélectionné
+      setRepliesCache(prev => {
+        const updated = {
+          ...prev,
+          [email.id]: { ...(prev[email.id] || { reply: "", editReply: "" }), extracted: nouvelle },
+        };
+        // Persister en Supabase
+        const allExtractions: Record<string,any> = {};
+        Object.entries(updated).forEach(([id, v]: [string, any]) => {
+          if (v.extracted) allExtractions[id] = v.extracted;
+        });
+        saveExtractions(allExtractions);
+        return updated;
+      });
+      // Si ce mail est celui affiché actuellement, rafraîchir l'extraction visible
+      if (sel?.id === email.id) setExtracted(nouvelle);
+      toast("Mail re-analysé ✓");
+    } catch (e: any) {
+      toast("Re-analyse échouée : " + humanError(e), "err");
+    }
+    setReanalysingId(null);
+  };
+
   // Chargement/synchronisation des emails — déclenche d'abord une sync Gmail, puis relit Supabase
   const loadEmailsFromApi = async (withSync = false) => {
     setLoadingMail(true);
@@ -4279,6 +4315,33 @@ FORMAT
                     <button onClick={()=>openReplyEditor("forward")} title="Transférer" style={{fontSize:12,padding:"7px 11px",borderRadius:8,border:"1px solid #E0DED7",background:"#FFFFFF",color:"#1A1A1E",cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,transition:"all .14s ease"}}>
                       <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2 10l4-4L2 2M12 2v4a3 3 0 01-3 3H3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       Transférer
+                    </button>
+                    {/* Bouton Re-analyser — force une nouvelle extraction IA avec le prompt à jour */}
+                    <button
+                      onClick={()=>reanalyserEmail(sel)}
+                      disabled={reanalysingId===sel.id}
+                      title="Re-analyser avec ARCHANGE (force une nouvelle extraction)"
+                      style={{
+                        fontSize:12,
+                        padding:"7px 11px",
+                        borderRadius:8,
+                        border:"1px solid rgba(184,146,79,0.35)",
+                        background: reanalysingId===sel.id ? "rgba(184,146,79,0.08)" : "#FFFFFF",
+                        color: reanalysingId===sel.id ? "#A5A4A0" : "#B8924F",
+                        cursor: reanalysingId===sel.id ? "wait" : "pointer",
+                        fontFamily:"'Geist','system-ui',sans-serif",
+                        fontWeight:500,
+                        display:"inline-flex",
+                        alignItems:"center",
+                        gap:5,
+                        transition:"all .14s ease",
+                      }}
+                    >
+                      {reanalysingId===sel.id ? (
+                        <><Spin s={11}/> Analyse…</>
+                      ) : (
+                        <>✦ Re-analyser</>
+                      )}
                     </button>
                     {/* NB : Les boutons "Planning" et "Événement lié" sont rendus par la résa card directement
                         (affichée au-dessus du corps du mail), donc pas de doublon ici. */}
