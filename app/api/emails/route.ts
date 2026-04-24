@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getOrgContext } from '@/lib/org/getOrgContext';
+import { fetchEmailBody } from '@/lib/gmail';
 
 // ─── GET : liste des emails avec filtres ────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -34,6 +35,49 @@ export async function GET(req: NextRequest) {
   const gmailId = url.searchParams.get('gmail_id');
   const limit = parseInt(url.searchParams.get('limit') || '500', 10);
 
+  // ── Mode "lecteur" : 1 email spécifique avec body complet Gmail ─────
+  // Quand le frontend ouvre un mail, il appelle cette route avec gmail_id.
+  // On va chercher le body_html/body_text complet depuis Gmail si pas en cache,
+  // et on renvoie un OBJECT unique (pas un array) pour le viewer.
+  if (gmailId) {
+    const { data: row, error: rowErr } = await supabaseAdmin
+      .from('emails_cache')
+      .select('*')
+      .eq('organisation_id', ctx.activeOrgId)
+      .eq('gmail_id', gmailId)
+      .maybeSingle();
+
+    if (rowErr) {
+      console.error('[emails GET single]', rowErr);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+    if (!row) {
+      return NextResponse.json({ error: 'Email not found' }, { status: 404 });
+    }
+
+    // Si body déjà en cache, renvoyer tel quel
+    if (row.body_html || row.body_text) {
+      return NextResponse.json(row);
+    }
+
+    // Sinon, lazy-fetch depuis Gmail (stocke aussi dans emails_cache)
+    try {
+      const fetched = await fetchEmailBody(ctx.activeOrgId, gmailId);
+      return NextResponse.json({
+        ...row,
+        body_html: fetched.body_html,
+        body_text: fetched.body_text,
+        attachments: fetched.attachments?.length ? fetched.attachments : row.attachments,
+        has_attachments: (fetched.attachments?.length || 0) > 0 || row.has_attachments,
+      });
+    } catch (e: any) {
+      console.error('[emails GET body fetch]', e?.message || e);
+      // Si Gmail échoue (token expiré, quota, etc.), on renvoie quand même la row (avec body null)
+      return NextResponse.json(row);
+    }
+  }
+
+  // ── Mode "liste" : plusieurs emails avec filtres ─────────────────────
   let query = supabaseAdmin
     .from('emails_cache')
     .select('*')
@@ -45,7 +89,6 @@ export async function GET(req: NextRequest) {
   if (isUnread !== null) query = query.eq('is_unread', isUnread === 'true');
   if (isStarred !== null) query = query.eq('is_starred', isStarred === 'true');
   if (isArchived !== null) query = query.eq('is_archived', isArchived === 'true');
-  if (gmailId) query = query.eq('gmail_id', gmailId);
 
   const { data, error } = await query;
 
