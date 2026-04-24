@@ -263,6 +263,175 @@ function estimateCostUSD(inputTokens: number, outputTokens: number): number {
   return (inputTokens * 3 / 1_000_000) + (outputTokens * 15 / 1_000_000);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Sources ARCHANGE v2 — Activation conditionnelle des règles commerciales
+// ═══════════════════════════════════════════════════════════════════════════
+// Renvoie UNIQUEMENT les règles pertinentes pour le mail en cours, selon les
+// infos extraites par l'IA. Réduit la taille du prompt et augmente la précision.
+function activerReglesSelonContexte(opts: {
+  extraction: any | null;
+  regles: any; // ReglesCommerciales
+  espacesDyn: { id: string; nom: string }[];
+}): string {
+  const { extraction, regles, espacesDyn } = opts;
+  if (!extraction || !regles) return "";
+
+  const activees: string[] = [];
+
+  // Nombre de personnes
+  const nbPers = typeof extraction.nombrePersonnes === "number" ? extraction.nombrePersonnes : null;
+  if (nbPers !== null && regles.parNombrePersonnes) {
+    let key = "";
+    if (nbPers < 30) key = "petits";
+    else if (nbPers <= 80) key = "moyens";
+    else if (nbPers <= 150) key = "grands";
+    else key = "xl";
+    const texte = regles.parNombrePersonnes[key];
+    if (texte && texte.trim()) activees.push(`  <par_nombre_personnes categorie="${key} (${nbPers} pers.)">\n${texte.trim()}\n  </par_nombre_personnes>`);
+  }
+
+  // Budget par personne — détection depuis string "45€/pers" etc.
+  const budgetStr = String(extraction.budget || "").toLowerCase();
+  const matchParPers = budgetStr.match(/(\d+)\s*€?\s*(?:\/|par)\s*(?:pers|personne)/);
+  const budgetParPersonne = matchParPers ? parseInt(matchParPers[1], 10) : null;
+  if (budgetParPersonne !== null && regles.parBudgetParPers) {
+    let key = "";
+    if (budgetParPersonne < 60) key = "economique";
+    else if (budgetParPersonne <= 120) key = "standard";
+    else key = "premium";
+    const texte = regles.parBudgetParPers[key];
+    if (texte && texte.trim()) activees.push(`  <par_budget_par_pers categorie="${key} (${budgetParPersonne}€/pers)">\n${texte.trim()}\n  </par_budget_par_pers>`);
+  }
+
+  // Budget total
+  const matchTotal = budgetStr.match(/(\d+[\s.,]?\d*)\s*€/);
+  let budgetTotal: number | null = null;
+  if (matchTotal && !matchParPers) {
+    budgetTotal = parseInt(matchTotal[1].replace(/[\s.,]/g, ""), 10);
+  } else if (budgetParPersonne !== null && nbPers !== null) {
+    budgetTotal = budgetParPersonne * nbPers;
+  }
+  if (budgetTotal !== null && regles.parBudgetTotal) {
+    let key = "";
+    if (budgetTotal < 250) key = "petit";
+    else if (budgetTotal <= 1000) key = "moyen";
+    else if (budgetTotal <= 2500) key = "important";
+    else key = "tresImportant";
+    const texte = regles.parBudgetTotal[key];
+    if (texte && texte.trim()) activees.push(`  <par_budget_total categorie="${key} (${budgetTotal}€)">\n${texte.trim()}\n  </par_budget_total>`);
+  }
+
+  // Profil client — détection simple depuis champ "entreprise" et "sourceEmail"
+  if (regles.parProfilClient) {
+    const entreprise = String(extraction.entreprise || "").trim();
+    const nom = String(extraction.nom || "").trim();
+    let profil = "";
+    // Heuristique simple : entreprise non vide ET pas d'indication particulier → entreprise
+    if (entreprise && !/mr|mme|m\.|mlle|madame|monsieur/i.test(nom)) {
+      // Détecter institutionnel vs entreprise classique vs agence
+      const bigCorp = /mairie|ministère|ministere|université|universite|ambassade|préfecture|prefecture|conseil (régional|general|général)/i.test(entreprise);
+      const agency = /agence|event|incentive|travel|communication|marketing/i.test(entreprise);
+      if (bigCorp) profil = "institutionnels";
+      else if (agency) profil = "agences";
+      else profil = "entreprises";
+    } else {
+      profil = "particuliers";
+    }
+    const texte = regles.parProfilClient[profil];
+    if (texte && texte.trim()) activees.push(`  <par_profil_client categorie="${profil}">\n${texte.trim()}\n  </par_profil_client>`);
+  }
+
+  // Moment — basé sur heureDebut
+  const heure = String(extraction.heureDebut || "").match(/^(\d{1,2})/);
+  if (heure && regles.parMoment) {
+    const h = parseInt(heure[1], 10);
+    let key = "";
+    if (h >= 11 && h < 15) key = "dejeuner";
+    else if (h >= 17 && h < 22) key = "soir";
+    else if (h >= 22 || h < 5) key = "cocktailTardif";
+    if (key) {
+      const texte = regles.parMoment[key];
+      if (texte && texte.trim()) activees.push(`  <par_moment categorie="${key} (${h}h)">\n${texte.trim()}\n  </par_moment>`);
+    }
+  }
+
+  // Espace
+  const espaceId = extraction.espaceDetecte;
+  if (espaceId && regles.parEspace && regles.parEspace[espaceId]) {
+    const esp = espacesDyn.find(e => e.id === espaceId);
+    const texte = regles.parEspace[espaceId];
+    if (texte && texte.trim()) activees.push(`  <par_espace id="${espaceId}" nom="${esp?.nom || espaceId}">\n${texte.trim()}\n  </par_espace>`);
+  }
+
+  if (activees.length === 0) return "";
+  return `\n<regles_commerciales_activees>\n${activees.join("\n\n")}\n</regles_commerciales_activees>`;
+}
+
+// Sources ARCHANGE v2 — Détection des cas particuliers (clients VIP, partenaires)
+function matchCasParticulier(opts: {
+  email: { from?: string; fromEmail?: string };
+  extraction: any | null;
+  liste: any[]; // CasParticulier[]
+}): any | null {
+  const { email, extraction, liste } = opts;
+  if (!liste || liste.length === 0) return null;
+  const fromEmailLower = (email.fromEmail || "").toLowerCase();
+  const extractedEmailLower = String(extraction?.email || "").toLowerCase();
+  const fromNameLower = String(email.from || "").toLowerCase();
+  const extractedNomLower = String(extraction?.nom || "").toLowerCase();
+
+  for (const cp of liste) {
+    if (cp.matchingMode === "manuel") continue; // Mode manuel : ne jamais auto-matcher
+    const emailPat = String(cp.emailPattern || "").toLowerCase().trim();
+    const nomPat = String(cp.nomPattern || "").toLowerCase().trim();
+
+    // Match sur email : pattern @domaine.fr OU adresse complète
+    if (emailPat) {
+      if (emailPat.startsWith("@") && (fromEmailLower.endsWith(emailPat) || extractedEmailLower.endsWith(emailPat))) return cp;
+      if (!emailPat.startsWith("@") && (fromEmailLower === emailPat || extractedEmailLower === emailPat)) return cp;
+      if (!emailPat.startsWith("@") && emailPat.includes("@") === false && (fromEmailLower.includes(emailPat) || extractedEmailLower.includes(emailPat))) return cp;
+    }
+    // Match sur nom
+    if (nomPat && (fromNameLower.includes(nomPat) || extractedNomLower.includes(nomPat))) return cp;
+  }
+  return null;
+}
+
+// Sources ARCHANGE v2 — Construction du bloc ton & style formalité
+function buildTonStyleBlock(ton: any, profilDetecte: string): string {
+  if (!ton) return "";
+  const parts: string[] = [];
+
+  if (Array.isArray(ton.formulesValides) && ton.formulesValides.length > 0) {
+    const formulesStr = ton.formulesValides
+      .filter((f: any) => f && (f.formule || "").trim())
+      .map((f: any) => `    • ${f.contexte ? `[${f.contexte}] ` : ""}"${f.formule}"`)
+      .join("\n");
+    if (formulesStr) parts.push(`  <formules_a_utiliser>\n${formulesStr}\n  </formules_a_utiliser>`);
+  }
+
+  if (Array.isArray(ton.formulesInterdites) && ton.formulesInterdites.length > 0) {
+    const interdits = ton.formulesInterdites.filter((f: string) => f && f.trim());
+    if (interdits.length > 0) {
+      parts.push(`  <formules_interdites>\n${interdits.map((f: string) => `    • "${f}" — NE JAMAIS UTILISER`).join("\n")}\n  </formules_interdites>`);
+    }
+  }
+
+  // Formalité : traduire le slider 0-1 en instruction verbale
+  if (ton.formalite && profilDetecte && ton.formalite[profilDetecte] !== undefined) {
+    const niveau = ton.formalite[profilDetecte];
+    let desc = "";
+    if (niveau < 0.25) desc = "Chaleureux et proche — utiliser un ton cordial, accessible, presque amical. Tutoiement possible si le client le propose.";
+    else if (niveau < 0.5) desc = "Professionnel avec chaleur — vouvoiement, mais avec des formulations personnelles et bienveillantes.";
+    else if (niveau < 0.75) desc = "Professionnel neutre — vouvoiement systématique, ton courtois et mesuré.";
+    else desc = "Très formel — vouvoiement strict, formulations institutionnelles, registre soutenu.";
+    parts.push(`  <niveau_formalite profil="${profilDetecte}">\n    ${desc}\n  </niveau_formalite>`);
+  }
+
+  if (parts.length === 0) return "";
+  return `\n<ton_style>\n${parts.join("\n\n")}\n</ton_style>`;
+}
+
 // EXTRACT_PROMPT est une fonction pour injecter la date du jour dynamiquement
 const buildExtractPrompt = (
   nomEtablissement = "l'établissement",
@@ -1146,6 +1315,97 @@ export default function App() {
   const [tagFilter, setTagFilter] = useState<string|null>(null); // tagId filtré ou null
   const saveCustomTags = (t: CustomTag[]) => { setCustomTags(t); saveToSupabase({custom_tags:JSON.stringify(t)}); };
   const saveEmailTags = (t: Record<string,string[]>) => { setEmailTags(t); saveToSupabase({email_tags:JSON.stringify(t)}); };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  SOURCES ARCHANGE v2 — 5 nouvelles structures (restructuration complète)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Types
+  type ReglesCommerciales = {
+    parNombrePersonnes: { petits: string; moyens: string; grands: string; xl: string };
+    parBudgetParPers: { economique: string; standard: string; premium: string };
+    parBudgetTotal: { petit: string; moyen: string; important: string; tresImportant: string };
+    parProfilClient: { entreprises: string; particuliers: string; institutionnels: string; agences: string };
+    parMoment: { dejeuner: string; soir: string; cocktailTardif: string };
+    parEspace: Record<string, string>; // keyed by espaceId
+  };
+  type FormuleValide = { id: string; contexte: string; formule: string };
+  type TonStyle = {
+    formulesValides: FormuleValide[];
+    formulesInterdites: string[];
+    formalite: { particuliers: number; entreprises: number; institutionnels: number; agences: number };
+  };
+  type ApprentissageRegle = { id: string; texte: string; categorie: string; occurrences: number; active: boolean; dateCreation: string };
+  type ApprentissageExemple = { id: string; emailSubject: string; emailBody: string; reponseValidee: string; typeEvenement: string; nombrePersonnes: number | null; dateAjout: string };
+  type ApprentissageSuggestion = { id: string; regleProposee: string; exemples: string[]; dateDetection: string };
+  type Apprentissages = {
+    reglesApprises: ApprentissageRegle[];
+    exemplesReference: ApprentissageExemple[];
+    suggestionsEnAttente: ApprentissageSuggestion[];
+  };
+  type CasParticulier = {
+    id: string;
+    nom: string;
+    emailPattern: string;
+    nomPattern: string;
+    matchingMode: "auto" | "manuel";
+    contexte: string;
+    regles: string;
+  };
+
+  // Valeurs par défaut
+  const DEFAULT_REGLES_COMMERCIALES: ReglesCommerciales = {
+    parNombrePersonnes: { petits: "", moyens: "", grands: "", xl: "" },
+    parBudgetParPers: { economique: "", standard: "", premium: "" },
+    parBudgetTotal: { petit: "", moyen: "", important: "", tresImportant: "" },
+    parProfilClient: { entreprises: "", particuliers: "", institutionnels: "", agences: "" },
+    parMoment: { dejeuner: "", soir: "", cocktailTardif: "" },
+    parEspace: {},
+  };
+  const DEFAULT_TON_STYLE: TonStyle = {
+    formulesValides: [],
+    formulesInterdites: [],
+    formalite: { particuliers: 0.3, entreprises: 0.7, institutionnels: 0.9, agences: 0.6 },
+  };
+  const DEFAULT_APPRENTISSAGES: Apprentissages = {
+    reglesApprises: [],
+    exemplesReference: [],
+    suggestionsEnAttente: [],
+  };
+
+  // States
+  const [reglesCommerciales, setReglesCommerciales] = useState<ReglesCommerciales>(DEFAULT_REGLES_COMMERCIALES);
+  const [tonStyle, setTonStyle] = useState<TonStyle>(DEFAULT_TON_STYLE);
+  const [apprentissages, setApprentissages] = useState<Apprentissages>(DEFAULT_APPRENTISSAGES);
+  const [casParticuliers, setCasParticuliers] = useState<CasParticulier[]>([]);
+  const [reglesAbsolues, setReglesAbsolues] = useState<string>("");
+  // Filtre d'affichage pour les tags de section Sources ARCHANGE
+  const [sourcesFilter, setSourcesFilter] = useState<string>("all"); // "all" | "infos" | "regles_com" | "ton" | "appr" | "cas_part" | "absolues"
+  // UI : quel accordéon ouvert dans chaque sous-section de règles commerciales
+  const [openReglesComTab, setOpenReglesComTab] = useState<string>(""); // "" = aucun, sinon "dim_X_tab_Y"
+
+  // Save helpers (debounce 1s pour éviter spam)
+  const saveReglesCommerciales = (rc: ReglesCommerciales) => {
+    setReglesCommerciales(rc);
+    saveToSupabase({ regles_commerciales: JSON.stringify(rc) });
+  };
+  const saveTonStyle = (ts: TonStyle) => {
+    setTonStyle(ts);
+    saveToSupabase({ ton_style: JSON.stringify(ts) });
+  };
+  const saveApprentissages = (a: Apprentissages) => {
+    setApprentissages(a);
+    saveToSupabase({ apprentissages: JSON.stringify(a) });
+  };
+  const saveCasParticuliers = (cp: CasParticulier[]) => {
+    setCasParticuliers(cp);
+    saveToSupabase({ cas_particuliers: JSON.stringify(cp) });
+  };
+  const saveReglesAbsolues = (ra: string) => {
+    setReglesAbsolues(ra);
+    saveToSupabase({ regles_absolues: ra });
+  };
+
   // Liens email ↔ événement — persistés en Supabase
   // Structure : { [emailId]: resaId }
   const [emailResaLinks, setEmailResaLinks] = useState<Record<string,string>>({});
@@ -1771,6 +2031,40 @@ export default function App() {
         try { if (d.sent_replies) setSentReplies(JSON.parse(d.sent_replies)); } catch {}
         try { if (d.custom_tags) setCustomTags(JSON.parse(d.custom_tags)); } catch {}
         try { if (d.email_tags) setEmailTags(JSON.parse(d.email_tags)); } catch {}
+        // ── Sources ARCHANGE v2 — chargement des 5 nouvelles structures ────
+        try { if (d.regles_commerciales) {
+          const loaded = JSON.parse(d.regles_commerciales);
+          // Deep merge avec DEFAULT pour garantir toutes les clés même si la structure évolue
+          setReglesCommerciales({
+            parNombrePersonnes: { ...DEFAULT_REGLES_COMMERCIALES.parNombrePersonnes, ...(loaded.parNombrePersonnes || {}) },
+            parBudgetParPers: { ...DEFAULT_REGLES_COMMERCIALES.parBudgetParPers, ...(loaded.parBudgetParPers || {}) },
+            parBudgetTotal: { ...DEFAULT_REGLES_COMMERCIALES.parBudgetTotal, ...(loaded.parBudgetTotal || {}) },
+            parProfilClient: { ...DEFAULT_REGLES_COMMERCIALES.parProfilClient, ...(loaded.parProfilClient || {}) },
+            parMoment: { ...DEFAULT_REGLES_COMMERCIALES.parMoment, ...(loaded.parMoment || {}) },
+            parEspace: loaded.parEspace || {},
+          });
+        } } catch {}
+        try { if (d.ton_style) {
+          const loaded = JSON.parse(d.ton_style);
+          setTonStyle({
+            formulesValides: Array.isArray(loaded.formulesValides) ? loaded.formulesValides : [],
+            formulesInterdites: Array.isArray(loaded.formulesInterdites) ? loaded.formulesInterdites : [],
+            formalite: { ...DEFAULT_TON_STYLE.formalite, ...(loaded.formalite || {}) },
+          });
+        } } catch {}
+        try { if (d.apprentissages) {
+          const loaded = JSON.parse(d.apprentissages);
+          setApprentissages({
+            reglesApprises: Array.isArray(loaded.reglesApprises) ? loaded.reglesApprises : [],
+            exemplesReference: Array.isArray(loaded.exemplesReference) ? loaded.exemplesReference : [],
+            suggestionsEnAttente: Array.isArray(loaded.suggestionsEnAttente) ? loaded.suggestionsEnAttente : [],
+          });
+        } } catch {}
+        try { if (d.cas_particuliers) {
+          const loaded = JSON.parse(d.cas_particuliers);
+          if (Array.isArray(loaded)) setCasParticuliers(loaded);
+        } } catch {}
+        try { if (typeof d.regles_absolues === "string") setReglesAbsolues(d.regles_absolues); } catch {}
         // P1 — Charger les réponses IA persistées → restaure les replies après F5
         try { if (d.replies_cache) {
           const replies = JSON.parse(d.replies_cache);
@@ -2455,9 +2749,40 @@ export default function App() {
       ].filter(Boolean).join("\n\n");
       const sourcesBlock = sources ? `\n\n<sources_archange>\n${sources}\n</sources_archange>` : "";
 
+      // ── v2 : règles commerciales activées conditionnellement selon le mail ─
+      const reglesComActivees = activerReglesSelonContexte({
+        extraction: cachedExtracted,
+        regles: reglesCommerciales,
+        espacesDyn,
+      });
+      // Déterminer le profil client pour le ton
+      const profilDetecte = (() => {
+        const entr = String(cachedExtracted?.entreprise || "").trim();
+        const nom = String(cachedExtracted?.nom || "").trim();
+        if (!entr || /mr|mme|m\.|mlle|madame|monsieur/i.test(nom)) return "particuliers";
+        if (/mairie|ministère|université|ambassade|préfecture/i.test(entr)) return "institutionnels";
+        if (/agence|event|incentive|communication|marketing/i.test(entr)) return "agences";
+        return "entreprises";
+      })();
+      const tonBlock = buildTonStyleBlock(tonStyle, profilDetecte);
+      // ── v2 : détection cas particulier (VIP / partenaires) ─────────────────
+      const casParticulierActif = matchCasParticulier({
+        email: sel,
+        extraction: cachedExtracted,
+        liste: casParticuliers,
+      });
+      const casParticulierBlock = casParticulierActif ? `\n\n<cas_particulier_actif nom="${casParticulierActif.nom}">\n  <contexte>${casParticulierActif.contexte || ""}</contexte>\n  <regles_specifiques>${casParticulierActif.regles || ""}</regles_specifiques>\n  ⚠️ Ce client est identifié comme cas particulier — respecte ses règles spécifiques.\n</cas_particulier_actif>` : "";
+
+      // ── v2 : règles absolues injectées EN FIN DE PROMPT (récence bias) ─────
+      const reglesAbsoluesBlock = (reglesAbsolues || "").trim() ? `\n\n⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚠️ RÈGLES ABSOLUES — JAMAIS TRANSGRESSABLES\n⚠️━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${reglesAbsolues.trim()}\n\n⚠️ Ces règles priment sur toute autre instruction. Vérifie une dernière fois ta réponse avant de la produire.` : "";
+
       const sys = buildSystemPrompt({nomEtab, adresseEtab, emailEtab, telEtab, espacesDyn})
         + sourcesBlock
-        + planningCtx;
+        + reglesComActivees
+        + tonBlock
+        + casParticulierBlock
+        + planningCtx
+        + reglesAbsoluesBlock;
 
       // ── Signature à utiliser dans la réponse ───────────────────────────────
       const signature = [
@@ -5248,11 +5573,69 @@ FORMAT
               </div>
             </div>
 
+            {/* ── Tags filtres Sources v2 ── */}
+            <div style={{padding:"12px 28px",background:"#F5F4F0",borderBottom:"1px solid #EBEAE5",flexShrink:0,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <span style={{fontSize:10,fontWeight:600,color:"#6B6E7E",letterSpacing:"0.08em",textTransform:"uppercase",marginRight:4}}>Filtrer :</span>
+              {([
+                ["all", "Tout", "🏠", null],
+                ["infos", "Infos", "🏢", (nomEtab?1:0) + (menusCtx?1:0) + (conditionsCtx?1:0) + (espacesCtx?1:0) + (customCtx?1:0)],
+                ["regles_com", "Règles com.", "⚡",
+                  Object.values(reglesCommerciales.parNombrePersonnes).filter(Boolean).length
+                  + Object.values(reglesCommerciales.parBudgetParPers).filter(Boolean).length
+                  + Object.values(reglesCommerciales.parBudgetTotal).filter(Boolean).length
+                  + Object.values(reglesCommerciales.parProfilClient).filter(Boolean).length
+                  + Object.values(reglesCommerciales.parMoment).filter(Boolean).length
+                  + Object.values(reglesCommerciales.parEspace).filter(Boolean).length
+                ],
+                ["ton", "Ton", "🎨", tonStyle.formulesValides.length + tonStyle.formulesInterdites.length],
+                ["appr", "Appr.", "📚", apprentissages.reglesApprises.length + apprentissages.exemplesReference.length + apprentissages.suggestionsEnAttente.length],
+                ["cas_part", "Cas part.", "🌟", casParticuliers.length],
+                ["absolues", "Absolues", "🚫", (reglesAbsolues||"").split("\n").filter((l: string)=>l.trim()).length],
+              ] as [string, string, string, number|null][]).map(([key, label, icon, count]) => {
+                const isActive = sourcesFilter === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={()=>setSourcesFilter(key)}
+                    style={{
+                      padding:"6px 12px",
+                      borderRadius:100,
+                      border: isActive ? "1px solid #B8924F" : "1px solid #EBEAE5",
+                      background: isActive ? "#B8924F" : "#FFFFFF",
+                      color: isActive ? "#FFFFFF" : "#1A1A1E",
+                      fontSize:11.5,
+                      fontWeight:500,
+                      cursor:"pointer",
+                      fontFamily:"'Geist','system-ui',sans-serif",
+                      display:"inline-flex",
+                      alignItems:"center",
+                      gap:5,
+                      transition:"all .14s ease",
+                      fontVariantNumeric:"tabular-nums",
+                    }}
+                  >
+                    <span style={{fontSize:12}}>{icon}</span>
+                    {label}
+                    {count !== null && count > 0 && (
+                      <span style={{
+                        fontSize:10,
+                        fontWeight:600,
+                        padding:"1px 6px",
+                        borderRadius:100,
+                        background: isActive ? "rgba(255,255,255,0.25)" : "rgba(184,146,79,0.12)",
+                        color: isActive ? "#FFFFFF" : "#B8924F",
+                      }}>{count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
             {/* ── Zone scrollable ── */}
             <div style={{flex:1,overflowY:"scroll",padding:"16px 28px 28px",display:"flex",flexDirection:"column",gap:12,minHeight:0}}>
 
             {/* ── Section Établissement ── */}
-            <div style={{background:"#FFFFFF",borderRadius:12,border:"2px solid #B8924F"}}>
+            <div style={{display: (sourcesFilter==="all"||sourcesFilter==="infos")?"block":"none",background:"#FFFFFF",borderRadius:12,border:"2px solid #B8924F"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FDF8EF",borderBottom:srcSections["etablissement"]?"1px solid #EBEAE5":"none",cursor:"pointer",borderRadius:srcSections["etablissement"]?"12px 12px 0 0":"12px"}} onClick={()=>setSrcSections(s=>({...s,etablissement:!s["etablissement"]}))}>
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -5288,7 +5671,7 @@ FORMAT
             </div>
 
             {/* ── Section Espaces dynamiques ── */}
-            <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+            <div style={{display:(sourcesFilter==="all"||sourcesFilter==="infos")?"block":"none",background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections["espacesDyn"]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,espacesDyn:!s["espacesDyn"]}))}>
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -5415,9 +5798,9 @@ FORMAT
             {([
               ["menus",      "🍽️", "Menus & Tarifs",        "Collez ici vos menus, formules, tarifs par personne, options boissons…",            menusCtx,      saveMenusCtx],
               ["conditions", "📜", "Conditions & Politique", "Politique d'annulation, acomptes, délais de confirmation, horaires d'accès…",       conditionsCtx, saveConditionsCtx],
-              ["ton",        "✏️", "Règles & Ton IA",        "Ex: Toujours proposer une visite. Ne pas mentionner les prix avant une demande de devis. Signature personnalisée…", tonCtx, saveTonCtx],
+              ["ton",        "✏️", "Règles & Ton IA (legacy)",        "Ancienne zone libre — remplacée par Ton & Style v2 (🎨). Conservée pour compatibilité ; si vous utilisez la nouvelle section Ton, videz celle-ci.", tonCtx, saveTonCtx],
             ]).map(([key, icon, title, ph, val, save]) => (
-              <div key={key} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+              <div key={key} style={{display:(sourcesFilter==="all"||sourcesFilter==="infos")?"block":"none",background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections[key]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,[key]:!s[key]}))}>
                   <div>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -5448,7 +5831,7 @@ FORMAT
             ))}
 
             {/* Liens web — section existante conservée */}
-            <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+            <div style={{display:(sourcesFilter==="all"||sourcesFilter==="infos")?"block":"none",background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
               <button onClick={()=>setSrcSections(s=>({...s,liens:!s.liens}))} style={{width:"100%",padding:"14px 20px",background:"#FAFAF7",border:"none",borderBottom:srcSections.liens?"1px solid #EBEAE5":"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left"}}>
                 <div>
                   <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>🔗 Liens web analysés</div>
@@ -5483,7 +5866,7 @@ FORMAT
             </div>
 
             {/* 3 — Tags personnalisés */}
-            <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+            <div style={{display:(sourcesFilter==="all"||sourcesFilter==="infos")?"block":"none",background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
               <div style={{padding:"14px 20px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>🏷️ Tags personnalisés</div>
@@ -5540,6 +5923,487 @@ FORMAT
                 </div>
               </div>
             </div>
+
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* ⚡ SECTION B — RÈGLES COMMERCIALES (5 dimensions conditionnelles) */}
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {(sourcesFilter==="all"||sourcesFilter==="regles_com") && (() => {
+              // Helper : rendu d'une sous-section avec onglets internes
+              const renderDimension = (dimKey: string, dimIcon: string, dimTitle: string, dimDesc: string, tabs: {id: string; label: string; placeholder: string}[], dimData: Record<string,string>, updateFn: (newData: Record<string,string>) => void) => {
+                const activeTab = openReglesComTab.startsWith(`${dimKey}:`) ? openReglesComTab.slice(dimKey.length+1) : tabs[0]?.id || "";
+                const countFilled = Object.values(dimData).filter(v => (v||"").trim()).length;
+                const dimSectionKey = `regcom_${dimKey}`;
+                return (
+                  <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections[dimSectionKey]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,[dimSectionKey]:!s[dimSectionKey]}))}>
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:16}}>{dimIcon}</span>
+                          <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>{dimTitle}</span>
+                          {countFilled > 0 && <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"rgba(184,146,79,0.12)",color:"#B8924F",fontWeight:600}}>{countFilled} remplie{countFilled>1?"s":""}</span>}
+                        </div>
+                        <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>{dimDesc}</div>
+                      </div>
+                      <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections[dimSectionKey]?"▲":"▼"}</span>
+                    </div>
+                    {srcSections[dimSectionKey] && (
+                      <div style={{padding:"16px 20px"}}>
+                        <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",borderBottom:"1px solid #EBEAE5",paddingBottom:10}}>
+                          {tabs.map(t => {
+                            const isActive = activeTab === t.id;
+                            const hasContent = (dimData[t.id]||"").trim().length > 0;
+                            return (
+                              <button key={t.id} onClick={()=>setOpenReglesComTab(`${dimKey}:${t.id}`)} style={{padding:"6px 12px",borderRadius:8,border:isActive?"1px solid #B8924F":"1px solid #EBEAE5",background:isActive?"#B8924F":"#FFFFFF",color:isActive?"#FFFFFF":(hasContent?"#1A1A1E":"#6B6E7E"),fontSize:12,fontWeight:isActive?600:500,cursor:"pointer",fontFamily:"'Geist','system-ui',sans-serif",display:"inline-flex",alignItems:"center",gap:5,transition:"all .14s ease"}}>
+                                {t.label}
+                                {hasContent && !isActive && <span style={{fontSize:9,color:"#B8924F"}}>●</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {(() => {
+                          const tab = tabs.find(t => t.id === activeTab) || tabs[0];
+                          if (!tab) return null;
+                          const val = dimData[tab.id] || "";
+                          return (
+                            <div>
+                              <textarea
+                                value={val}
+                                onChange={e => updateFn({...dimData, [tab.id]: e.target.value})}
+                                placeholder={tab.placeholder}
+                                rows={6}
+                                style={{...inp,lineHeight:1.7,resize:"vertical",width:"100%",fontFamily:"inherit"}}
+                              />
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                                <span style={{fontSize:11,color:"#6B6E7E"}}>{val.length} caractères — activé automatiquement sur les mails correspondants</span>
+                                {val && <button onClick={()=>updateFn({...dimData, [tab.id]: ""})} style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}}>Vider ×</button>}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
+              // Construction des onglets dynamiques pour "Par espace"
+              const tabsEspaces = espacesDyn.map(e => ({
+                id: e.id,
+                label: e.nom || e.id,
+                placeholder: `Règles spécifiques à l'espace "${e.nom || e.id}" — ex: "Toujours mentionner la façade LED pour les lancements de produit. Accès voiturier disponible sur demande."`
+              }));
+
+              return (
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  {/* Header section B */}
+                  <div style={{padding:"10px 14px",background:"rgba(184,146,79,0.06)",borderLeft:"3px solid #B8924F",borderRadius:"0 8px 8px 0"}}>
+                    <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:16}}>⚡</span> Règles commerciales
+                    </div>
+                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,lineHeight:1.5}}>
+                      Règles activées automatiquement selon le contexte du mail (nb de personnes, budget, profil client, moment, espace). ARCHANGE n'injecte que les règles pertinentes — pas de surcharge.
+                    </div>
+                  </div>
+
+                  {renderDimension("nbPers", "🔢", "Par nombre de personnes",
+                    "Active selon nombrePersonnes extrait du mail",
+                    [
+                      {id:"petits", label:"Petits (<30)", placeholder:"Ex: Pour les petits groupes, proposer la salle privative au RDC. Mentionner option dégustation vins."},
+                      {id:"moyens", label:"Moyens (30-80)", placeholder:"Ex: Pour les groupes moyens, le Patio est idéal. Proposer option voiturier si >50 pers."},
+                      {id:"grands", label:"Grands (80-150)", placeholder:"Ex: Pour les grands groupes, Atrium en priorité. Toujours proposer visite préalable."},
+                      {id:"xl", label:"Très grands (>150)", placeholder:"Ex: Pour les très grands groupes, privatisation totale possible. Devis sur-mesure, service dédié."},
+                    ],
+                    reglesCommerciales.parNombrePersonnes,
+                    (nv) => saveReglesCommerciales({...reglesCommerciales, parNombrePersonnes: nv as any})
+                  )}
+
+                  {renderDimension("budPers", "💰", "Par budget €/personne",
+                    "Active si le budget est exprimé en €/pers dans le mail",
+                    [
+                      {id:"economique", label:"Économique (<60€/pers)", placeholder:"Ex: Pour budgets serrés, proposer formule apéritif dînatoire 3 pièces + boissons. Mentionner Patio comme espace le plus abordable."},
+                      {id:"standard", label:"Standard (60-120€/pers)", placeholder:"Ex: Formule cocktail 6 pièces + entrée/plat/dessert. Proposer accord mets-vins optionnel."},
+                      {id:"premium", label:"Premium (>120€/pers)", placeholder:"Ex: Menu signature chef + sommelier dédié + accords mets-vins inclus. Service voiturier offert."},
+                    ],
+                    reglesCommerciales.parBudgetParPers,
+                    (nv) => saveReglesCommerciales({...reglesCommerciales, parBudgetParPers: nv as any})
+                  )}
+
+                  {renderDimension("budTot", "💰", "Par budget total",
+                    "Active selon budget total du mail (ou calcul nb pers × €/pers)",
+                    [
+                      {id:"petit", label:"Petit (<250€)", placeholder:"Ex: Petits événements — privilégier la convivialité, pas de devis formel, email chaleureux."},
+                      {id:"moyen", label:"Moyen (250-1000€)", placeholder:"Ex: Proposer visite rapide, devis structuré simple, mentionner options upsell modestes."},
+                      {id:"important", label:"Important (1000-2500€)", placeholder:"Ex: Toujours proposer visite préalable, devis détaillé, mentionner options premium, rappel téléphonique dans les 48h."},
+                      {id:"tresImportant", label:"Très important (>2500€)", placeholder:"Ex: Rendez-vous physique systématique, devis VIP personnalisé, chef disponible pour échange, conditions négociables."},
+                    ],
+                    reglesCommerciales.parBudgetTotal,
+                    (nv) => saveReglesCommerciales({...reglesCommerciales, parBudgetTotal: nv as any})
+                  )}
+
+                  {renderDimension("profil", "🏢", "Par profil client",
+                    "Détecté automatiquement selon entreprise et sourceEmail",
+                    [
+                      {id:"entreprises", label:"Entreprises", placeholder:"Ex: Ton professionnel, mentionner facture et numéro de TVA, parler d'équipe et de team building. Proposer options ROI (espace de travail, connexion wifi, écrans)."},
+                      {id:"particuliers", label:"Particuliers", placeholder:"Ex: Ton chaleureux, focus émotion/expérience, évoquer l'ambiance, photos des espaces. Proposer visite comme moment convivial."},
+                      {id:"institutionnels", label:"Institutionnels", placeholder:"Ex: Ton formel, références similaires (autres institutions), mentionner normes accessibilité/sécurité. Conditions de règlement adaptées (mandats, délais)."},
+                      {id:"agences", label:"Agences événementielles", placeholder:"Ex: Ton direct et efficace, tarifs nets, commissions précisées. Mentionner fiche technique complète, photos HD, contrat partenaire."},
+                    ],
+                    reglesCommerciales.parProfilClient,
+                    (nv) => saveReglesCommerciales({...reglesCommerciales, parProfilClient: nv as any})
+                  )}
+
+                  {renderDimension("moment", "🕐", "Par moment",
+                    "Active selon heureDebut extrait du mail",
+                    [
+                      {id:"dejeuner", label:"Déjeuner (11h-15h)", placeholder:"Ex: Pour déjeuners, proposer formules rapides, mentionner départ à 14h30 max. Menu allégé pour retour au bureau facilité."},
+                      {id:"soir", label:"Soir (17h-22h)", placeholder:"Ex: Pour les soirs, mettre en avant l'ambiance, éclairage chaleureux, service plus long, options digestifs."},
+                      {id:"cocktailTardif", label:"Cocktail tardif (22h+)", placeholder:"Ex: Pour événements tardifs, mentionner insonorisation, voisinage, option DJ/musique live. Service jusqu'à 2h max."},
+                    ],
+                    reglesCommerciales.parMoment,
+                    (nv) => saveReglesCommerciales({...reglesCommerciales, parMoment: nv as any})
+                  )}
+
+                  {tabsEspaces.length > 0 ? renderDimension("espace", "🏛", "Par espace",
+                    "Synchronisé automatiquement avec les espaces définis plus haut",
+                    tabsEspaces,
+                    reglesCommerciales.parEspace,
+                    (nv) => saveReglesCommerciales({...reglesCommerciales, parEspace: nv})
+                  ) : (
+                    <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5",padding:"16px 20px"}}>
+                      <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                        <span style={{fontSize:16}}>🏛</span> Par espace
+                      </div>
+                      <div style={{fontSize:11,color:"#6B6E7E"}}>Aucun espace défini. Ajoutez des espaces dans la section "🏛️ Espaces de l'établissement" pour pouvoir y attacher des règles spécifiques.</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* 🎨 SECTION C — TON & STYLE */}
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {(sourcesFilter==="all"||sourcesFilter==="ton") && (
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {/* Header section C */}
+                <div style={{padding:"10px 14px",background:"rgba(184,146,79,0.06)",borderLeft:"3px solid #B8924F",borderRadius:"0 8px 8px 0"}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:16}}>🎨</span> Ton & style de communication
+                  </div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,lineHeight:1.5}}>
+                    Formules à utiliser, formules à bannir, niveau de formalité par profil — tous les mails héritent automatiquement de ces règles.
+                  </div>
+                </div>
+
+                {/* C.1 — Formules valides */}
+                <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections["ton_valides"]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,ton_valides:!s["ton_valides"]}))}>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:16}}>✅</span>
+                        <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Formules à utiliser</span>
+                        {tonStyle.formulesValides.length > 0 && <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#D1FAE5",color:"#3F5B32",fontWeight:600}}>{tonStyle.formulesValides.length}</span>}
+                      </div>
+                      <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Expressions que ARCHANGE doit privilégier</div>
+                    </div>
+                    <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["ton_valides"]?"▲":"▼"}</span>
+                  </div>
+                  {srcSections["ton_valides"] && (
+                    <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
+                      {tonStyle.formulesValides.map((f, idx) => (
+                        <div key={f.id} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"10px 12px",background:"#F9F8F6",borderRadius:8,border:"1px solid #EBEAE5"}}>
+                          <input value={f.contexte} onChange={e=>{const u=[...tonStyle.formulesValides]; u[idx]={...u[idx],contexte:e.target.value}; saveTonStyle({...tonStyle,formulesValides:u});}} placeholder="Contexte (ex: Ouverture)" style={{...inp,flex:"0 0 140px",fontSize:12}}/>
+                          <input value={f.formule} onChange={e=>{const u=[...tonStyle.formulesValides]; u[idx]={...u[idx],formule:e.target.value}; saveTonStyle({...tonStyle,formulesValides:u});}} placeholder="Formule exacte" style={{...inp,flex:1,fontSize:12}}/>
+                          <button onClick={()=>saveTonStyle({...tonStyle,formulesValides:tonStyle.formulesValides.filter(x=>x.id!==f.id)})} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"4px 6px"}}>✕</button>
+                        </div>
+                      ))}
+                      <button onClick={()=>saveTonStyle({...tonStyle,formulesValides:[...tonStyle.formulesValides,{id:`f_${Date.now()}`,contexte:"",formule:""}]})} style={{padding:"8px 14px",borderRadius:8,border:"1px dashed #B8924F",background:"#FFFFFF",color:"#B8924F",fontSize:12,fontWeight:500,cursor:"pointer",alignSelf:"flex-start"}}>+ Ajouter une formule</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* C.2 — Formules interdites */}
+                <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections["ton_interdits"]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,ton_interdits:!s["ton_interdits"]}))}>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:16}}>❌</span>
+                        <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Formules interdites</span>
+                        {tonStyle.formulesInterdites.length > 0 && <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#FEE2E2",color:"#991B1B",fontWeight:600}}>{tonStyle.formulesInterdites.length}</span>}
+                      </div>
+                      <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Expressions à bannir absolument</div>
+                    </div>
+                    <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["ton_interdits"]?"▲":"▼"}</span>
+                  </div>
+                  {srcSections["ton_interdits"] && (
+                    <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:8}}>
+                      {tonStyle.formulesInterdites.map((f, idx) => (
+                        <div key={idx} style={{display:"flex",gap:8}}>
+                          <input value={f} onChange={e=>{const u=[...tonStyle.formulesInterdites]; u[idx]=e.target.value; saveTonStyle({...tonStyle,formulesInterdites:u});}} placeholder={`Ex: N'hésitez pas, Cordialement…`} style={{...inp,flex:1,fontSize:12}}/>
+                          <button onClick={()=>saveTonStyle({...tonStyle,formulesInterdites:tonStyle.formulesInterdites.filter((_,i)=>i!==idx)})} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"4px 6px"}}>✕</button>
+                        </div>
+                      ))}
+                      <button onClick={()=>saveTonStyle({...tonStyle,formulesInterdites:[...tonStyle.formulesInterdites,""]})} style={{padding:"8px 14px",borderRadius:8,border:"1px dashed #DC2626",background:"#FFFFFF",color:"#DC2626",fontSize:12,fontWeight:500,cursor:"pointer",alignSelf:"flex-start"}}>+ Ajouter une interdiction</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* C.3 — Niveau de formalité par profil */}
+                <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#FAFAF7",borderBottom:srcSections["ton_form"]?"1px solid #EBEAE5":"none",cursor:"pointer"}} onClick={()=>setSrcSections(s=>({...s,ton_form:!s["ton_form"]}))}>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:16}}>📊</span>
+                        <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Niveau de formalité par profil</span>
+                      </div>
+                      <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,paddingLeft:24}}>Curseur : chaleureux ↔ professionnel</div>
+                    </div>
+                    <span style={{fontSize:12,color:"#6B6E7E"}}>{srcSections["ton_form"]?"▲":"▼"}</span>
+                  </div>
+                  {srcSections["ton_form"] && (
+                    <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:16}}>
+                      {([
+                        ["particuliers", "Particuliers"],
+                        ["entreprises", "Entreprises"],
+                        ["institutionnels", "Institutionnels"],
+                        ["agences", "Agences événementielles"],
+                      ] as [keyof TonStyle["formalite"], string][]).map(([key, label]) => (
+                        <div key={key}>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:12,color:"#1A1A1E"}}>
+                            <span style={{fontWeight:500}}>{label}</span>
+                            <span style={{color:"#B8924F",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{Math.round((tonStyle.formalite[key] || 0) * 100)}% formel</span>
+                          </div>
+                          <input type="range" min="0" max="100" value={Math.round((tonStyle.formalite[key] || 0) * 100)} onChange={e=>saveTonStyle({...tonStyle,formalite:{...tonStyle.formalite,[key]:parseInt(e.target.value,10)/100}})} style={{width:"100%",accentColor:"#B8924F",cursor:"pointer"}}/>
+                          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#6B6E7E",marginTop:2}}>
+                            <span>Chaleureux</span>
+                            <span>Très formel</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* 📚 SECTION D — APPRENTISSAGES ARCHANGE */}
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {(sourcesFilter==="all"||sourcesFilter==="appr") && (
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{padding:"10px 14px",background:"rgba(184,146,79,0.06)",borderLeft:"3px solid #B8924F",borderRadius:"0 8px 8px 0"}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:16}}>📚</span> Apprentissages ARCHANGE
+                  </div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,lineHeight:1.5}}>
+                    Cette section se remplira automatiquement quand ARCHANGE détectera des patterns récurrents dans vos corrections. Bientôt disponible.
+                  </div>
+                </div>
+
+                {/* Message d'accueil */}
+                {apprentissages.reglesApprises.length === 0 && apprentissages.exemplesReference.length === 0 && apprentissages.suggestionsEnAttente.length === 0 ? (
+                  <div style={{background:"#FFFFFF",borderRadius:3,border:"1px dashed #EBEAE5",padding:"32px 20px",textAlign:"center"}}>
+                    <div style={{fontSize:32,marginBottom:12,opacity:0.4}}>🌱</div>
+                    <div style={{fontSize:14,color:"#1A1A1E",fontWeight:500,marginBottom:6,fontFamily:"'Fraunces',Georgia,serif"}}>ARCHANGE n'a encore rien appris</div>
+                    <div style={{fontSize:12,color:"#6B6E7E",lineHeight:1.6,maxWidth:480,margin:"0 auto"}}>
+                      Quand vous modifiez une réponse générée avant envoi, ARCHANGE enregistre la correction.<br/>
+                      Après quelques corrections similaires (3 minimum), une règle apprise apparaîtra ici pour validation.
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* D.1 — Règles apprises */}
+                    <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+                      <div style={{padding:"14px 20px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:16}}>💡</span>
+                          <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Règles apprises</span>
+                          <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"rgba(184,146,79,0.12)",color:"#B8924F",fontWeight:600}}>{apprentissages.reglesApprises.length}</span>
+                        </div>
+                      </div>
+                      <div style={{padding:"16px 20px"}}>
+                        {apprentissages.reglesApprises.length === 0 ? (
+                          <div style={{fontSize:12,color:"#A5A4A0",textAlign:"center",padding:"20px"}}>Aucune règle apprise pour l'instant</div>
+                        ) : (
+                          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                            {apprentissages.reglesApprises.map(r => (
+                              <div key={r.id} style={{padding:"12px 14px",background:"#F9F8F6",borderRadius:8,border:"1px solid #EBEAE5",display:"flex",gap:10,alignItems:"flex-start"}}>
+                                <input type="checkbox" checked={r.active} onChange={e=>saveApprentissages({...apprentissages,reglesApprises:apprentissages.reglesApprises.map(x=>x.id===r.id?{...x,active:e.target.checked}:x)})} style={{marginTop:3,accentColor:"#B8924F"}}/>
+                                <div style={{flex:1}}>
+                                  <div style={{fontSize:12.5,color:"#1A1A1E",lineHeight:1.5,opacity:r.active?1:0.5}}>{r.texte}</div>
+                                  <div style={{display:"flex",gap:8,marginTop:4,fontSize:10,color:"#6B6E7E"}}>
+                                    <span style={{padding:"2px 6px",background:"rgba(184,146,79,0.1)",color:"#B8924F",borderRadius:4,fontWeight:600}}>{r.categorie}</span>
+                                    <span>× {r.occurrences} fois</span>
+                                    <span>{r.dateCreation}</span>
+                                  </div>
+                                </div>
+                                <button onClick={()=>saveApprentissages({...apprentissages,reglesApprises:apprentissages.reglesApprises.filter(x=>x.id!==r.id)})} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:13,padding:"4px 6px"}}>✕</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* D.2 — Exemples référence */}
+                    <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+                      <div style={{padding:"14px 20px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:16}}>⭐</span>
+                          <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Exemples de référence</span>
+                          <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"rgba(184,146,79,0.12)",color:"#B8924F",fontWeight:600}}>{apprentissages.exemplesReference.length}</span>
+                        </div>
+                      </div>
+                      <div style={{padding:"16px 20px"}}>
+                        {apprentissages.exemplesReference.length === 0 ? (
+                          <div style={{fontSize:12,color:"#A5A4A0",textAlign:"center",padding:"20px"}}>Aucun exemple — marquez une réponse comme "⭐ exemplaire" depuis la vue email pour l'ajouter ici</div>
+                        ) : (
+                          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                            {apprentissages.exemplesReference.map(ex => (
+                              <div key={ex.id} style={{padding:"12px 14px",background:"#F9F8F6",borderRadius:8,border:"1px solid #EBEAE5"}}>
+                                <div style={{fontSize:12,fontWeight:600,color:"#1A1A1E",marginBottom:4}}>{ex.emailSubject}</div>
+                                <div style={{fontSize:11,color:"#6B6E7E",display:"flex",gap:10,flexWrap:"wrap"}}>
+                                  <span>📅 {ex.dateAjout}</span>
+                                  {ex.typeEvenement && <span style={{padding:"1px 6px",background:"rgba(184,146,79,0.1)",color:"#B8924F",borderRadius:4}}>{ex.typeEvenement}</span>}
+                                  {ex.nombrePersonnes && <span>{ex.nombrePersonnes} pers.</span>}
+                                  <button onClick={()=>saveApprentissages({...apprentissages,exemplesReference:apprentissages.exemplesReference.filter(x=>x.id!==ex.id)})} style={{marginLeft:"auto",background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:11}}>Retirer</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* D.3 — Suggestions en attente */}
+                    {apprentissages.suggestionsEnAttente.length > 0 && (
+                      <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+                        <div style={{padding:"14px 20px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <span style={{fontSize:16}}>🕘</span>
+                            <span style={{fontSize:13,fontWeight:600,color:"#1A1A1E"}}>Suggestions en attente</span>
+                            <span style={{fontSize:10,padding:"2px 7px",borderRadius:100,background:"#FEF3C7",color:"#92400E",fontWeight:600}}>{apprentissages.suggestionsEnAttente.length}</span>
+                          </div>
+                        </div>
+                        <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
+                          {apprentissages.suggestionsEnAttente.map(s => (
+                            <div key={s.id} style={{padding:"12px 14px",background:"rgba(254,243,199,0.3)",borderRadius:8,border:"1px solid #FDE68A"}}>
+                              <div style={{fontSize:12.5,color:"#1A1A1E",lineHeight:1.5,marginBottom:8}}>💡 {s.regleProposee}</div>
+                              <div style={{fontSize:10,color:"#6B6E7E",marginBottom:8}}>Détecté {s.dateDetection} · Basé sur {s.exemples.length} exemples</div>
+                              <div style={{display:"flex",gap:6}}>
+                                <button onClick={()=>{
+                                  const nvRegle: ApprentissageRegle = {id:`r_${Date.now()}`,texte:s.regleProposee,categorie:"apprise",occurrences:s.exemples.length,active:true,dateCreation:new Date().toLocaleDateString("fr-FR")};
+                                  saveApprentissages({...apprentissages,reglesApprises:[...apprentissages.reglesApprises,nvRegle],suggestionsEnAttente:apprentissages.suggestionsEnAttente.filter(x=>x.id!==s.id)});
+                                  toast("Règle adoptée ✓");
+                                }} style={{padding:"6px 12px",borderRadius:6,border:"1px solid #B8924F",background:"#B8924F",color:"#FFFFFF",fontSize:11,fontWeight:500,cursor:"pointer"}}>✓ Adopter</button>
+                                <button onClick={()=>saveApprentissages({...apprentissages,suggestionsEnAttente:apprentissages.suggestionsEnAttente.filter(x=>x.id!==s.id)})} style={{padding:"6px 12px",borderRadius:6,border:"1px solid #EBEAE5",background:"#FFFFFF",color:"#6B6E7E",fontSize:11,cursor:"pointer"}}>✗ Ignorer</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* 🌟 SECTION E — CAS PARTICULIERS */}
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {(sourcesFilter==="all"||sourcesFilter==="cas_part") && (
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{padding:"10px 14px",background:"rgba(184,146,79,0.06)",borderLeft:"3px solid #B8924F",borderRadius:"0 8px 8px 0"}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:16}}>🌟</span> Cas particuliers (clients VIP, partenaires)
+                  </div>
+                  <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,lineHeight:1.5}}>
+                    Matching automatique par domaine email et/ou nom. Quand un mail match, ARCHANGE active les règles spécifiques de la fiche.
+                  </div>
+                </div>
+
+                {casParticuliers.map((cp, idx) => (
+                  <div key={cp.id} style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5"}}>
+                    <div style={{padding:"14px 20px",background:"#FAFAF7",borderBottom:"1px solid #EBEAE5",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <input value={cp.nom} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],nom:e.target.value}; saveCasParticuliers(u);}} placeholder="Nom du cas particulier (ex: Cabinet Dubois)" style={{...inp,flex:1,fontSize:13,fontWeight:600}}/>
+                      <button onClick={()=>saveCasParticuliers(casParticuliers.filter(x=>x.id!==cp.id))} style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,padding:"4px 10px"}}>✕</button>
+                    </div>
+                    <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:12}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>📧 Email / Domaine</label>
+                          <input value={cp.emailPattern} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],emailPattern:e.target.value}; saveCasParticuliers(u);}} placeholder="@cabinetdubois.fr ou contact@exact.com" style={{...inp,fontSize:12}}/>
+                        </div>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>👤 Nom (contient)</label>
+                          <input value={cp.nomPattern} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],nomPattern:e.target.value}; saveCasParticuliers(u);}} placeholder="Dubois" style={{...inp,fontSize:12}}/>
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>⚙️ Mode de matching</label>
+                        <div style={{display:"flex",gap:8}}>
+                          <button onClick={()=>{const u=[...casParticuliers]; u[idx]={...u[idx],matchingMode:"auto"}; saveCasParticuliers(u);}} style={{padding:"6px 12px",borderRadius:6,border:cp.matchingMode==="auto"?"1px solid #B8924F":"1px solid #EBEAE5",background:cp.matchingMode==="auto"?"#B8924F":"#FFFFFF",color:cp.matchingMode==="auto"?"#FFFFFF":"#1A1A1E",fontSize:11,fontWeight:500,cursor:"pointer"}}>✨ Automatique</button>
+                          <button onClick={()=>{const u=[...casParticuliers]; u[idx]={...u[idx],matchingMode:"manuel"}; saveCasParticuliers(u);}} style={{padding:"6px 12px",borderRadius:6,border:cp.matchingMode==="manuel"?"1px solid #B8924F":"1px solid #EBEAE5",background:cp.matchingMode==="manuel"?"#B8924F":"#FFFFFF",color:cp.matchingMode==="manuel"?"#FFFFFF":"#1A1A1E",fontSize:11,fontWeight:500,cursor:"pointer"}}>✋ Manuel</button>
+                        </div>
+                        <div style={{fontSize:10,color:"#6B6E7E",marginTop:4}}>{cp.matchingMode==="auto"?"Appliqué automatiquement aux mails correspondants":"Ne s'applique que si vous le forcez (pour éviter les faux positifs)"}</div>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>📝 Contexte / historique</label>
+                        <textarea value={cp.contexte} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],contexte:e.target.value}; saveCasParticuliers(u);}} placeholder="Ex: Client fidèle depuis 2023, organise 4-5 événements/an, tarif préférentiel négocié." rows={2} style={{...inp,fontSize:12,resize:"vertical"}}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:"#6B6E7E",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>⚡ Règles spécifiques</label>
+                        <textarea value={cp.regles} onChange={e=>{const u=[...casParticuliers]; u[idx]={...u[idx],regles:e.target.value}; saveCasParticuliers(u);}} placeholder="Ex: Toujours vouvoyer. Tarif -10% systématique. Remise du devis en main propre." rows={3} style={{...inp,fontSize:12,resize:"vertical"}}/>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button onClick={()=>saveCasParticuliers([...casParticuliers,{id:`cp_${Date.now()}`,nom:"",emailPattern:"",nomPattern:"",matchingMode:"auto",contexte:"",regles:""}])} style={{padding:"10px 16px",borderRadius:8,border:"1px dashed #B8924F",background:"#FFFFFF",color:"#B8924F",fontSize:13,fontWeight:500,cursor:"pointer",alignSelf:"flex-start"}}>+ Nouveau cas particulier</button>
+              </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* 🚫 SECTION F — RÈGLES ABSOLUES (JAMAIS) */}
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {(sourcesFilter==="all"||sourcesFilter==="absolues") && (() => {
+              const lignes = (reglesAbsolues || "").split("\n").filter((l: string)=>l.trim());
+              const tooMany = lignes.length > 10;
+              return (
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  <div style={{padding:"10px 14px",background:"rgba(220,38,38,0.04)",borderLeft:"3px solid #DC2626",borderRadius:"0 8px 8px 0"}}>
+                    <div style={{fontSize:13,fontWeight:600,color:"#1A1A1E",display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:16}}>🚫</span> Règles absolues (JAMAIS transgresser)
+                    </div>
+                    <div style={{fontSize:11,color:"#6B6E7E",marginTop:3,lineHeight:1.5}}>
+                      Injectées en FIN de prompt (récence bias) pour maximiser le respect. Une règle par ligne, recommandé max 10.
+                    </div>
+                  </div>
+
+                  <div style={{background:"#FFFFFF",borderRadius:3,border:"1px solid #EBEAE5",padding:"16px 20px"}}>
+                    <textarea
+                      value={reglesAbsolues}
+                      onChange={e=>saveReglesAbsolues(e.target.value)}
+                      placeholder={`Une règle par ligne. Formulation forte (JAMAIS, TOUJOURS). Ex :
+
+1. Ne jamais donner un tarif sans préciser "tarif indicatif"
+2. Ne jamais confirmer une date sans vérifier le planning
+3. Ne jamais s'engager sur un menu spécifique (dépend du chef)
+4. Ne jamais mentionner le tarif d'un autre client
+5. Toujours mentionner l'acompte 30% pour les devis > 1000€`}
+                      rows={12}
+                      style={{...inp,lineHeight:1.8,resize:"vertical",width:"100%",fontFamily:"inherit",fontSize:13}}
+                    />
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                      <span style={{fontSize:11,color: tooMany ? "#DC2626" : "#6B6E7E"}}>
+                        {lignes.length} règle{lignes.length>1?"s":""} {tooMany ? `— ⚠️ trop nombreuses (max recommandé : 10)` : ""}
+                      </span>
+                      {reglesAbsolues && <button onClick={()=>saveReglesAbsolues("")} style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}}>Vider ×</button>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             </div>
           </div>
