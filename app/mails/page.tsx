@@ -1057,7 +1057,7 @@ export default function App() {
   const [emails, setEmails] = useState([]);
   // Fix #4 — Pagination : savoir s'il y a plus d'emails à charger
   const [emailsTotal, setEmailsTotal] = useState(0);
-  const [emailsLimit, setEmailsLimit] = useState(100);
+  const [emailsLimit, setEmailsLimit] = useState(1000);
   const [loadingMore, setLoadingMore] = useState(false);
   const [resas, setResas] = useState<any[]>([]);
   const [sel, setSel] = useState(null);
