@@ -995,6 +995,9 @@ export default function App() {
   const syncRunning = useRef(false);
   const [saveIndicator, setSaveIndicator] = useState(false);
   const [offlineQueue, setOfflineQueue] = useState<Record<string,string>>({}); // P4: file hors-ligne
+  // ─── Notifications de troncature : par emailId, liste des éléments dépassés ─
+  type TruncationInfo = { label: string; actuel: number; limite: number };
+  const [truncations, setTruncations] = useState<Record<string, TruncationInfo[]>>({});
   // ─── Stats API tokens (mises à jour à chaque appel callClaude) ────────────
   const [apiStatsView, setApiStatsView] = useState({ totalCalls: 0, totalInputTokens: 0, totalOutputTokens: 0, totalCostUSD: 0 });
   const [apiStatsOpen, setApiStatsOpen] = useState(false);
@@ -2242,6 +2245,7 @@ export default function App() {
     try {
       // ── Limites Option A (10-15× anciennes valeurs) ────────────────────────
       const LIM = {
+        body: 30000,    // corps du mail courant
         menus: 15000,
         conditions: 8000,
         espaces: 8000,
@@ -2249,6 +2253,25 @@ export default function App() {
         custom: 5000,
         link: 2000,
       };
+
+      // ── Détection des troncatures pour notification utilisateur ────────────
+      const detectedTruncations: TruncationInfo[] = [];
+      const corpsLen = (sel.body || sel.snippet || "").length;
+      if (corpsLen > LIM.body) detectedTruncations.push({ label: "Corps du mail", actuel: corpsLen, limite: LIM.body });
+      if ((menusCtx?.length || 0) > LIM.menus) detectedTruncations.push({ label: "Menus & Tarifs", actuel: menusCtx.length, limite: LIM.menus });
+      if ((conditionsCtx?.length || 0) > LIM.conditions) detectedTruncations.push({ label: "Conditions & Politique", actuel: conditionsCtx.length, limite: LIM.conditions });
+      if ((espacesCtx?.length || 0) > LIM.espaces) detectedTruncations.push({ label: "Espaces & Capacités", actuel: espacesCtx.length, limite: LIM.espaces });
+      if ((tonCtx?.length || 0) > LIM.ton) detectedTruncations.push({ label: "Règles & Ton", actuel: tonCtx.length, limite: LIM.ton });
+      if ((customCtx?.length || 0) > LIM.custom) detectedTruncations.push({ label: "Contexte personnalisé", actuel: customCtx.length, limite: LIM.custom });
+      // Liens web : on signale le plus gros lien tronqué
+      Object.values(linksFetched).forEach((l: any) => {
+        const sumLen = (l?.summary || "").length;
+        if (sumLen > LIM.link) {
+          const existing = detectedTruncations.find(t => t.label === "Liens web analysés");
+          if (!existing) detectedTruncations.push({ label: "Liens web analysés", actuel: sumLen, limite: LIM.link });
+          else if (sumLen > existing.actuel) { existing.actuel = sumLen; }
+        }
+      });
 
       // ── Construire le planning temps réel (balisé XML) ─────────────────────
       const planningCtx = `\n\n<planning_temps_reel>\n` + (
@@ -2397,6 +2420,8 @@ export default function App() {
           saveToSupabase({ replies_cache: JSON.stringify(repliesToSave) });
           return updated;
         });
+        // Enregistrer les troncatures détectées (vide = pas de notification affichée)
+        setTruncations(prev => ({ ...prev, [sel.id]: detectedTruncations }));
       }
 
       // ── Association IA email ↔ événement ────────────────────────────────────
@@ -4168,6 +4193,33 @@ FORMAT
                       </div>
                       {srcActives>0&&<span style={{fontSize:10,color:"rgba(184,148,86,0.7)",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}>🧠 {srcActives} source{srcActives>1?"s":""}</span>}
                     </div>
+                    {/* ── Bandeau notification troncatures (visible UNIQUEMENT si dépassement réel) ── */}
+                    {sel && truncations[sel.id] && truncations[sel.id].length > 0 && (
+                      <div style={{
+                        padding:"10px 16px",
+                        background:"#FEF7E6",
+                        borderBottom:"1px solid #E6D9B8",
+                        display:"flex",
+                        alignItems:"flex-start",
+                        gap:10,
+                      }}>
+                        <span style={{fontSize:14,lineHeight:1.4,flexShrink:0,marginTop:1}}>⚠️</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:11.5,fontWeight:600,color:"#8B6914",fontFamily:"'Inter',sans-serif",letterSpacing:"0.02em",marginBottom:4}}>
+                            Contenu tronqué — ARCHANGE n'a vu qu'une partie de {truncations[sel.id].length === 1 ? "cet élément" : "ces éléments"}
+                          </div>
+                          <div style={{fontSize:11,color:"#6B5A2A",fontFamily:"'Inter',sans-serif",lineHeight:1.55,fontVariantNumeric:"tabular-nums"}}>
+                            {truncations[sel.id].map((t, i) => (
+                              <div key={i}>
+                                • <strong>{t.label}</strong> : {t.actuel.toLocaleString("fr-FR")} caractères présents,
+                                {" "}<strong>{t.limite.toLocaleString("fr-FR")} envoyés</strong>
+                                {" "}<span style={{color:"#A08544"}}>({Math.round((t.limite/t.actuel)*100)}% transmis)</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {genReply
                       ? <div style={{padding:"20px",fontSize:13,color:"#6B6E7E",display:"flex",alignItems:"center",gap:10,fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}><Spin/> Archange rédige…</div>
                       : !reply
