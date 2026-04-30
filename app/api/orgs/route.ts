@@ -1,134 +1,157 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * /api/orgs — Lister/créer des organisations
+ * /api/orgs — Liste & création d'organisations
  * ═══════════════════════════════════════════════════════════════
+ *
+ * GET   → liste les organisations dont l'utilisateur courant est membre
+ * POST  → crée une nouvelle organisation (le créateur devient super_admin)
  */
-import { NextRequest, NextResponse } from 'next/server';
+
+import { NextResponse, type NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { supabaseAdmin } from '@/lib/supabase';
-import { logActivity } from '@/lib/activity';
 
-// ─── GET : liste les orgs dont je suis membre ──────────────────────────
+// ───── GET : liste des organisations du user courant ──────────────────
+
 export async function GET() {
-  const session = await getServerSession(authOptions);
+    const session = await getServerSession(authOptions);
+
   if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { data: user } = await supabaseAdmin
-    .from('users')
-    .select('id, active_organisation_id')
-    .eq('email', session.user.email)
-    .single();
+      .from('users')
+      .select('id, active_organisation_id')
+      .eq('email', session.user.email)
+      .single();
 
-  if (!user) return NextResponse.json({ orgs: [], activeOrgId: null });
-
-  const { data: memberships } = await supabaseAdmin
-    .from('memberships')
-    .select(`
-      role,
-      is_active,
-      organisation_id,
-      organisations:organisation_id (id, nom, slug, type, is_active)
-    `)
-    .eq('user_id', user.id)
-    .eq('is_active', true);
-
-  const orgs = (memberships || [])
-    .filter((m: any) => m.organisations && m.organisations.is_active)
-    .map((m: any) => ({
-      id: m.organisations.id,
-      nom: m.organisations.nom,
-      slug: m.organisations.slug,
-      type: m.organisations.type,
-      role: m.role,
-    }));
-
-  return NextResponse.json({
-    orgs,
-    activeOrgId: user.active_organisation_id || (orgs[0]?.id ?? null),
-  });
-}
-
-// ─── POST : créer une nouvelle organisation ────────────────────────────
-// Le créateur devient automatiquement super_admin de l'org.
-export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const body = await req.json();
-  const { nom, type } = body;
-  if (!nom?.trim()) {
-    return NextResponse.json({ error: 'nom required' }, { status: 400 });
-  }
-
-  // Slug auto : nom en minuscules, sans accents, espaces -> tirets
-  const slug = nom
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50) + '-' + Math.random().toString(36).slice(2, 8);
-
-  const { data: user } = await supabaseAdmin
-    .from('users')
-    .select('id')
-    .eq('email', session.user.email)
-    .single();
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-  // Créer l'org
+  // Récupérer toutes les memberships actives + jointure organisations
+  const { data: memberships, error } = await supabaseAdmin
+      .from('memberships')
+      .select('id, role, joined_at, organisation:organisations(id, nom, slug, type, is_active)')
+      .eq('user_id', user.id)
+      .eq('is_active', true);
+
+  if (error) {
+        console.error('[GET /api/orgs]', error);
+        return NextResponse.json({ error: 'Database error' }, { status: 500 });
+  }
+
+  const orgs = (memberships || [])
+      .filter((m: any) => m.organisation && m.organisation.is_active)
+      .map((m: any) => ({
+              id: m.organisation.id,
+              nom: m.organisation.nom,
+              slug: m.organisation.slug,
+              type: m.organisation.type,
+              role: m.role,
+              joinedAt: m.joined_at,
+              isActive: m.organisation.id === user.active_organisation_id,
+      }));
+
+  return NextResponse.json({ orgs, activeOrgId: user.active_organisation_id });
+}
+
+// ───── POST : créer une nouvelle organisation ─────────────────────────
+
+export async function POST(req: NextRequest) {
+    const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  let body: { nom?: string; type?: string };
+    try {
+          body = await req.json();
+    } catch {
+          return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
+
+  const nom = String(body.nom || '').trim();
+    const type = String(body.type || 'brasserie').trim();
+
+  if (!nom || nom.length < 2 || nom.length > 80) {
+        return NextResponse.json(
+          { error: 'Le nom doit faire entre 2 et 80 caractères' },
+          { status: 400 }
+              );
+  }
+
+  // Récupérer l'user
+  const { data: user } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single();
+
+  if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+
+  // Slug unique : nom-en-minuscules-tirets + suffixe random si collision
+  const baseSlug = nom
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 50) || 'org';
+
+  let slug = baseSlug;
+    for (let i = 0; i < 10; i++) {
+          const { data: existing } = await supabaseAdmin
+            .from('organisations')
+            .select('id')
+            .eq('slug', slug)
+            .maybeSingle();
+
+      if (!existing) break;
+          slug = baseSlug + '-' + Math.random().toString(36).substring(2, 6);
+    }
+
+  // Créer l'organisation
   const { data: newOrg, error: orgErr } = await supabaseAdmin
-    .from('organisations')
-    .insert({
-      nom: nom.trim(),
-      name: nom.trim(),  // colonne legacy
-      slug,
-      type: type || 'brasserie',
-      is_active: true,
-    })
-    .select()
-    .single();
+      .from('organisations')
+      .insert({ nom, name: nom, slug, type, is_active: true })
+      .select('id, nom, slug, type')
+      .single();
 
   if (orgErr || !newOrg) {
-    console.error('[orgs POST] Create failed:', orgErr);
-    return NextResponse.json({ error: 'Failed to create org', details: orgErr?.message }, { status: 500 });
+        console.error('[POST /api/orgs] org create', orgErr);
+        return NextResponse.json({ error: 'Création échouée' }, { status: 500 });
   }
 
-  // Ajouter le créateur comme super_admin
-  const { error: memErr } = await supabaseAdmin
-    .from('memberships')
-    .insert({
-      user_id: user.id,
-      organisation_id: newOrg.id,
-      role: 'super_admin',
-      is_active: true,
-    });
+  // Créer la membership super_admin pour le créateur
+  const { error: memErr } = await supabaseAdmin.from('memberships').insert({
+        user_id: user.id,
+        organisation_id: newOrg.id,
+        role: 'super_admin',
+        is_active: true,
+  });
 
   if (memErr) {
-    console.error('[orgs POST] Membership failed:', memErr);
-    // Cleanup l'org orpheline
-    await supabaseAdmin.from('organisations').delete().eq('id', newOrg.id);
-    return NextResponse.json({ error: 'Failed to create membership', details: memErr.message }, { status: 500 });
+        console.error('[POST /api/orgs] membership create', memErr);
+        await supabaseAdmin.from('organisations').delete().eq('id', newOrg.id);
+        return NextResponse.json({ error: 'Membership creation failed' }, { status: 500 });
   }
 
-  // Définir comme org active si c'est la première
+  // Définir cette nouvelle org comme l'active
   await supabaseAdmin
-    .from('users')
-    .update({ active_organisation_id: newOrg.id })
-    .eq('id', user.id);
+      .from('users')
+      .update({ active_organisation_id: newOrg.id })
+      .eq('id', user.id);
 
-  await logActivity({
-    orgId: newOrg.id,
-    userId: user.id,
-    action: 'org.created',
-    resourceType: 'organisation',
-    resourceId: newOrg.id,
-    metadata: { nom: newOrg.nom, type: newOrg.type },
+  // Logger l'action
+  await supabaseAdmin.from('activity_logs').insert({
+        user_id: user.id,
+        organisation_id: newOrg.id,
+        action: 'org.created',
+        resource_type: 'organisation',
+        resource_id: newOrg.id,
+        metadata: { nom, type },
   });
 
   return NextResponse.json({ org: newOrg }, { status: 201 });
