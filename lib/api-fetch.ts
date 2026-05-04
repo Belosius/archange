@@ -8,6 +8,10 @@
  * vers /api/*. Le backend (getOrgContext) utilise ce header pour
  * résoudre l'organisation active de la requête.
  *
+ * Phase D bonus : si une réponse contient { error: 'GMAIL_AUTH_EXPIRED' },
+ * redirection automatique vers /api/gmail/connect pour relancer le flow
+ * OAuth, en gardant l'URL actuelle comme retour.
+ *
  * Usage (drop-in replacement pour fetch) :
  *
  *   import { apiFetch } from '@/lib/api-fetch'
@@ -48,9 +52,16 @@ export function invalidateActiveOrgCache() {
   cachedAt = 0
 }
 
+// ─── Anti-redirect-loop : évite de redéclencher /api/gmail/connect en boucle ──
+// Si l'utilisateur vient de revenir du callback Gmail et que ça plante encore,
+// on n'essaie qu'une fois par session.
+let gmailRedirectAttempted = false
+
 /**
  * Wrapper de fetch qui ajoute automatiquement le header X-Active-Org-Id.
  * Interface strictement compatible avec fetch() natif.
+ *
+ * Détecte aussi les erreurs GMAIL_AUTH_EXPIRED et redirige vers le flow OAuth.
  */
 export async function apiFetch(
   input: ApiFetchInput,
@@ -66,5 +77,31 @@ export async function apiFetch(
     headers.set('Content-Type', 'application/json')
   }
 
-  return fetch(input, { ...init, headers })
+  const response = await fetch(input, { ...init, headers })
+
+  // Phase D : intercepter GMAIL_AUTH_EXPIRED et déclencher la reconnexion auto
+  // On clone la response pour pouvoir la lire sans la consommer pour le caller
+  if (!response.ok && !gmailRedirectAttempted) {
+    const cloned = response.clone()
+    try {
+      const data = await cloned.json()
+      if (data?.error === 'GMAIL_AUTH_EXPIRED' || data?.code === 'GMAIL_AUTH_EXPIRED') {
+        gmailRedirectAttempted = true
+        // Garder l'URL actuelle comme cible de retour après reconnexion
+        const returnTo = window.location.pathname + window.location.search
+        const connectUrl = `/api/gmail/connect?return=${encodeURIComponent(returnTo)}`
+        // Petit toast natif avant de rediriger
+        if (typeof window !== 'undefined') {
+          console.warn('[apiFetch] Gmail token expired, redirecting to OAuth...')
+        }
+        window.location.href = connectUrl
+        // Pendant la redirection, on retourne quand même la réponse au caller
+        // (qui ne devrait pas y arriver puisque la page se recharge)
+      }
+    } catch {
+      // Pas un JSON, pas un GMAIL_AUTH_EXPIRED, on laisse passer
+    }
+  }
+
+  return response
 }
