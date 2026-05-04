@@ -1053,6 +1053,51 @@ export default function App() {
   const { data: session, status } = useSession()
   const router = useRouter()
   useEffect(() => { if (status === "unauthenticated") router.replace("/") }, [status, router])
+
+  // Phase C - States du switcher d'organisation
+  const [orgsList, setOrgsList] = useState<Array<{id:string;nom:string;role:string;isActive:boolean}>>([]);
+  const [orgMenuOpen, setOrgMenuOpen] = useState(false);
+  const [orgSwitching, setOrgSwitching] = useState(false);
+  const orgMenuRef = useRef<HTMLDivElement>(null);
+
+  // Phase C - Charger les orgs au montage
+  useEffect(() => {
+    fetch('/api/orgs')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setOrgsList(data.orgs || []))
+      .catch(() => {});
+  }, []);
+
+  // Phase C - Fermer le menu org au clic extérieur
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (orgMenuOpen && orgMenuRef.current && !orgMenuRef.current.contains(e.target as Node)) {
+        setOrgMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [orgMenuOpen]);
+
+  // Phase C - Bascule d'organisation
+  const switchOrg = async (orgId: string) => {
+    const active = orgsList.find(o => o.isActive);
+    if (orgId === active?.id || orgSwitching) return;
+    setOrgSwitching(true);
+    try {
+      const r = await fetch('/api/orgs/switch', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({orgId}),
+      });
+      if (!r.ok) throw new Error('Switch failed');
+      window.location.reload();
+    } catch {
+      alert("Impossible de changer d'organisation");
+      setOrgSwitching(false);
+    }
+  };
+
   const [view, setView] = useState("general");
   const [emails, setEmails] = useState([]);
   // Fix #4 — Pagination : savoir s'il y a plus d'emails à charger
@@ -3754,9 +3799,30 @@ FORMAT
               <path d="M12 9.6 L 12 18.2" stroke="#B8924F" strokeWidth="1.2" strokeLinecap="round"/>
               <path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B8924F"/>
             </svg>
-            <div>
+            <div ref={orgMenuRef} style={{position:"relative"}}>
               <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:500,color:"#1A1A1E",letterSpacing:0.3,lineHeight:1}}>Archange</div>
-              <div style={{fontSize:9,letterSpacing:"0.16em",textTransform:"uppercase",color:"#6B6E7E",marginTop:2}}>{nomEtab}</div>
+              <button onClick={()=>setOrgMenuOpen(v=>!v)} style={{fontSize:9,letterSpacing:"0.16em",textTransform:"uppercase",color:"#6B6E7E",marginTop:2,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>
+                {(orgsList.find(o=>o.isActive)?.nom)||nomEtab}
+                <span style={{fontSize:7,opacity:0.5}}>▾</span>
+              </button>
+              {orgMenuOpen && <div style={{position:"absolute",top:"100%",left:-4,marginTop:6,background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:6,boxShadow:"0 8px 24px rgba(0,0,0,0.08)",zIndex:1000,minWidth:200,overflow:"hidden"}}>
+                <div style={{maxHeight:240,overflowY:"auto",padding:"4px 0"}}>
+                  {orgsList.map(o => (
+                    <button key={o.id} onClick={()=>switchOrg(o.id)} disabled={orgSwitching} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 10px",border:"none",background:o.isActive?"#F5F4F0":"transparent",cursor:orgSwitching?"wait":"pointer",color:"#1A1A1E",fontSize:12,textAlign:"left",fontFamily:"inherit"}}>
+                      <div style={{width:18,height:18,borderRadius:4,background:"#B8924F",color:"#FFFFFF",display:"grid",placeItems:"center",fontSize:9,fontWeight:700,flexShrink:0}}>{o.nom[0]?.toUpperCase()}</div>
+                      <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.nom}</span>
+                      {o.isActive && <span style={{color:"#B8924F",fontSize:11}}>✓</span>}
+                    </button>
+                  ))}
+                </div>
+                <div style={{borderTop:"1px solid #EBEAE5",padding:"4px 0"}}>
+                  <button onClick={()=>{setOrgMenuOpen(false);window.location.href="/onboarding/new-org";}} style={{width:"100%",padding:"7px 10px",border:"none",background:"transparent",cursor:"pointer",color:"#6B6E7E",fontSize:11,textAlign:"left",fontFamily:"inherit"}}>+ Nouvelle organisation</button>
+                  {(orgsList.find(o=>o.isActive)?.role==='super_admin'||orgsList.find(o=>o.isActive)?.role==='admin') && <>
+                    <button onClick={()=>{setOrgMenuOpen(false);window.location.href="/settings/team";}} style={{width:"100%",padding:"7px 10px",border:"none",background:"transparent",cursor:"pointer",color:"#6B6E7E",fontSize:11,textAlign:"left",fontFamily:"inherit"}}>Gérer l'équipe</button>
+                    <button onClick={()=>{setOrgMenuOpen(false);window.location.href="/activity";}} style={{width:"100%",padding:"7px 10px",border:"none",background:"transparent",cursor:"pointer",color:"#6B6E7E",fontSize:11,textAlign:"left",fontFamily:"inherit"}}>Journal d'activité</button>
+                  </>}
+                </div>
+              </div>}
             </div>
           </div>}
           {navCollapsed&&<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" stroke="#B8924F" strokeWidth="1"/><path d="M8.5 9 L 15.5 9" stroke="#B8924F" strokeWidth="1.2" strokeLinecap="round"/><circle cx="12" cy="7" r="1.1" fill="#B8924F"/><path d="M12 9.6 L 12 18.2" stroke="#B8924F" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.8 17.8 L 12 19.2 L 13.2 17.8 Z" fill="#B8924F"/></svg>}
