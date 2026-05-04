@@ -72,7 +72,7 @@ export function Sidebar({ badges = {} }: SidebarProps) {
       if (!r.ok) throw new Error('Switch failed')
       window.location.reload()
     } catch {
-      alert('Impossible de changer d'organisation')
+      alert("Impossible de changer d'organisation")
       setSwitching(false)
     }
   }
