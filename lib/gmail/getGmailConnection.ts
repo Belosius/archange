@@ -19,6 +19,13 @@
  *   if (!conn) return NextResponse.json({ error: 'No Gmail connection' }, 404);
  *   const gmailAccessToken = conn.accessToken;
  *   // utiliser dans les appels Gmail API
+ *
+ * NOUVELLE ERREUR TYPÉE (Phase D bonus) :
+ *   getGmailConnection retourne null dans 2 cas :
+ *     1. Aucune ligne dans gmail_connections → besoin d'une 1ère connexion
+ *     2. refresh_token révoqué/invalide → besoin d'une RECONNEXION
+ *   Pour distinguer les deux, le helper expose maintenant getGmailConnectionStrict
+ *   qui throw GmailAuthExpiredError dans le cas 2.
  */
 
 import { supabaseAdmin } from '@/lib/supabase';
@@ -34,10 +41,23 @@ export interface GmailConnection {
   organisationId: string;
 }
 
+// ─── Erreur typée pour les routes qui veulent déclencher la reconnexion auto ──
+export class GmailAuthExpiredError extends Error {
+  constructor(public readonly organisationId: string, public readonly reason: string) {
+    super(`Gmail authentication expired for org ${organisationId}: ${reason}`);
+    this.name = 'GmailAuthExpiredError';
+  }
+}
+
 /**
  * Récupère la connexion Gmail active d'une organisation.
  * Si un `email` est fourni, récupère cette connexion précise (utile si l'org
  * a plusieurs boîtes Gmail). Sinon la première active.
+ *
+ * Retourne null si :
+ *   - Aucune connexion configurée pour cette org
+ *   - Le refresh_token est révoqué/invalide (le caller devrait préférer
+ *     getGmailConnectionStrict pour distinguer les deux cas)
  */
 export async function getGmailConnection(
   organisationId: string,
@@ -75,6 +95,61 @@ export async function getGmailConnection(
   return conn;
 }
 
+/**
+ * Variante "stricte" qui throw GmailAuthExpiredError si la reconnexion
+ * est nécessaire. À utiliser dans les routes API qui doivent renvoyer
+ * une réponse 401 + { error: 'GMAIL_AUTH_EXPIRED' } au frontend.
+ *
+ * USAGE :
+ *   try {
+ *     const conn = await getGmailConnectionStrict(orgId);
+ *     // utiliser conn.accessToken
+ *   } catch (e) {
+ *     if (e instanceof GmailAuthExpiredError) {
+ *       return NextResponse.json({ error: 'GMAIL_AUTH_EXPIRED' }, { status: 401 });
+ *     }
+ *     throw e;
+ *   }
+ */
+export async function getGmailConnectionStrict(
+  organisationId: string,
+  email?: string
+): Promise<GmailConnection> {
+  let query = supabaseAdmin
+    .from('gmail_connections')
+    .select('id, email, label, oauth_access_token, oauth_refresh_token, oauth_expires_at, history_id, organisation_id')
+    .eq('organisation_id', organisationId)
+    .eq('is_active', true);
+
+  if (email) query = query.eq('email', email);
+
+  const { data, error } = await query.limit(1).single();
+  if (error || !data) {
+    throw new GmailAuthExpiredError(organisationId, 'no_connection');
+  }
+
+  const conn: GmailConnection = {
+    id: data.id,
+    email: data.email,
+    label: data.label,
+    accessToken: data.oauth_access_token,
+    refreshToken: data.oauth_refresh_token,
+    expiresAt: data.oauth_expires_at ? new Date(data.oauth_expires_at) : null,
+    historyId: data.history_id,
+    organisationId: data.organisation_id,
+  };
+
+  if (isTokenExpired(conn.expiresAt)) {
+    const refreshed = await refreshGmailToken(conn);
+    if (!refreshed) {
+      throw new GmailAuthExpiredError(organisationId, 'refresh_failed');
+    }
+    return refreshed;
+  }
+
+  return conn;
+}
+
 function isTokenExpired(expiresAt: Date | null): boolean {
   if (!expiresAt) return false; // pas de date d'expiration, on suppose valide
   return expiresAt.getTime() - 5 * 60 * 1000 < Date.now();
@@ -100,7 +175,18 @@ async function refreshGmailToken(conn: GmailConnection): Promise<GmailConnection
     });
 
     if (!r.ok) {
-      console.error('[getGmailConnection] refresh failed:', await r.text());
+      const errText = await r.text();
+      console.error('[getGmailConnection] refresh failed:', errText);
+
+      // Si le refresh_token est définitivement invalide, on désactive la connexion
+      // pour ne pas spammer Google API à chaque requête.
+      if (errText.includes('invalid_grant') || errText.includes('revoked')) {
+        await supabaseAdmin
+          .from('gmail_connections')
+          .update({ is_active: false })
+          .eq('id', conn.id);
+      }
+
       return null;
     }
 
