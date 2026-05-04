@@ -1,5 +1,21 @@
 'use client'
 
+/**
+ * ═══════════════════════════════════════════════════════════════
+ *  components/layout/Sidebar — Sidebar partagée (mode CLAIR)
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * Utilisée par /events, /planning, /sources, /stats.
+ * (La page /mails a sa propre sidebar inline — même style cible.)
+ *
+ * Design : background #FAFAF7, accent #B8924F, fonts Fraunces/Geist.
+ *
+ * Modifications Phase E1 (chantier 1) :
+ *  - Refonte couleurs : sombre → clair (harmonisation avec /mails)
+ *  - Footer "Mon profil" cliquable vers /settings/profile
+ *  - Bouton signOut (↩) séparé avec stopPropagation
+ */
+
 import { useSession, signOut } from 'next-auth/react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
@@ -11,6 +27,22 @@ const NAV_ITEMS = [
   { href: '/stats',    icon: '◎', label: 'Stats'      },
   { href: '/sources',  icon: '⟡', label: 'Sources IA' },
 ]
+
+// ─── Palette claire RÊVA ────────────────────────────────────────
+const C = {
+  bg:           '#FAFAF7',
+  bgHover:      '#F5F4F0',
+  bgActive:     '#F0EBE0',
+  bgCard:       '#FFFFFF',
+  border:       '#EBEAE5',
+  borderStrong: '#DBDAD3',
+  textPrimary:  '#1A1A1E',
+  textSec:      '#6B6E7E',
+  textTer:      '#A0A0A8',
+  accent:       '#B8924F',
+  accentHover:  '#A07E40',
+  greenDot:     '#1F6B3A',
+}
 
 interface Org {
   id: string
@@ -33,6 +65,7 @@ export function Sidebar({ badges = {} }: SidebarProps) {
   const [orgs, setOrgs] = useState<Org[]>([])
   const [orgMenuOpen, setOrgMenuOpen] = useState(false)
   const [switching, setSwitching] = useState(false)
+  const [profileHover, setProfileHover] = useState(false)
   const orgRef = useRef<HTMLDivElement>(null)
 
   const initials = session?.user?.name
@@ -59,6 +92,7 @@ export function Sidebar({ badges = {} }: SidebarProps) {
 
   const activeOrg = orgs.find(o => o.isActive) || orgs[0]
   const canManage = activeOrg?.role === 'super_admin' || activeOrg?.role === 'admin'
+  const hasMultipleOrgs = orgs.length > 1
 
   const switchOrg = async (orgId: string) => {
     if (orgId === activeOrg?.id || switching) return
@@ -77,69 +111,164 @@ export function Sidebar({ badges = {} }: SidebarProps) {
     }
   }
 
+  const goToProfile = () => router.push('/settings/profile')
+
   return (
     <aside style={{
-      width: collapsed ? 60 : 200,
-      background: '#1C1814',
+      width: collapsed ? 60 : 220,
+      background: C.bg,
       display: 'flex',
       flexDirection: 'column',
       flexShrink: 0,
+      borderRight: `1px solid ${C.border}`,
       transition: 'width .25s cubic-bezier(.4,0,.2,1)',
       overflow: 'hidden',
+      fontFamily: "'Geist','Helvetica Neue',Arial,sans-serif",
+      color: C.textPrimary,
     }}>
-      {/* Header */}
-      <div style={{ padding: collapsed ? '16px 0 12px' : '20px 16px 16px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', borderBottom: '1px solid rgba(209,196,178,.06)', flexShrink: 0 }}>
+      {/* ─── Header : logo ARCHANGE + bouton collapse ─────────── */}
+      <div style={{
+        padding: collapsed ? '18px 0 14px' : '20px 16px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'space-between',
+        borderBottom: `1px solid ${C.border}`,
+        flexShrink: 0,
+      }}>
         {!collapsed && (
           <div>
-            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 13, fontWeight: 600, color: 'rgba(209,196,178,.85)', letterSpacing: '.12em' }}>ARCHANGE</div>
-            <div style={{ fontSize: 8, color: 'rgba(209,196,178,.3)', letterSpacing: '.18em', textTransform: 'uppercase', marginTop: 3 }}>AGENT IA</div>
+            <div style={{
+              fontFamily: "'Fraunces',Georgia,serif",
+              fontSize: 16,
+              fontWeight: 600,
+              color: C.textPrimary,
+              letterSpacing: '.02em',
+              lineHeight: 1,
+            }}>
+              ARCHANGE
+            </div>
+            <div style={{
+              fontSize: 9,
+              color: C.textSec,
+              letterSpacing: '.18em',
+              textTransform: 'uppercase',
+              marginTop: 4,
+              fontWeight: 500,
+            }}>
+              Agent email
+            </div>
           </div>
         )}
-        <button onClick={() => setCollapsed(v => !v)} style={{ width: 22, height: 22, borderRadius: 5, border: 'none', background: 'rgba(209,196,178,.07)', color: 'rgba(209,196,178,.35)', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <button
+          onClick={() => setCollapsed(v => !v)}
+          title={collapsed ? 'Développer' : 'Réduire'}
+          style={{
+            width: 24, height: 24, borderRadius: 6,
+            border: `1px solid ${C.border}`,
+            background: C.bgCard,
+            color: C.textSec,
+            cursor: 'pointer',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
           {collapsed ? '›' : '‹'}
         </button>
       </div>
 
-      {/* Org switcher */}
+      {/* ─── Org switcher ─────────────────────────────────────── */}
       {activeOrg && (
-        <div ref={orgRef} style={{ position: 'relative', padding: collapsed ? '8px 0' : '10px 12px', borderBottom: '1px solid rgba(209,196,178,.06)', flexShrink: 0 }}>
+        <div ref={orgRef} style={{
+          position: 'relative',
+          padding: collapsed ? '10px 0' : '12px 12px',
+          borderBottom: `1px solid ${C.border}`,
+          flexShrink: 0,
+        }}>
           <button
-            onClick={() => setOrgMenuOpen(v => !v)}
-            title={collapsed ? activeOrg.nom : undefined}
+            onClick={() => hasMultipleOrgs && setOrgMenuOpen(v => !v)}
+            title={collapsed ? activeOrg.nom : (hasMultipleOrgs ? 'Changer d\'organisation' : activeOrg.nom)}
             style={{
               width: '100%', display: 'flex', alignItems: 'center',
-              gap: collapsed ? 0 : 8,
+              gap: collapsed ? 0 : 9,
               justifyContent: collapsed ? 'center' : 'flex-start',
-              padding: collapsed ? '6px 0' : '7px 9px',
-              borderRadius: 6, border: '1px solid rgba(209,196,178,.08)',
-              background: 'rgba(209,196,178,.04)', cursor: 'pointer',
-              transition: 'all .15s',
+              padding: collapsed ? '7px 0' : '8px 10px',
+              borderRadius: 8,
+              border: `1px solid ${C.border}`,
+              background: orgMenuOpen ? C.bgActive : C.bgCard,
+              cursor: hasMultipleOrgs ? 'pointer' : 'default',
+              transition: 'background .12s, border-color .12s',
+              fontFamily: 'inherit',
+            }}
+            onMouseEnter={e => {
+              if (hasMultipleOrgs) {
+                (e.currentTarget as HTMLButtonElement).style.background = C.bgHover
+              }
+            }}
+            onMouseLeave={e => {
+              if (!orgMenuOpen) {
+                (e.currentTarget as HTMLButtonElement).style.background = C.bgCard
+              }
             }}
           >
-            <div style={{ width: 22, height: 22, borderRadius: 5, background: '#C9A96E', color: '#1C1814', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+            <div style={{
+              width: 26, height: 26, borderRadius: 6,
+              background: C.accent,
+              color: '#FFFFFF',
+              display: 'grid', placeItems: 'center',
+              fontSize: 12, fontWeight: 700,
+              flexShrink: 0,
+              fontFamily: "'Fraunces',Georgia,serif",
+            }}>
               {activeOrg.nom[0]?.toUpperCase()}
             </div>
             {!collapsed && (
               <>
                 <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                  <div style={{ fontSize: 11, color: 'rgba(209,196,178,.85)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{
+                    fontSize: 13,
+                    color: C.textPrimary,
+                    fontWeight: 600,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    lineHeight: 1.2,
+                  }}>
                     {activeOrg.nom}
                   </div>
-                  <div style={{ fontSize: 8, color: 'rgba(209,196,178,.35)', textTransform: 'uppercase', letterSpacing: '.1em', marginTop: 1 }}>
+                  <div style={{
+                    fontSize: 9,
+                    color: C.textSec,
+                    textTransform: 'uppercase',
+                    letterSpacing: '.1em',
+                    marginTop: 2,
+                    fontWeight: 600,
+                  }}>
                     {activeOrg.role.replace('_', ' ')}
                   </div>
                 </div>
-                <span style={{ color: 'rgba(209,196,178,.3)', fontSize: 9 }}>▾</span>
+                {hasMultipleOrgs && (
+                  <span style={{ color: C.textSec, fontSize: 10, flexShrink: 0 }}>▾</span>
+                )}
               </>
             )}
           </button>
 
+          {/* Dropdown menu */}
           {orgMenuOpen && !collapsed && (
             <div style={{
-              position: 'absolute', top: '100%', left: 12, right: 12, marginTop: 4,
-              background: '#26201B', border: '1px solid rgba(209,196,178,.1)',
-              borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,.4)',
-              zIndex: 1000, overflow: 'hidden',
+              position: 'absolute',
+              top: '100%',
+              left: 12, right: 12,
+              marginTop: 6,
+              background: C.bgCard,
+              border: `1px solid ${C.borderStrong}`,
+              borderRadius: 8,
+              boxShadow: '0 8px 24px rgba(0,0,0,.08)',
+              zIndex: 1000,
+              overflow: 'hidden',
             }}>
               <div style={{ maxHeight: 240, overflowY: 'auto', padding: '4px 0' }}>
                 {orgs.map(o => (
@@ -148,90 +277,224 @@ export function Sidebar({ badges = {} }: SidebarProps) {
                     onClick={() => switchOrg(o.id)}
                     disabled={switching}
                     style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '7px 10px', border: 'none',
-                      background: o.isActive ? 'rgba(209,196,178,.08)' : 'transparent',
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 9,
+                      padding: '8px 12px',
+                      border: 'none',
+                      background: o.isActive ? C.bgActive : 'transparent',
                       cursor: switching ? 'wait' : 'pointer',
-                      color: 'rgba(209,196,178,.85)', fontSize: 11, textAlign: 'left',
+                      color: C.textPrimary,
+                      fontSize: 12,
+                      textAlign: 'left',
+                      fontFamily: 'inherit',
+                      transition: 'background .1s',
                     }}
-                    onMouseEnter={e => { if (!o.isActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(209,196,178,.05)' }}
-                    onMouseLeave={e => { if (!o.isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                    onMouseEnter={e => {
+                      if (!o.isActive) (e.currentTarget as HTMLButtonElement).style.background = C.bgHover
+                    }}
+                    onMouseLeave={e => {
+                      if (!o.isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
+                    }}
                   >
-                    <div style={{ width: 18, height: 18, borderRadius: 4, background: '#C9A96E', color: '#1C1814', display: 'grid', placeItems: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
+                    <div style={{
+                      width: 20, height: 20, borderRadius: 5,
+                      background: C.accent,
+                      color: '#FFFFFF',
+                      display: 'grid', placeItems: 'center',
+                      fontSize: 10, fontWeight: 700,
+                      flexShrink: 0,
+                      fontFamily: "'Fraunces',Georgia,serif",
+                    }}>
                       {o.nom[0]?.toUpperCase()}
                     </div>
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.nom}</span>
-                    {o.isActive && <span style={{ color: '#C9A96E', fontSize: 11 }}>✓</span>}
+                    <span style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontWeight: o.isActive ? 600 : 500,
+                    }}>
+                      {o.nom}
+                    </span>
+                    {o.isActive && <span style={{ color: C.accent, fontSize: 12, fontWeight: 700 }}>✓</span>}
                   </button>
                 ))}
               </div>
-              <div style={{ borderTop: '1px solid rgba(209,196,178,.06)', padding: '4px 0' }}>
-                <button onClick={() => { setOrgMenuOpen(false); router.push('/onboarding/new-org') }} style={dropdownLinkStyle}>+ Nouvelle organisation</button>
-                {canManage && <>
-                  <button onClick={() => { setOrgMenuOpen(false); router.push('/settings/team') }} style={dropdownLinkStyle}>Gérer l'équipe</button>
-                  <button onClick={() => { setOrgMenuOpen(false); router.push('/activity') }} style={dropdownLinkStyle}>Journal d'activité</button>
-                </>}
+              <div style={{ borderTop: `1px solid ${C.border}`, padding: '4px 0' }}>
+                <button
+                  onClick={() => { setOrgMenuOpen(false); router.push('/onboarding/new-org') }}
+                  style={dropdownLinkStyle}
+                  onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = C.bgHover}
+                  onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
+                >
+                  + Nouvelle organisation
+                </button>
+                {canManage && (
+                  <>
+                    <button
+                      onClick={() => { setOrgMenuOpen(false); router.push('/settings/team') }}
+                      style={dropdownLinkStyle}
+                      onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = C.bgHover}
+                      onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
+                    >
+                      Gérer l'équipe
+                    </button>
+                    <button
+                      onClick={() => { setOrgMenuOpen(false); router.push('/activity') }}
+                      style={dropdownLinkStyle}
+                      onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = C.bgHover}
+                      onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
+                    >
+                      Journal d'activité
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Nav items */}
-      <nav style={{ padding: '10px 8px', flex: 1 }}>
+      {/* ─── Nav items ─────────────────────────────────────────── */}
+      <nav style={{ padding: '12px 8px', flex: 1 }}>
         {NAV_ITEMS.map(item => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           const badge = badges[item.href]
           return (
-            <button key={item.href} onClick={() => router.push(item.href)}
-              title={collapsed ? item.label : undefined}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 9, width: '100%',
-                padding: collapsed ? '9px 0' : '9px 12px',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                borderRadius: 8, border: 'none',
-                background: active ? 'rgba(209,196,178,.1)' : 'transparent',
-                color: active ? '#D1C4B2' : 'rgba(209,196,178,.4)',
-                fontSize: 11, cursor: 'pointer', marginBottom: 2,
-                transition: 'all .15s',
-              }}>
-              <span style={{ fontSize: 14, flexShrink: 0 }}>{item.icon}</span>
-              {!collapsed && (
-                <>
-                  <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>
-                  {badge ? (
-                    <span style={{ background: '#C9A96E', color: '#1C1814', fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 100 }}>{badge}</span>
-                  ) : null}
-                </>
-              )}
-            </button>
+            <NavButton
+              key={item.href}
+              icon={item.icon}
+              label={item.label}
+              active={active}
+              badge={badge}
+              collapsed={collapsed}
+              onClick={() => router.push(item.href)}
+            />
           )
         })}
       </nav>
 
-      {/* User profile */}
-      <div style={{ padding: '10px 10px 14px', borderTop: '1px solid rgba(209,196,178,.06)', flexShrink: 0 }}>
+      {/* ─── Footer : Mon profil (cliquable) + Déconnexion ─────── */}
+      <div style={{
+        padding: '10px 10px 14px',
+        borderTop: `1px solid ${C.border}`,
+        flexShrink: 0,
+      }}>
         {collapsed ? (
-          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(201,169,110,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#C9A96E', margin: '0 auto', cursor: 'pointer' }}
-            onClick={() => signOut({ callbackUrl: '/' })} title="Se déconnecter">
+          // Mode replié : avatar simple cliquable vers profil
+          <button
+            type="button"
+            onClick={goToProfile}
+            title="Mon profil"
+            style={{
+              width: 36, height: 36, borderRadius: '50%',
+              background: profileHover ? C.bgActive : C.bgCard,
+              border: `1px solid ${C.border}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 12, fontWeight: 700,
+              color: C.accent,
+              margin: '0 auto',
+              cursor: 'pointer',
+              fontFamily: "'Fraunces',Georgia,serif",
+              transition: 'background .12s',
+              padding: 0,
+            }}
+            onMouseEnter={() => setProfileHover(true)}
+            onMouseLeave={() => setProfileHover(false)}
+          >
             {initials}
-          </div>
+          </button>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(209,196,178,.06)' }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(201,169,110,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#C9A96E', flexShrink: 0 }}>
+          // Mode déplié : carte cliquable + bouton ↩ séparé
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={goToProfile}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                goToProfile()
+              }
+            }}
+            onMouseEnter={() => setProfileHover(true)}
+            onMouseLeave={() => setProfileHover(false)}
+            title="Voir mon profil"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 9,
+              padding: '8px 10px',
+              borderRadius: 8,
+              background: profileHover ? C.bgActive : C.bgCard,
+              border: `1px solid ${C.border}`,
+              cursor: 'pointer',
+              transition: 'background .12s',
+              outline: 'none',
+            }}
+          >
+            <div style={{
+              width: 30, height: 30, borderRadius: '50%',
+              background: C.accent,
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 11, fontWeight: 700,
+              flexShrink: 0,
+              fontFamily: "'Fraunces',Georgia,serif",
+            }}>
               {initials}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: 'rgba(209,196,178,.7)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {session?.user?.name?.split(' ')[0] || 'Olivier'}
+              <div style={{
+                fontSize: 13,
+                color: C.textPrimary,
+                fontWeight: 600,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                lineHeight: 1.2,
+              }}>
+                {session?.user?.name?.split(' ')[0] || 'Profil'}
               </div>
-              <div style={{ fontSize: 9, color: 'rgba(209,196,178,.3)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#28C840' }}/>
-                Gmail connecté
+              <div style={{
+                fontSize: 10,
+                color: C.textSec,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                marginTop: 3,
+                fontWeight: 500,
+              }}>
+                <span style={{
+                  width: 5, height: 5, borderRadius: '50%',
+                  background: C.greenDot,
+                  flexShrink: 0,
+                }}/>
+                Voir mon profil
               </div>
             </div>
-            <button onClick={() => signOut({ callbackUrl: '/' })} title="Se déconnecter"
-              style={{ background: 'none', border: 'none', color: 'rgba(209,196,178,.25)', cursor: 'pointer', fontSize: 14, padding: '2px 4px' }}>
+            <button
+              onClick={e => { e.stopPropagation(); signOut({ callbackUrl: '/' }) }}
+              title="Se déconnecter"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: C.textSec,
+                cursor: 'pointer',
+                fontSize: 14,
+                padding: '4px 6px',
+                borderRadius: 5,
+                lineHeight: 1,
+                fontFamily: 'inherit',
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = C.textPrimary}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = C.textSec}
+            >
               ↩
             </button>
           </div>
@@ -241,8 +504,92 @@ export function Sidebar({ badges = {} }: SidebarProps) {
   )
 }
 
+// ─── Sous-composant : bouton de navigation ──────────────────────
+function NavButton({
+  icon, label, active, badge, collapsed, onClick,
+}: {
+  icon: string
+  label: string
+  active: boolean
+  badge?: number
+  collapsed: boolean
+  onClick: () => void
+}) {
+  const [hover, setHover] = useState(false)
+
+  let bg = 'transparent'
+  if (active) bg = C.bgActive
+  else if (hover) bg = C.bgHover
+
+  let color = C.textSec
+  if (active) color = C.textPrimary
+
+  return (
+    <button
+      onClick={onClick}
+      title={collapsed ? label : undefined}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        width: '100%',
+        padding: collapsed ? '10px 0' : '10px 12px',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        borderRadius: 8,
+        border: 'none',
+        background: bg,
+        color: color,
+        fontSize: 13,
+        fontWeight: active ? 600 : 500,
+        cursor: 'pointer',
+        marginBottom: 2,
+        transition: 'background .12s, color .12s',
+        fontFamily: 'inherit',
+      }}
+    >
+      <span style={{
+        fontSize: 16,
+        flexShrink: 0,
+        color: active ? C.accent : color,
+        transition: 'color .12s',
+      }}>{icon}</span>
+      {!collapsed && (
+        <>
+          <span style={{ flex: 1, textAlign: 'left' }}>{label}</span>
+          {badge ? (
+            <span style={{
+              background: active ? C.accent : C.borderStrong,
+              color: active ? '#FFFFFF' : C.textPrimary,
+              fontSize: 10,
+              fontWeight: 700,
+              padding: '2px 7px',
+              borderRadius: 100,
+              minWidth: 18,
+              textAlign: 'center',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {badge}
+            </span>
+          ) : null}
+        </>
+      )}
+    </button>
+  )
+}
+
+// ─── Style des liens du dropdown ─────────────────────────────────
 const dropdownLinkStyle: React.CSSProperties = {
-  width: '100%', padding: '7px 10px', border: 'none',
-  background: 'transparent', cursor: 'pointer',
-  color: 'rgba(209,196,178,.5)', fontSize: 11, textAlign: 'left',
+  width: '100%',
+  padding: '8px 12px',
+  border: 'none',
+  background: 'transparent',
+  cursor: 'pointer',
+  color: C.textSec,
+  fontSize: 12,
+  textAlign: 'left',
+  fontFamily: 'inherit',
+  transition: 'background .1s',
+  fontWeight: 500,
 }
