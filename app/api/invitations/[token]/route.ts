@@ -1,195 +1,198 @@
+'use client';
 /**
  * ═══════════════════════════════════════════════════════════════
- * /api/invitations/[token] — Lookup et acceptation d'une invitation
+ * /invite/[token] — Landing page d'acceptation d'invitation
  * ═══════════════════════════════════════════════════════════════
  *
- * GET  → infos publiques (nom de l'org, rôle proposé, email cible)
- *        Pas de session requise — utilisé par la landing page /invite/[token]
- * POST → accepter l'invitation (session NextAuth requise, email doit matcher)
+ * Flow :
+ * 1. Page charge le token depuis l'URL → GET /api/invitations/[token]
+ * 2. Si user pas connecté → bouton "Se connecter avec Google"
+ *    (le callback ramène ici, on retente automatiquement)
+ * 3. Si user connecté avec le bon email → POST accept → redirect /mails
+ * 4. Si email ne match pas → message clair pour changer de compte Google
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { supabaseAdmin } from '@/lib/supabase';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession, signIn } from 'next-auth/react';
+import { invalidateActiveOrgCache } from '@/lib/api-fetch';
 
-async function loadInvitation(token: string) {
-  const { data: inv } = await supabaseAdmin
-    .from('invitations')
-    .select('id, organisation_id, email, role, token, expires_at, accepted_at, invited_by')
-    .eq('token', token)
-    .maybeSingle();
-  return inv;
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Administrateur',
+  manager: 'Gestionnaire',
+  lecture: 'Lecture seule',
+};
+
+interface InvitationInfo {
+  email: string;
+  role: string;
+  orgName: string;
+  invitedByName: string;
+  expiresAt: string;
 }
 
-// ───── GET : info publique sur l'invitation ───────────────────────────
-export async function GET(
-  _req: NextRequest,
-  context: { params: Promise<{ token: string }> }
-) {
-  const { token } = await context.params;
-  if (!token) {
-    return NextResponse.json({ error: 'Token required' }, { status: 400 });
-  }
+export default function InvitePage({ params }: { params: { token: string } }) {
+  const { token } = params;
+  const router = useRouter();
+  const { data: session, status } = useSession();
 
-  const inv = await loadInvitation(token);
-  if (!inv) {
-    return NextResponse.json({ error: 'Invitation introuvable' }, { status: 404 });
-  }
+  const [info, setInfo] = useState<InvitationInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [accepting, setAccepting] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
-  if (inv.accepted_at) {
-    return NextResponse.json(
-      { error: 'Cette invitation a déjà été acceptée', alreadyAccepted: true },
-      { status: 410 }
-    );
-  }
+  useEffect(() => {
+    fetch(`/api/invitations/${token}`)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) {
+          setError(data.error || 'Invitation invalide');
+        } else {
+          setInfo(data.invitation);
+        }
+      })
+      .catch(() => setError('Erreur réseau'))
+      .finally(() => setLoaded(true));
+  }, [token]);
 
-  if (new Date(inv.expires_at).getTime() < Date.now()) {
-    return NextResponse.json(
-      { error: 'Cette invitation a expiré', expired: true },
-      { status: 410 }
-    );
-  }
-
-  const { data: org } = await supabaseAdmin
-    .from('organisations')
-    .select('id, nom, slug')
-    .eq('id', inv.organisation_id)
-    .single();
-
-  const { data: inviter } = await supabaseAdmin
-    .from('users')
-    .select('email, name')
-    .eq('id', inv.invited_by)
-    .maybeSingle();
-
-  return NextResponse.json({
-    invitation: {
-      email: inv.email,
-      role: inv.role,
-      orgName: org?.nom || 'Organisation',
-      orgSlug: org?.slug || '',
-      invitedByName: (inviter as any)?.name || (inviter as any)?.email || 'Un membre',
-      expiresAt: inv.expires_at,
-    },
-  });
-}
-
-// ───── POST : accepter l'invitation ───────────────────────────────────
-export async function POST(
-  _req: NextRequest,
-  context: { params: Promise<{ token: string }> }
-) {
-  const { token } = await context.params;
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json(
-      { error: 'Vous devez être connecté pour accepter une invitation' },
-      { status: 401 }
-    );
-  }
-
-  const inv = await loadInvitation(token);
-  if (!inv) {
-    return NextResponse.json({ error: 'Invitation introuvable' }, { status: 404 });
-  }
-  if (inv.accepted_at) {
-    return NextResponse.json({ error: 'Déjà acceptée' }, { status: 410 });
-  }
-  if (new Date(inv.expires_at).getTime() < Date.now()) {
-    return NextResponse.json({ error: 'Invitation expirée' }, { status: 410 });
-  }
-
-  if (session.user.email.toLowerCase() !== inv.email.toLowerCase()) {
-    return NextResponse.json(
-      {
-        error: `Cette invitation est destinée à ${inv.email}. Connectez-vous avec ce compte Google.`,
-        wrongAccount: true,
-        expectedEmail: inv.email,
-      },
-      { status: 403 }
-    );
-  }
-
-  const { data: user } = await supabaseAdmin
-    .from('users')
-    .select('id')
-    .eq('email', session.user.email)
-    .single();
-
-  if (!user) {
-    return NextResponse.json({ error: 'User non trouvé' }, { status: 404 });
-  }
-
-  const { data: existing } = await supabaseAdmin
-    .from('memberships')
-    .select('id, is_active, role')
-    .eq('user_id', user.id)
-    .eq('organisation_id', inv.organisation_id)
-    .maybeSingle();
-
-  if (existing) {
-    if (existing.is_active) {
-      await supabaseAdmin
-        .from('invitations')
-        .update({
-          accepted_at: new Date().toISOString(),
-          accepted_by: user.id,
-          status: 'accepted',
-        })
-        .eq('id', inv.id);
-      return NextResponse.json({
-        ok: true,
-        orgId: inv.organisation_id,
-        alreadyMember: true,
-      });
-    } else {
-      await supabaseAdmin
-        .from('memberships')
-        .update({
-          is_active: true,
-          role: inv.role,
-          invited_by: inv.invited_by,
-          joined_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id);
+  const accept = async () => {
+    setAccepting(true);
+    setError(null);
+    try {
+      const r = await fetch(`/api/invitations/${token}`, { method: 'POST' });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Acceptation échouée');
+      invalidateActiveOrgCache();
+      router.push('/mails');
+    } catch (e: any) {
+      setError(e.message || 'Erreur');
+      setAccepting(false);
     }
-  } else {
-    const { error: memErr } = await supabaseAdmin.from('memberships').insert({
-      user_id: user.id,
-      organisation_id: inv.organisation_id,
-      role: inv.role,
-      is_active: true,
-      invited_by: inv.invited_by,
-    });
-    if (memErr) {
-      console.error('[POST /api/invitations/:token]', memErr);
-      return NextResponse.json({ error: 'Membership creation failed' }, { status: 500 });
-    }
+  };
+
+  if (!loaded) {
+    return (
+      <div style={containerStyle}>
+        <div style={cardStyle}>
+          <p style={{ color: 'var(--color-text-secondary)' }}>Chargement…</p>
+        </div>
+      </div>
+    );
   }
 
-  await supabaseAdmin
-    .from('invitations')
-    .update({
-      accepted_at: new Date().toISOString(),
-      accepted_by: user.id,
-      status: 'accepted',
-    })
-    .eq('id', inv.id);
+  if (error && !info) {
+    return (
+      <div style={containerStyle}>
+        <div style={cardStyle}>
+          <h1 style={{ fontSize: 22, marginBottom: 12 }}>Invitation invalide</h1>
+          <p style={{ color: 'var(--color-text-secondary)', marginBottom: 20 }}>{error}</p>
+          <button onClick={() => router.push('/')} style={primaryBtn}>
+            Retour à l'accueil
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  await supabaseAdmin
-    .from('users')
-    .update({ active_organisation_id: inv.organisation_id })
-    .eq('id', user.id);
+  if (!info) return null;
 
-  await supabaseAdmin.from('activity_logs').insert({
-    user_id: user.id,
-    organisation_id: inv.organisation_id,
-    action: 'invitation.accepted',
-    resource_type: 'invitation',
-    resource_id: inv.id,
-    metadata: { role: inv.role, invited_by: inv.invited_by },
-  });
+  const wrongAccount =
+    status === 'authenticated' &&
+    session?.user?.email &&
+    session.user.email.toLowerCase() !== info.email.toLowerCase();
 
-  return NextResponse.json({ ok: true, orgId: inv.organisation_id });
+  return (
+    <div style={containerStyle}>
+      <div style={cardStyle}>
+        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 6, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+          Invitation Archange
+        </div>
+        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 16 }}>
+          Vous avez été invité·e à rejoindre {info.orgName}
+        </h1>
+
+        <div style={{ background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>Invité par</span>
+            <span style={{ fontSize: 13 }}>{info.invitedByName}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>Email cible</span>
+            <span style={{ fontSize: 13, fontFamily: 'monospace' }}>{info.email}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>Rôle</span>
+            <span style={{ fontSize: 13 }}>{ROLE_LABELS[info.role] || info.role}</span>
+          </div>
+        </div>
+
+        {status === 'unauthenticated' && (
+          <>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: 14, marginBottom: 16, lineHeight: 1.5 }}>
+              Connectez-vous avec le compte Google <strong>{info.email}</strong> pour accepter l'invitation.
+            </p>
+            <button
+              onClick={() => signIn('google', { callbackUrl: `/invite/${token}` })}
+              style={primaryBtn}
+            >
+              Se connecter avec Google
+            </button>
+          </>
+        )}
+
+        {wrongAccount && (
+          <>
+            <div style={{ background: 'rgba(220,160,50,0.1)', border: '1px solid rgba(220,160,50,0.3)', padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 13, lineHeight: 1.5 }}>
+              Vous êtes connecté·e avec <strong>{session?.user?.email}</strong> mais l'invitation est destinée à <strong>{info.email}</strong>. Déconnectez-vous puis reconnectez-vous avec le bon compte Google.
+            </div>
+            <button onClick={() => signIn('google', { callbackUrl: `/invite/${token}` })} style={primaryBtn}>
+              Changer de compte Google
+            </button>
+          </>
+        )}
+
+        {status === 'authenticated' && !wrongAccount && (
+          <>
+            {error && (
+              <div style={{ background: 'rgba(220,50,50,0.1)', color: '#c33', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 16 }}>
+                {error}
+              </div>
+            )}
+            <button onClick={accept} disabled={accepting} style={primaryBtn}>
+              {accepting ? 'Acceptation…' : `Rejoindre ${info.orgName}`}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
+
+const containerStyle: React.CSSProperties = {
+  minHeight: '100vh',
+  display: 'grid',
+  placeItems: 'center',
+  padding: 24,
+  background: 'var(--color-bg-primary)',
+};
+
+const cardStyle: React.CSSProperties = {
+  width: '100%',
+  maxWidth: 480,
+  background: 'var(--color-bg-secondary)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 12,
+  padding: 32,
+  boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+};
+
+const primaryBtn: React.CSSProperties = {
+  padding: '10px 18px',
+  borderRadius: 8,
+  border: 'none',
+  background: 'var(--color-accent, #b48c50)',
+  color: 'white',
+  fontSize: 14,
+  fontWeight: 500,
+  cursor: 'pointer',
+  width: '100%',
+};
