@@ -11,7 +11,7 @@
  * 3. Si user connecté avec le bon email → POST accept → redirect /mails
  * 4. Si email ne match pas → message clair pour changer de compte Google
  */
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { invalidateActiveOrgCache } from '@/lib/api-fetch';
@@ -30,8 +30,8 @@ interface InvitationInfo {
   expiresAt: string;
 }
 
-export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params);
+export default function InvitePage({ params }: { params: { token: string } }) {
+  const { token } = params;
   const router = useRouter();
   const { data: session, status } = useSession();
 
