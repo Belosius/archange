@@ -3801,9 +3801,14 @@ FORMAT
             </svg>
             <div ref={orgMenuRef} style={{position:"relative"}}>
               <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:500,color:"#1A1A1E",letterSpacing:0.3,lineHeight:1}}>Archange</div>
-              <button onClick={()=>setOrgMenuOpen(v=>!v)} style={{fontSize:9,letterSpacing:"0.16em",textTransform:"uppercase",color:"#6B6E7E",marginTop:2,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>
-                {(orgsList.find(o=>o.isActive)?.nom)||nomEtab}
-                <span style={{fontSize:7,opacity:0.5}}>▾</span>
+              <button onClick={()=>{ if(orgsList.length>1) setOrgMenuOpen(v=>!v); }} title={orgsList.length>1?"Changer d'organisation":((orgsList.find(o=>o.isActive)?.nom)||nomEtab)} style={{display:"flex",alignItems:"center",gap:6,marginTop:5,padding:"3px 6px 3px 3px",background:orgMenuOpen?"#F5F4F0":"transparent",border:"1px solid",borderColor:orgMenuOpen?"#EBEAE5":"transparent",borderRadius:5,cursor:orgsList.length>1?"pointer":"default",fontFamily:"inherit",transition:"background .12s, border-color .12s"}} onMouseEnter={e=>{ if(orgsList.length>1){ const t=e.currentTarget as HTMLButtonElement; t.style.background="#F5F4F0"; t.style.borderColor="#EBEAE5"; } }} onMouseLeave={e=>{ if(!orgMenuOpen){ const t=e.currentTarget as HTMLButtonElement; t.style.background="transparent"; t.style.borderColor="transparent"; } }}>
+                <span style={{width:16,height:16,borderRadius:4,background:"#B8924F",color:"#FFFFFF",display:"grid",placeItems:"center",fontSize:10,fontWeight:700,flexShrink:0,fontFamily:"'Fraunces',Georgia,serif",lineHeight:1}}>
+                  {((orgsList.find(o=>o.isActive)?.nom)||nomEtab||"?")[0]?.toUpperCase()}
+                </span>
+                <span style={{fontSize:11.5,color:"#1A1A1E",fontWeight:600,letterSpacing:"0.02em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>
+                  {(orgsList.find(o=>o.isActive)?.nom)||nomEtab}
+                </span>
+                {orgsList.length>1 && <span style={{fontSize:9,color:"#6B6E7E",flexShrink:0,marginLeft:1}}>▾</span>}
               </button>
               {orgMenuOpen && <div style={{position:"absolute",top:"100%",left:-4,marginTop:6,background:"#FFFFFF",border:"1px solid #EBEAE5",borderRadius:6,boxShadow:"0 8px 24px rgba(0,0,0,0.08)",zIndex:1000,minWidth:200,overflow:"hidden"}}>
                 <div style={{maxHeight:240,overflowY:"auto",padding:"4px 0"}}>
@@ -3840,14 +3845,30 @@ FORMAT
           ))}
         </div>
         {!navCollapsed&&<div style={{padding:"12px 14px",borderTop:"1px solid #EBEAE5",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:7}}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={()=>router.push('/settings/profile')}
+            onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); router.push('/settings/profile'); } }}
+            title="Voir mon profil"
+            style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",padding:"4px 6px",margin:"-4px -6px",borderRadius:5,outline:"none",transition:"background .12s"}}
+            onMouseEnter={(e)=>{ (e.currentTarget as HTMLDivElement).style.background = "#F5F4F0"; }}
+            onMouseLeave={(e)=>{ (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
+          >
             <div style={{width:22,height:22,borderRadius:"50%",background:"#1A1A1E",color:"#F5F4F0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:500,flexShrink:0}}>
               {(session?.user?.name||"?")[0].toUpperCase()}
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:11,fontWeight:500,color:"#1A1A1E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{session?.user?.name||"Directeur"}</div>
-              <button onClick={()=>signOut({callbackUrl:"/"})} style={{fontSize:9.5,color:"#6B6E7E",background:"none",border:"none",cursor:"pointer",padding:0,letterSpacing:"0.05em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif"}}>⎋ Déconnexion</button>
+              <div style={{fontSize:9.5,color:"#6B6E7E",letterSpacing:"0.05em",textTransform:"uppercase",fontFamily:"'Geist','system-ui',sans-serif",marginTop:1}}>Voir mon profil</div>
             </div>
+            <button
+              onClick={(e)=>{ e.stopPropagation(); signOut({callbackUrl:"/"}); }}
+              title="Se déconnecter"
+              style={{fontSize:14,color:"#6B6E7E",background:"none",border:"none",cursor:"pointer",padding:"2px 4px",borderRadius:4,lineHeight:1,fontFamily:"inherit",flexShrink:0}}
+              onMouseEnter={(e)=>{ (e.currentTarget as HTMLButtonElement).style.color = "#1A1A1E"; }}
+              onMouseLeave={(e)=>{ (e.currentTarget as HTMLButtonElement).style.color = "#6B6E7E"; }}
+            >↩</button>
           </div>
         </div>}
       </aside>
